@@ -1,0 +1,23 @@
+[Unit]
+Description=DNS Manager signed GitHub deployment webhook
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dnsdeploy
+Group=dnsdeploy
+SupplementaryGroups=docker
+WorkingDirectory=/opt/dns-manager-deploy
+EnvironmentFile=/etc/dns-manager/webhook.env
+ExecStart=/usr/bin/node /opt/dns-manager-deploy/webhook.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+# Docker access is effectively root access. Restrict this account and branch writers.
+
+[Install]
+WantedBy=multi-user.target

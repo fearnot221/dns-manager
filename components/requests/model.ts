@@ -1,0 +1,45 @@
+import type { RecordType } from "@/lib/dns/types";
+
+export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+export type DnsRequest = {
+  id: string;
+  applicationId?: string | null;
+  applicantName?: string | null;
+  applicantUnit?: string | null;
+  applicantExtension?: string | null;
+  zoneName: string;
+  recordName: string;
+  recordType: string;
+  content: string;
+  ttl: number;
+  purpose?: string | null;
+  status: RequestStatus;
+  reviewNote?: string | null;
+  createdAt: string;
+  reviewedAt?: string | null;
+  canReview: boolean;
+  user: { id: string; name?: string | null; email: string };
+  reviewer?: { name?: string | null; email: string } | null;
+};
+
+export const requestTypes: RecordType[] = ["A", "AAAA", "CNAME", "MX", "TXT", "SRV", "CAA"];
+export const statuses: Array<{ key: "ALL" | RequestStatus; label: string }> = [
+  { key: "ALL", label: "全部" },
+  { key: "PENDING", label: "待審核" },
+  { key: "APPROVED", label: "已核准" },
+  { key: "REJECTED", label: "未核准" },
+];
+
+export function displayRecordName(name: string, zone: string) {
+  const cleanName = name.replace(/\.$/, "");
+  const cleanZone = zone.replace(/\.$/, "");
+  return cleanName === cleanZone ? "@" : cleanName.endsWith(`.${cleanZone}`) ? cleanName.slice(0, -cleanZone.length - 1) : cleanName;
+}
+export function contentHelp(type: RecordType) {
+  if (type === "MX") return "依序填入優先序及郵件伺服器，例如 10 mail.example.com。";
+  if (type === "SRV") return "依序填入優先序、權重、連接埠及目標主機。";
+  if (type === "CAA") return "依序填入旗標、標籤及憑證授權單位。";
+  if (type === "A") return "填入 IPv4 位址，例如 192.0.2.10。";
+  if (type === "AAAA") return "填入 IPv6 位址，例如 2001:db8::1。";
+  return type === "TXT" ? "需要時，系統會自動加上引號。" : "填入完整目標主機名稱，例如 target.example.com。";
+}

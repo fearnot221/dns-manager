@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.env*
+!.env.example
+npm-debug.log*
+.local-demo
+.sites-runtime
+coverage
+outputs
+work
+*.pem
+*.key
+*.tsbuildinfo
+.github
+**/*.env
+!**/*.env.example

@@ -1,0 +1,37 @@
+.admin-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding: 16px; margin-bottom: 18px; }
+.admin-toolbar .filter-input { flex: 1 1 260px; }
+.admin-toolbar label { display: grid; gap: 5px; color: var(--muted); font-size: .875rem; }
+.admin-toolbar select { background: var(--panel); border: 1px solid var(--border-strong); border-radius: 8px; padding: 9px 12px; min-height: 42px; color: var(--ink); }
+.admin-toolbar + .request-notice { margin-bottom: 20px; }
+.inventory-group { margin-bottom: 20px; overflow: hidden; }
+.inventory-group > h2 { display: flex; align-items: center; gap: 12px; padding: 16px 20px; background: var(--surface-soft); overflow-wrap: anywhere; }
+.inventory-group > h2 span { font-size: .875rem; color: var(--muted); font-weight: 400; flex-shrink: 0; }
+.inventory-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(140px,.5fr) auto; align-items: center; gap: 20px; padding: 20px; border-top: 1px solid var(--border); }
+.inventory-row strong, .inventory-row code, .inventory-row span { display: block; overflow-wrap: anywhere; }
+.inventory-row code { font-size: .875rem; margin: 5px 0; }
+.inventory-row p, .inventory-row span { font-size: .875rem; color: var(--muted); margin-top: 4px; }
+.inspection-last strong { font-size: .875rem; font-weight: 500; }
+.inspection-history { border-top: 1px solid var(--border); padding-top: 18px; }
+.inspection-history ol { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 14px; }
+.inspection-history li { border-left: 2px solid var(--border-strong); padding-left: 12px; overflow-wrap: anywhere; }
+.inspection-history strong, .inspection-history span { display: block; font-size: .875rem; }
+.inspection-history span { color: var(--muted); margin-top: 4px; }
+.inspection-history p { font-size: .875rem; margin-top: 6px; white-space: pre-wrap; }
+.settings-form { max-width: 780px; overflow: hidden; }
+.settings-form label { display: grid; gap: 8px; font-size: .875rem; }
+.settings-form input { width: 100%; min-height: 44px; border: 1px solid var(--border-strong); background: var(--panel); border-radius: 8px; padding: 10px 12px; color: var(--ink); }
+.settings-form small { color: var(--muted); line-height: 1.6; }
+.ownership-summary { display: grid; gap: 3px; text-align: left; border: 0; background: transparent; color: var(--muted); padding: 8px 0 0; min-width: 0; width: 100%; font-size: .8125rem; white-space: normal; }
+.ownership-summary span, .ownership-summary small { overflow-wrap: anywhere; }
+.ownership-summary small { font-size: .8125rem; }
+.ownership-summary:hover { color: var(--accent); text-decoration: underline; }
+.board-ownership { grid-column: 1/-1; }
+@media(max-width: 800px) { .inventory-row { grid-template-columns: minmax(0,1fr); gap: 12px; } .inventory-row .page-actions { justify-content: flex-end; } }
+@media(max-width: 600px) {
+  .admin-toolbar { padding: 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+  .admin-toolbar .filter-input, .admin-toolbar > button { grid-column: 1 / -1; min-width: 0; }
+  .admin-toolbar label { min-width: 0; }
+  .admin-toolbar select { font-size: 1rem; width: 100%; }
+  .settings-form input { font-size: 1rem; }
+  .settings-form .modal-foot { flex-wrap: wrap; }
+}
