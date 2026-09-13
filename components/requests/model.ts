@@ -18,7 +18,7 @@ export type DnsRequest = {
   createdAt: string;
   reviewedAt?: string | null;
   canReview: boolean;
-  user: { id: string; name?: string | null; email: string };
+  user: { id: string; name?: string | null; email: string; studentId?: string | null; accounts?: { providerAccountId: string }[] };
   reviewer?: { name?: string | null; email: string } | null;
 };
 

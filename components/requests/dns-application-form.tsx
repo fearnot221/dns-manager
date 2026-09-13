@@ -136,7 +136,7 @@ export function DnsApplicationForm() {
 
         {loading && <p className="application-help" role="status">正在取得可申請的網域…</p>}
         {zoneError && <div className="form-error" role="alert"><AlertTriangle size={17} /><div>無法取得網域清單，請按「重新載入網域」重試。<small className="zone-error-detail">{zoneError}</small></div></div>}
-        {!loading && !zoneError && zones.length === 0 && <div className="request-notice" role="status">目前沒有可申請的 Zone，請聯絡管理員設定 PowerDNS 網域。</div>}
+        {!loading && !zoneError && zones.length === 0 && <div className="request-notice" role="status">目前沒有開放申請的網域，請聯絡管理員開放所需網域。</div>}
 
         {records.map((record, index) => <fieldset key={record.id} className={"application-record" + (errorRecordId === record.id ? " has-error" : "")} disabled={pending} aria-label={"第 " + (index + 1) + " 筆 DNS 紀錄"}>
           <div className="application-record-head"><h3>紀錄 {index + 1}</h3><button className="icon-button danger-hover" type="button" disabled={records.length === 1 || pending} aria-label={"移除第 " + (index + 1) + " 筆"} title="移除此筆，可復原" onClick={() => removeRecord(record.id)}><Trash2 size={16} /></button></div>

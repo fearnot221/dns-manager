@@ -4,7 +4,7 @@ import { OWNER_EMAIL } from "@/lib/auth/owner";
 import { localDocument } from "@/lib/db/local-store";
 import type { GlobalRole } from "@/lib/dns/types";
 
-export type DemoUser = { id: string; email: string; name: string; globalRole: GlobalRole; disabled: boolean; passwordHash: string | null; createdAt: string };
+export type DemoUser = { id: string; email: string; name: string; studentId?: string | null; note?: string; portalIdentifier?: string | null; globalRole: GlobalRole; disabled: boolean; passwordHash: string | null; createdAt: string };
 async function initialUsers(): Promise<DemoUser[]> {
   const definitions = [
     { id: "dev-owner", email: OWNER_EMAIL, name: "Fearnot", globalRole: "SUPER_ADMIN" as const, password: process.env.DEV_OWNER_PASSWORD || "DemoOwner!2026" },

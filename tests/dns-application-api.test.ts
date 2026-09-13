@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/requests/zone-access", () => ({ applicationZoneNames: vi.fn() }));
+import { applicationZoneNames } from "@/lib/requests/zone-access";
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class AuthError extends Error {} }));
 vi.mock("@/lib/powerdns/client", () => ({ powerdns: { listZones: vi.fn() } }));
 vi.mock("@/lib/requests/save-application", () => ({ saveApplication: vi.fn() }));
@@ -17,11 +19,18 @@ const request = (input: unknown) => new Request("http://localhost:3000/api/dns-r
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(applicationZoneNames).mockImplementation(async (names) => names);
   vi.mocked(requireActor).mockResolvedValue({ id: "user", email: "user@example.com", globalRole: "USER", zoneRoles: {} });
   vi.mocked(powerdns.listZones).mockResolvedValue([{ id: "secret-id", name: "example.com.", kind: "Native", serial: 123, dnssec: true, rrsets: [{ name: "private.example.com.", type: "A", ttl: 300, records: [{ content: "10.0.0.1", disabled: false }] }] }]);
   vi.mocked(saveApplication).mockResolvedValue({ applicationId: "batch-id", count: 1 });
 });
 describe("application API boundaries", () => {
+  it("hides closed zones and rejects direct submissions without saving", async () => {
+    vi.mocked(applicationZoneNames).mockResolvedValue([]);
+    expect(await (await GET()).json()).toEqual({ zones: [] });
+    expect((await POST(request(body))).status).toBe(400);
+    expect(saveApplication).not.toHaveBeenCalled();
+  });
   it("offers zone names to signed-in users without exposing DNS contents or server metadata", async () => {
     const response = await GET();
     expect(await response.json()).toEqual({ zones: [{ name: "example.com." }] });

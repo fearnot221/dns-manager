@@ -21,7 +21,7 @@ export function RequestCard({ item, admin, onReview }: { item: DnsRequest; admin
         <div><dt>內容</dt><dd><code>{item.content}</code></dd></div>
         <div><dt>TTL</dt><dd>{item.ttl} 秒</dd></div>
         <div><dt>申請時間</dt><dd>{date.toLocaleString("zh-TW")}</dd></div>
-        {admin && <div><dt>申請帳號</dt><dd>{item.user.email}</dd></div>}
+        {admin && <div><dt>申請帳號</dt><dd>{item.user.studentId || item.user.accounts?.[0]?.providerAccountId || "未綁定 Portal"}</dd></div>}
         {item.applicantName && <><div><dt>申請人</dt><dd>{item.applicantName}</dd></div><div><dt>申請單位</dt><dd>{item.applicantUnit}</dd></div><div><dt>單位分機</dt><dd>{item.applicantExtension}</dd></div></>}
         {item.purpose && <div><dt>用途</dt><dd>{item.purpose}</dd></div>}
         {item.reviewNote && <div className="review-note"><dt>審核回覆</dt><dd>{item.reviewNote}</dd></div>}

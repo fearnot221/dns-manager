@@ -29,6 +29,8 @@ enum DnsRequestStatus {
 model User {
   id               String           @id @default(cuid())
   name             String?
+  studentId        String?
+  note             String           @default("")
   email            String           @unique
   passwordHash     String?
   disabled         Boolean          @default(false)

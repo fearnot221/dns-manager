@@ -85,3 +85,19 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface-soft) 45%, var(--p
   .span-2 { grid-column: auto; }
   .resource-error { flex-direction: column; text-align: center; }
 }
+.zone-access-hint { color: var(--muted); font-size: 13px; margin: 0 0 18px; line-height: 1.7; }
+.zone-access-filter { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); padding: 9px 12px; }
+.zone-access-switch { display: inline-flex; align-items: center; gap: 9px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; padding: 8px 2px; border-radius: 6px; }
+.zone-access-switch[aria-checked="true"] { color: var(--accent); }
+.zone-access-switch:disabled { opacity: .6; cursor: wait; }
+.zone-switch-track { width: 32px; height: 20px; padding: 3px; border-radius: 20px; background: var(--border-strong); transition: background .18s ease; }
+.zone-switch-track > span { display: block; width: 14px; height: 14px; background: white; border-radius: 50%; box-shadow: 0 1px 3px #0002; transition: transform .18s ease; }
+.zone-access-switch[aria-checked="true"] .zone-switch-track { background: var(--accent); }
+.zone-access-switch[aria-checked="true"] .zone-switch-track > span { transform: translateX(12px); }
+.zone-access-error { color: #b42318; margin: 12px 20px; font-size: 14px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 20px; }
+.zone-category-tabs button { transition: background .16s ease, color .16s ease; }
+@media (prefers-reduced-motion: no-preference) {
+  #zone-category-panel { animation: zone-panel-in .18s ease-out; }
+  @keyframes zone-panel-in { from { opacity: .6; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+}

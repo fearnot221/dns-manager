@@ -6,7 +6,7 @@ import { ScrollRegion } from "@/components/ui/scroll-region";
 import { Badge } from "@/components/ui";
 import type { AuditEvent } from "@/lib/audit/service";
 
-const labels: Record<string, string> = { MUTATION_STARTED: "開始操作", MUTATION_COMPLETED: "操作結束", CREATE_ZONE: "新增 Zone", DELETE_ZONE: "刪除 Zone", CREATE_RECORD: "新增 DNS", UPDATE_RECORD: "修改 DNS", DELETE_RECORD: "刪除 DNS", UPDATE_PERMISSION: "調整權限", CREATE_USER: "新增使用者", UPDATE_USER: "修改使用者", ADD_PORTAL_ALLOWLIST: "加入登入白名單", REMOVE_PORTAL_ALLOWLIST: "移除登入白名單", UPDATE_DNS_OWNERSHIP: "修改 DNS 歸屬", INSPECT_DNS_RECORD: "DNS 清查", REQUEST_DNS_APPLICATION: "送出 DNS 申請", APPROVE_DNS_REQUEST: "核准 DNS 申請", REJECT_DNS_REQUEST: "駁回 DNS 申請", SIGN_IN: "登入", SIGN_OUT: "登出" };
+const labels: Record<string, string> = { UPDATE_ZONE_APPLICATION_ACCESS: "調整網域申請開放", MUTATION_STARTED: "開始操作", MUTATION_COMPLETED: "操作結束", CREATE_ZONE: "新增 Zone", DELETE_ZONE: "刪除 Zone", CREATE_RECORD: "新增 DNS", UPDATE_RECORD: "修改 DNS", DELETE_RECORD: "刪除 DNS", UPDATE_PERMISSION: "調整權限", CREATE_USER: "新增使用者", UPDATE_USER: "修改使用者", ADD_PORTAL_ALLOWLIST: "加入登入白名單", REMOVE_PORTAL_ALLOWLIST: "移除登入白名單", UPDATE_DNS_OWNERSHIP: "修改 DNS 歸屬", INSPECT_DNS_RECORD: "DNS 清查", REQUEST_DNS_APPLICATION: "送出 DNS 申請", APPROVE_DNS_REQUEST: "核准 DNS 申請", REJECT_DNS_REQUEST: "駁回 DNS 申請", SIGN_IN: "登入", SIGN_OUT: "登出" };
 export function AuditWorkbench() {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");

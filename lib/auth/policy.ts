@@ -9,5 +9,5 @@ export function loginProviderAllowed(provider: unknown, env: NodeJS.ProcessEnv =
 }
 
 export function passwordLoginEnabled(env: NodeJS.ProcessEnv = process.env) {
-  return demoLoginEnabled(env) || env.AUTH_PASSWORD_LOGIN_ENABLED !== "false";
+  return demoLoginEnabled(env);
 }

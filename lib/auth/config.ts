@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { verifyPassword } from "@/lib/auth/password";
 import { demoUsers } from "@/lib/users/demo";
-import { isOwnerEmail, resolvedGlobalRole } from "@/lib/auth/owner";
+import { resolvedGlobalRole } from "@/lib/auth/owner";
 import { ncuPortalProvider, portalConfigured, portalIdentity } from "./ncu-portal";
 import { passwordLoginEnabled, loginProviderAllowed } from "./policy";
 import { logAuditEvent } from "@/lib/audit/service";
@@ -90,7 +90,11 @@ const config: NextAuthConfig = {
           const identity = portalIdentity(profile);
           if (identity.id !== account.providerAccountId) return false;
           const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "ncu-portal", providerAccountId: identity.id } }, include: { user: true } });
-          if (linked) return !linked.user.disabled && (identity.owner ? isOwnerEmail(linked.user.email) && linked.user.globalRole === "SUPER_ADMIN" : !isOwnerEmail(linked.user.email));
+          if (linked) {
+            if (linked.user.disabled) return false;
+            await db.user.update({ where: { id: linked.user.id }, data: { studentId: identity.studentId, ...(identity.owner ? { globalRole: "SUPER_ADMIN" } : {}) } });
+            return true;
+          }
           const existing = await db.user.findUnique({ where: { email: identity.email } });
           if (existing?.disabled) return false;
           if (!identity.owner) return !existing; // Never silently merge existing accounts by email.

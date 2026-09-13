@@ -26,7 +26,7 @@ export function DnsRequestsWorkbench({ admin }: { admin: boolean }) {
     const needle = query.trim().toLowerCase();
     return requests.filter((item) => {
       if (status !== "ALL" && item.status !== status) return false;
-      return `${item.zoneName} ${item.recordName} ${item.recordType} ${item.content} ${item.user.email} ${item.applicantName ?? ""} ${item.applicantUnit ?? ""}`.toLowerCase().includes(needle);
+      return `${item.zoneName} ${item.recordName} ${item.recordType} ${item.content} ${item.user.studentId || item.user.accounts?.[0]?.providerAccountId || ""} ${item.applicantName ?? ""} ${item.applicantUnit ?? ""}`.toLowerCase().includes(needle);
     });
   }, [query, requests, status]);
 

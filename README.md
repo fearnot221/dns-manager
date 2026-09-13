@@ -4,6 +4,20 @@ A production-oriented PowerDNS Authoritative management platform built with Next
 
 ## Architecture
 
+### Portal 帳號呈現與最高權限
+
+正式環境僅支援 Portal 登入（舊 AUTH_PASSWORD_LOGIN_ENABLED 不再啟用正式環境帳密登入）；local demo 仍保留測試登入。請於 Portal 應用設定授權 `identifier student-id`，學號欄位為 `studentId`；未提供學號時顯示 Portal identifier，不猜測電子郵件。使用者管理與側欄不再顯示帳號暱稱、電子郵件，管理頁可編輯最多 1000 字備註，備註不影響權限。
+
+受保護的最高權限綁定 Portal identifier `115502532`，不是 studentId 顯示值或電子郵件。`NCU_OWNER_IDENTIFIER` 請同步設為 `115502532`。原受信任初始化帳號的內部電子郵件與帳號 ID 保留，用於首次連結及既有資料關聯；不能透過修改備註、學號或 email 取得最高權限。新帳號透過 Portal 登入建立，不再提供後台手動建立帳密功能。
+
+部署須先執行 Prisma migration（Docker 部署的 migrate 服務會執行），新增 User.studentId 與 User.note。既有 Portal 帳號下次登入會更新學號，無需刪除或重建帳號；歷史稽核原始資料不會被改寫。
+
+### 網域申請開放設定
+
+管理員在 Zone 清單的「使用者申請」欄位逐一開放或暫停申請。**尚未設定的網域預設暫停申請**，升級後請先開放需要提供申請的網域。申請表只顯示開放中的 PowerDNS 網域；送出時後端再次檢查，不接受未開放網域。暫停不會修改 DNS，也不影響既有紀錄或待審核申請。
+
+設定保存在既有 SystemSetting（本機 demo 使用本機檔案），依 PowerDNS 連線與 server ID 區分，不需資料庫 migration。管理員只能調整自己可管理的網域；變更包含操作者、時間、前後狀態的稽核紀錄，並防止舊頁面覆蓋較新的設定。網站沒有新增網域入口，新增網域 API 也已停用。
+
 The frontend is organized around a persistent authenticated workspace:
 
 - `app/(workspace)/layout.tsx`: shared session-aware shell; individual pages still check permissions.
