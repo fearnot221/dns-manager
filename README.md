@@ -6,7 +6,7 @@ A production-oriented PowerDNS Authoritative management platform built with Next
 
 ### Portal 帳號呈現與最高權限
 
-正式環境僅支援 Portal 登入（舊 AUTH_PASSWORD_LOGIN_ENABLED 不再啟用正式環境帳密登入）；local demo 仍保留測試登入。請於 Portal 應用設定授權 `identifier student-id`，學號欄位為 `studentId`；未提供學號時顯示 Portal identifier，不猜測電子郵件。使用者管理與側欄不再顯示帳號暱稱、電子郵件，管理頁可編輯最多 1000 字備註，備註不影響權限。
+測試期間保留帳密與 Portal 登入；`AUTH_PASSWORD_LOGIN_ENABLED=true`（預設）允許已有密碼的測試帳號登入，測試完成可設為 `false` 關閉。local demo 仍保留測試登入。請於 Portal 應用設定授權 `identifier student-id`，學號欄位為 `studentId`；未提供學號時顯示 Portal identifier，不猜測電子郵件。使用者管理與側欄不再顯示帳號暱稱、電子郵件，管理頁可編輯最多 1000 字備註，備註不影響權限。
 
 受保護的最高權限綁定 Portal identifier `115502532`，不是 studentId 顯示值或電子郵件。`NCU_OWNER_IDENTIFIER` 請同步設為 `115502532`。原受信任初始化帳號的內部電子郵件與帳號 ID 保留，用於首次連結及既有資料關聯；不能透過修改備註、學號或 email 取得最高權限。新帳號透過 Portal 登入建立，不再提供後台手動建立帳密功能。
 

@@ -8,9 +8,10 @@ it("can disable password login in production regardless of mock or database sett
     for (const provider of [undefined, "credentials", "google"]) expect(loginProviderAllowed(provider, env)).toBe(false);
   }
 });
-it("retains credentials only in local demo", () => {
+it("retains test credentials unless explicitly disabled", () => {
   const env = { NODE_ENV: "development", DATABASE_URL: "" } as NodeJS.ProcessEnv;
   expect(loginProviderAllowed("credentials", env)).toBe(true);
   expect(loginProviderAllowed("ncu-portal", env)).toBe(false);
-  expect(loginProviderAllowed("credentials", { ...env, DATABASE_URL: "postgresql://db/test" })).toBe(false);
+  expect(loginProviderAllowed("credentials", { ...env, DATABASE_URL: "postgresql://db/test" })).toBe(true);
+  expect(loginProviderAllowed("credentials", { ...env, NODE_ENV: "production", AUTH_PASSWORD_LOGIN_ENABLED: "true" })).toBe(true);
 });

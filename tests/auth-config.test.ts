@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { hashPassword } from "@/lib/auth/password";
 const mocks = vi.hoisted(() => ({
   nextAuth: vi.fn(() => ({ handlers: {}, auth: vi.fn() })),
   after: vi.fn(),
@@ -28,15 +29,30 @@ async function configuration(production = true, configured = true) {
   // Capture the actual Auth.js configuration without performing network sign-in.
   return (mocks.nextAuth.mock.calls as unknown as [import("next-auth").NextAuthConfig][])[0][0];
 }
-it("registers only Portal in production despite the legacy password flag", async () => {
+it("registers Portal and password login for testing", async () => {
   const config = await configuration();
-  expect(config.providers.map((p) => typeof p === "function" ? p().id : p.id)).toEqual(["ncu-portal"]);
+  expect(config.providers.map((p) => typeof p === "function" ? p().id : p.id)).toEqual(["credentials", "ncu-portal"]);
   vi.resetModules(); vi.clearAllMocks();
-  expect((await configuration(true, false)).providers).toHaveLength(0);
+  expect((await configuration(true, false)).providers).toHaveLength(1);
 });
 it("registers only credentials in local demo", async () => {
   const config = await configuration(false);
   expect(config.providers.map((p) => typeof p === "function" ? p().id : p.id)).toEqual(["credentials"]);
+});
+it("validates existing test passwords and rejects disabled accounts or a disabled provider", async () => {
+  const config = await configuration();
+  const provider = config.providers[0] as unknown as { options: { authorize: (value: unknown) => Promise<unknown> } };
+  const password = "test-password-123456";
+  const user = { id: "test", email: "test@example.invalid", name: "Test", globalRole: "USER", disabled: false, passwordHash: await hashPassword(password) };
+  mocks.findUnique.mockResolvedValue(user);
+  expect(await provider.options.authorize({ email: user.email, password })).toMatchObject({ id: "test", globalRole: "USER" });
+  expect(await provider.options.authorize({ email: user.email, password: "wrong" })).toBeNull();
+  mocks.findUnique.mockResolvedValue({ ...user, disabled: true });
+  expect(await provider.options.authorize({ email: user.email, password })).toBeNull();
+  vi.stubEnv("AUTH_PASSWORD_LOGIN_ENABLED", "false");
+  mocks.findUnique.mockClear();
+  expect(await provider.options.authorize({ email: user.email, password })).toBeNull();
+  expect(mocks.findUnique).not.toHaveBeenCalled();
 });
 it("rejects old JWTs and preserves Portal provenance on new JWTs", async () => {
   const config = await configuration();

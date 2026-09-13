@@ -21,6 +21,29 @@ beforeEach(() => {
   vi.mocked(demoUsers).mockImplementation(async (operation) => operation(users));
 });
 describe("protected owner and user management", () => {
+  it("allows admins and the owner to update or clear owner notes only", async () => {
+    for (const actor of [admin, owner]) {
+      vi.mocked(requireActor).mockResolvedValue(actor);
+      for (const note of ["最高帳號備註", ""]) {
+        expect((await PATCH(request({ note }), { params: Promise.resolve({ id: owner.id }) })).status).toBe(200);
+        expect(users[0].note).toBe(note);
+        expect(users[0].globalRole).toBe("SUPER_ADMIN");
+        expect(users[0].disabled).toBe(false);
+      }
+    }
+  });
+  it("rejects mixed protected-account updates without writing the note", async () => {
+    vi.mocked(requireActor).mockResolvedValue(owner);
+    for (const fields of [{ disabled: false }, { disabled: true }, { globalRole: "USER" }]) {
+      expect((await PATCH(request({ note: "must not save", ...fields }), { params: Promise.resolve({ id: owner.id }) })).status).toBe(403);
+      expect(users[0].note).toBeUndefined();
+    }
+  });
+  it("does not let ordinary users edit owner notes", async () => {
+    vi.mocked(requireActor).mockResolvedValue({ id: "dev-user", email: "user@example.com", globalRole: "USER", zoneRoles: {} });
+    expect((await PATCH(request({ note: "forbidden" }), { params: Promise.resolve({ id: owner.id }) })).status).toBe(403);
+    expect(users[0].note).toBeUndefined();
+  });
   it("stores notes without exposing email or nickname and rejects identity edits", async () => {
     const result = await PATCH(request({ note: "網管測試帳號" }), { params: Promise.resolve({ id: "dev-user" }) });
     expect(result.status).toBe(200);
