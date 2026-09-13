@@ -26,11 +26,12 @@ export DEPLOY_TAG
 DEPLOY_TAG="$(git rev-parse HEAD)"
 compose=(docker compose --project-name dns-manager --env-file "$DEPLOY_ENV_FILE" -f "$DEPLOY_DIR/docker-compose.yml")
 "${compose[@]}" config --quiet
-# Keep the current web container running while building and migrating.
+# Build before downtime. Never stop the current release if lint/test/build fails.
 "${compose[@]}" build --pull web migrate
-"${compose[@]}" up -d --wait postgres
-"${compose[@]}" run --rm --no-deps migrate
-if ! "${compose[@]}" up -d --no-deps --wait --wait-timeout 120 web; then
+# Intentionally restart the whole application stack as requested. Preserve named volumes.
+# The separate ingress container and host webhook service remain available.
+"${compose[@]}" down --timeout 30
+if ! "${compose[@]}" up -d --wait --wait-timeout 180; then
   echo 'New web container did not become healthy. Database migrations are NOT automatically reversed.'
   echo 'Inspect docker compose logs, then redeploy a compatible commit. No data volume has been removed.'
   exit 1

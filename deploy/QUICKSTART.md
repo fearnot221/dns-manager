@@ -1,0 +1,122 @@
+# Ubuntu VM 快速安裝：dns.ce.ncu.edu.tw + 獨立 Caddy
+
+適用於專用、全新 Ubuntu Server **24.04 LTS** VM（amd64 或 arm64，建議 4 vCPU / 8 GB RAM / 60 GB 磁碟）。需有 sudo、固定 RFC1918 內網 IPv4、可出站連線至 Ubuntu/Docker/Node/GitHub/NCU Portal。不是在 Proxmox host 或 CT 執行。
+
+## 1. VM 上安裝
+
+```bash
+sudo apt-get update
+sudo apt-get install -y curl ca-certificates
+curl -fL --proto '=https' --tlsv1.2 \
+  https://raw.githubusercontent.com/fearnot221/dns-manager/main/deploy/install-vm.sh \
+  -o install-dns-manager.sh
+less install-dns-manager.sh
+sudo bash install-dns-manager.sh
+```
+
+依提示輸入 **VM 內網 IP**、**Caddy 連到 VM 時的來源內網 IP**（若有 NAT，填轉換後的來源 IP）。腳本只支援 IPv4 RFC1918，其他網路配置需手動調整，不能填 `0.0.0.0`。
+
+腳本會安裝 Docker Engine/Compose/Buildx、獨立 Node.js 22 runtime、專用 dnsdeploy 帳號、網站與 PostgreSQL、migration、最高帳號、獨立內網 Caddy gateway 與 systemd webhook 接收服務。Node tarball 會核對官方 HTTPS SHA256 manifest。原有 Docker 安裝會保留，若缺 plugin／套件衝突則停止，不會自動移除其他軟體。
+
+固定目錄：
+
+- `/opt/dns-manager`：main checkout，dnsdeploy 擁有；不要直接改正式 checkout。
+- `/opt/dns-manager-deploy`：root 管理的 webhook／更新程式；不由 push 自行覆寫。
+- `/opt/dns-manager-node`：host webhook 的獨立 Node runtime；不修改系統 Node。
+- `/etc/dns-manager/app.env`、`webhook.env`：root:dnsdeploy 0640，密鑰不進 Git。
+- `/var/lib/dns-manager-webhook`：持久化 queue、部署鎖與完成紀錄。
+
+可以重跑本腳本恢復中斷的安裝，既有 env 密鑰與最高帳號不會重設。若有不是本腳本管理的同名目錄會停止，避免覆寫手動部署。重跑會更新 main、重裝受管理的 host scripts/gateway 設定並重啟服務；日常更新請用 `update-now.sh`，不要重跑 installer。已安裝的獨立 Node runtime 需另行維護安全更新。
+
+## 2. 在另一台 Caddy proxy 加入站台
+
+腳本會在 VM 產生 `/etc/dns-manager/Caddyfile.external`。將其中的站台 block **合併**到既有 proxy Caddyfile，不要覆蓋其他站台。內容如下，替換 `VM_PRIVATE_IP`：
+
+```caddyfile
+dns.ce.ncu.edu.tw {
+    reverse_proxy http://VM_PRIVATE_IP:8080
+}
+```
+
+在 **proxy 主機** 上驗證再 reload（下例為 systemd 部署的 Caddy；容器部署請用其原有方式）：
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+sudo systemctl reload caddy
+```
+
+公開 DNS `dns.ce.ncu.edu.tw` 指向 **proxy 的對外服務位址**。TLS 憑證由既有 Caddy 管理；依其 ACME 設定開放 proxy 的 80/443 或使用 DNS challenge。VM 不需對外 IP 或憑證。
+
+內網 ACL／防火牆僅允許 **Caddy → VM TCP 8080**；SSH 只給維運來源。腳本不會改防火牆或 SSH，避免斷線。VM gateway 另外用來源 IP allowlist 拒絕其他主機，網站 3000 與 webhook 9000 維持 loopback，PostgreSQL 不發布 port。Caddy→VM 的 HTTP 連線應置於受信任／隔離內網；若會跨不可信網段，先建立 VPN 或加 upstream TLS。
+
+外部 Caddy → VM:8080 的 gateway → 本機 web:3000 或 `/hooks/github` → 本機 webhook:9000。VM gateway 用獨立 Compose project `dns-manager-ingress` 執行，網站 down 時它和 host webhook service 都不會被停掉。它不是第二個對外 proxy，只提供內網來源限制與路徑分流。
+
+驗證 `https://dns.ce.ncu.edu.tw/login` 可正常開啟。若 403，核對 Caddy 實際來源 IP；若 502，檢查 VM 網路／容器狀態；若連線逾時，檢查 ACL、DNS 和路由。
+
+## 3. 一次性註冊 GitHub webhook
+
+建立短效 **fine-grained PAT**：resource owner `fearnot221`，只選 `dns-manager`，Repository permissions → **Webhooks: Read and write**。不要使用長期全權 token，也不要把 token 貼進指令或對話。
+
+在 VM 執行：
+
+```bash
+sudo /opt/dns-manager-deploy/register-webhook.sh
+```
+
+Token 以隱藏輸入讀取，只透過 stdin 傳入註冊程式，不存檔、不傳給網站、不傳給部署子程序。它會先對 `https://dns.ce.ncu.edu.tw/hooks/github` 送有簽章的 ping，確認 Caddy/DNS/TLS/receiver 真正連通，再建立或更新同網址的 push webhook（TLS 驗證開啟）。完成後可立即撤銷 PAT，不影響以後的 public repo fetch 或 webhook 驗章。
+
+不想用 PAT，可手動在 GitHub → Repository Settings → Webhooks 新增：
+
+- Payload URL：`https://dns.ce.ncu.edu.tw/hooks/github`
+- Content type：`application/json`
+- Secret：VM `/etc/dns-manager/webhook.env` 的 `WEBHOOK_SECRET`（不要公開）
+- Just the push event；Active；Enable SSL verification
+
+**只有 main 的 push 會部署**，其他分支與刪除事件忽略。流程：HMAC 驗證 → repo/branch 比對 → 持久化排隊 → fetch/fast-forward 最新 main → lint/test/build → `docker compose down --timeout 30` → `docker compose up -d --wait --wait-timeout 180` → DB migration / web 健康檢查。
+
+build 失敗不會執行 down；down/up 會短暫中斷網站和資料庫，但不使用 `-v`、不刪 volume、不自動 seed。連續 push 會串行處理，部署的是 fetch 時 main 的最新版本，不承諾每個中間 commit 都上線。正式 checkout dirty 或歷史被 force-push 成非 fast-forward 時會安全停止。
+
+首次設定後，push 一個真正要部署的 main 更新，確認 GitHub Recent deliveries 收到 202，並在 VM 查看：
+
+```bash
+sudo journalctl -u dns-manager-webhook -f
+sudo cat /var/lib/dns-manager-webhook/last-successful-commit
+curl -f https://dns.ce.ncu.edu.tw/healthz
+```
+
+**202 只代表接受排隊，不代表部署完成**；要看到 journal 的 `Healthy deployment` 及 healthz 成功。註冊腳本只驗證連通並建立 webhook，尚未代替這次真實 push 驗收。GitHub delivery 若因網路故障未送到 VM，或 `.failed` 部署失敗，修正問題後需在 Recent deliveries 按 Redeliver；不宣稱任何網路／磁碟故障下都能無人介入。已成功的 delivery 不會重複部署。
+
+## 4. 最高帳號、Portal 與 PowerDNS
+
+最高帳號是 `fearnot@ce.ncu.edu.tw`；初始密碼是獨立隨機值，不是 demo 密碼：
+
+```bash
+sudo cat /etc/dns-manager/initial-owner-password
+sudoedit /etc/dns-manager/app.env
+```
+
+將密碼保存至安全的密碼管理器後，刪除這一個交付檔即可（勿刪 app.env）。seed 成功後 env 裡的 `OWNER_INITIAL_PASSWORD` 會清空，不再傳給後續容器。
+
+安裝程式**無法代填學校核發的秘密**。在 app.env 填 `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、人工核對最高帳號的 `NCU_OWNER_IDENTIFIER`；三者須一起設定。Portal：
+
+- Single Sign On URL：`https://dns.ce.ncu.edu.tw/login`
+- Return To Address：`https://dns.ce.ncu.edu.tw/api/auth/callback/ncu-portal`
+- Scopes：`identifier chinese-name email`；關閉可代理登入。
+
+PowerDNS 填 `PDNS_API_URL`、`PDNS_API_KEY` 或先設定可信 `PDNS_ALLOWED_ORIGINS` 再從後台填 API。未配置時網站仍可用本機最高帳號登入，但 DNS 操作不會成功；`PDNS_MOCK=false` 不會偷換成 demo 資料。API 不要對外暴露。
+
+修改 app.env 後立即套用：
+
+```bash
+sudo /opt/dns-manager-deploy/update-now.sh
+```
+
+這也使用同一把部署鎖和 down/up 流程，不用為環境變數變更假造 Git commit。它會拉 main 的最新版本，故執行前確認該分支已準備好上線。
+
+## 備份與故障處理
+
+正式資料必須另設 PostgreSQL 邏輯備份、VM 備份及備份還原驗證；本腳本不代建遠端備份。密鑰（尤其 `SETTINGS_ENCRYPTION_KEY`）、資料庫及 PowerDNS backend 都需安全備份。migration 不會自動逆轉，up 失敗可能讓網站停機，請修正後重送／手動部署相容版本，不要 `down -v` 或任意更換資料庫／加密密鑰。
+
+dnsdeploy 的 Docker 權限等同高權限；限制 repo 寫入者、SSH，啟用 GitHub 2FA／main 保護。Server 會在 build 時跑 lint/test，但不等待 GitHub Actions；需要審核請保護 main，讓 merge 前 CI 必須通過。舊 image/build cache 不會自動 prune；定期檢查磁碟用量，避免無空間使更新失敗。
+
+參考：[Docker Ubuntu 安裝](https://docs.docker.com/engine/install/ubuntu/)、[Caddy reverse_proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy)、[GitHub Webhooks API](https://docs.github.com/en/rest/repos/webhooks)。

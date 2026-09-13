@@ -1,5 +1,7 @@
 # Docker 自架與 GitHub push 自動部署
 
+**目前正式架構：Ubuntu 24.04 內網 VM + 另一台 Caddy，網域 `dns.ce.ncu.edu.tw`。請優先使用 [VM 一鍵安裝指南](QUICKSTART.md) 與 [install-vm.sh](install-vm.sh)。** 它會自動建立環境檔、安裝依賴、初始化帳號、配置私有 gateway/webhook，並提供一次性 GitHub webhook 註冊工具。下列是手動安裝／同機 Nginx 的替代方案。
+
 本方案使用 Linux 主機上的 Docker Compose、PostgreSQL、Nginx（HTTPS）及一個獨立的 webhook service。網站容器不掛載 Docker socket。Webhook 的部署帳號具有 Docker 權限，等同主機高權限，務必限制 SSH、repository 寫入者與正式分支。
 
 ## 1. 先準備
@@ -92,13 +94,13 @@ Repository → Settings → Webhooks → Add webhook：
 
 必須等 server HTTPS endpoint 已就緒再建立，不能以 localhost 作 GitHub webhook 目的地。檢查 ping 成功，push main 後確認 delivery 202、server journal 顯示 `Healthy deployment`，以及健康檢查正常。202 僅代表持久化排隊成功，不代表部署已成功。
 
-流程：驗證 HMAC-SHA256 → 比對 repo／branch → 持久化排隊 → Git fetch + fast-forward → Docker lint/test/build → 等待 DB → migration → 重建 web → healthcheck。payload 不會提供 shell command，強制推送或 dirty checkout 的非 fast-forward 更新會失敗而不是覆蓋本機檔案。連續 push 串行執行；拉的是當時正式分支最新版本。
+流程：驗證 HMAC-SHA256 → 比對 repo／branch → 持久化排隊 → Git fetch + fast-forward → Docker lint/test/build → compose down（不刪 volume）→ compose up → 等待 DB / migration / web healthcheck。payload 不會提供 shell command，強制推送或 dirty checkout 的非 fast-forward 更新會失敗而不是覆蓋本機檔案。連續 push 串行執行；拉的是當時正式分支最新版本。
 
 失敗請看 journal／Compose logs；修正後從 GitHub Recent deliveries 重送同一個失敗事件。已成功的 delivery ID 不重複執行；服務重啟會處理未完成的 queue。State directory 裡的 `.done`／`.failed` 是去重與結果紀錄，勿任意刪除。
 
 ## 6. 備份、更新與限制
 
-部署不會 seed、刪除 volume、prune 或自動回退資料庫。升版前備份 PostgreSQL、PowerDNS backend 與 SETTINGS_ENCRYPTION_KEY，先在 staging 驗證 migration。新 web healthcheck 失敗時不宣稱成功，須由維運部署相容修正版／依備份還原；資料庫 migration 不會自動逆轉。單 web container 替換有短暫中斷，不是零停機部署。
+部署不會 seed、刪除 volume、prune 或自動回退資料庫。升版前備份 PostgreSQL、PowerDNS backend 與 SETTINGS_ENCRYPTION_KEY，先在 staging 驗證 migration。新 web healthcheck 失敗時不宣稱成功，須由維運部署相容修正版／依備份還原；資料庫 migration 不會自動逆轉。down/up 會暫停網站與資料庫，不是零停機部署。
 
 網站與 webhook receiver 分開管理：更新 receiver／host deploy script 需由維運檢查後重新 install 和 restart service。任何可改 Compose／Dockerfile 的正式分支寫入者都有能力影響主機，請啟用 GitHub 2FA、分支保護與審核。
 

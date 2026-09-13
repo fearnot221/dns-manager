@@ -11,6 +11,13 @@ try {
   compose(['--profile', 'maintenance', 'run', '--rm', '--no-deps', 'seed']);
   compose(['exec', '-T', 'web', 'node', '-e', "Promise.all(['/healthz','/login'].map(async p=>{const r=await fetch('http://127.0.0.1:3000'+p);if(!r.ok)throw Error(p+' '+r.status);console.log(p,r.status)})).catch(e=>{console.error(e.message);process.exit(1)})"]);
   compose(['exec', '-T', 'postgres', 'psql', '-U', 'aegis', '-d', 'aegis_dns', '-c', 'SELECT email, "globalRole" FROM "User";']);
+  // Exercise the requested down/up path on real PostgreSQL and prove named-volume durability.
+  compose(['down', '--timeout', '30']);
+  compose(['up', '-d', '--no-build', '--wait', '--wait-timeout', '180']);
+  const ownerCount = compose(['exec', '-T', 'postgres', 'psql', '-U', 'aegis', '-d', 'aegis_dns', '-tAc', 'SELECT count(*) FROM "User" WHERE email=\'fearnot@ce.ncu.edu.tw\' AND "globalRole"=\'SUPER_ADMIN\';'], true).trim();
+  if (ownerCount !== '1') throw new Error('Owner record did not survive compose down/up');
+  compose(['exec', '-T', 'web', 'node', '-e', "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]);
+  console.info('Compose down/up preserved PostgreSQL owner record and restored healthy web');
   console.info('Docker smoke test passed:', project);
 } finally {
   // Only this script-created disposable project's containers and test volume are removed.

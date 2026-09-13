@@ -1,0 +1,27 @@
+{
+    admin off
+    auto_https off
+}
+
+# Private VM gateway; Docker host networking preserves the connecting proxy IP.
+http://:8080 {
+    bind VM_PRIVATE_IP
+    @blocked not remote_ip CADDY_PRIVATE_IP
+    request_body {
+        max_size 2MB
+    }
+    # Preserve order: deny untrusted sources BEFORE either proxy handler.
+    route {
+        respond @blocked 403
+        handle /hooks/github {
+            reverse_proxy 127.0.0.1:9000
+        }
+        handle {
+            reverse_proxy 127.0.0.1:3000 {
+                header_up Host dns.ce.ncu.edu.tw
+                header_up X-Forwarded-Host dns.ce.ncu.edu.tw
+                header_up X-Forwarded-Proto https
+            }
+        }
+    }
+}

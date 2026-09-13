@@ -1,0 +1,4 @@
+# On the EXISTING, separate Caddy proxy. Replace VM_PRIVATE_IP, validate, then reload.
+dns.ce.ncu.edu.tw {
+    reverse_proxy http://VM_PRIVATE_IP:8080
+}
