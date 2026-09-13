@@ -9,8 +9,12 @@ COPY prisma ./prisma
 RUN npm ci
 
 FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+# The VM installer uses umask 077. Source files can be 0600 / directories 0700;
+# assign them and generated Prisma dependencies to the account that runs migrations.
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node . .
+RUN chown node:node /app
+USER node
 RUN npm run lint && npm test && npm run build
 
 FROM builder AS tools

@@ -32,6 +32,8 @@ sudo bash install-dns-manager.sh
 
 若舊版停在 `compose-spec.json: stat .: permission denied`，這是切換 dnsdeploy 後繼承了私人家目錄，不是 Docker 安裝失敗。重新下載修正版 installer 再執行即可接續，無需刪目錄、重裝 Docker，或把自己的家目錄改成公開可讀。
 
+若 PostgreSQL healthy，但 migrate 退出 243，且其 log 有 `EACCES`／無法讀取 `/app/package.json`，舊 Dockerfile 沒有處理 `umask 077` checkout 的檔案所有權。新版 builder 會以 node 擁有並建置程式及 Prisma 依賴。重跑 installer 會拉取修正版並重建、重試 migration；不要改成 root 跑 migration，也不要刪除 postgres_data volume。CI 會用 0600 檔案／0700 目錄的隔離 checkout 建置，再實測 migration、seed、down/up 與資料保留。
+
 ## 2. 在另一台 Caddy proxy 加入站台
 
 腳本會在 VM 產生 `/etc/dns-manager/Caddyfile.external`。將其中的站台 block **合併**到既有 proxy Caddyfile，不要覆蓋其他站台。內容如下，替換 `VM_PRIVATE_IP`：

@@ -19,8 +19,7 @@ jobs:
       - run: bash -n deploy/install-vm.sh deploy/deploy.sh deploy/register-webhook.sh deploy/update-now.sh
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
-      - run: docker build --target runner -t dns-manager-web:verification .
-      - run: docker build --target tools -t dns-manager-tools:verification .
+      - run: node scripts/build-verification-images.mjs
       - run: node scripts/verify-docker.mjs
       - run: node scripts/verify-ingress.mjs
       - run: node scripts/verify-compose-cwd.mjs
