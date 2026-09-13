@@ -13,6 +13,9 @@
 .request-entry { border-top: 1px solid var(--border); }
 .request-entry > summary { cursor: pointer; list-style: none; }
 .request-entry > summary::-webkit-details-marker { display: none; }
+.request-entry > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; border-radius: 4px; }
+.request-status-filter button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+.request-entry > summary { transition: background .15s ease; }
 .request-entry > summary:hover, .request-entry[open] > summary { background: var(--surface-soft); }
 .request-type { font-family: var(--font-mono), monospace; font-size: .8125rem; font-weight: 600; color: var(--accent); }
 .request-host { min-width: 0; display: grid; gap: 3px; }
@@ -22,6 +25,7 @@
 .request-status { white-space: nowrap; font-size: .875rem; }
 .request-status.status-approved { color: var(--green); }
 .request-status.status-rejected { color: var(--red); }
+.request-status.status-cancelled { color: var(--muted); }
 .request-date { color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
 .request-chevron { color: var(--muted); transition: transform .15s; }
 .request-entry[open] .request-chevron { transform: rotate(180deg); }
@@ -30,6 +34,7 @@
 .request-detail dl > div { display: grid; grid-template-columns: 80px minmax(0,1fr); gap: 12px; font-size: .875rem; }
 .request-detail dt { color: var(--muted); }
 .request-detail dd { margin: 0; overflow-wrap: anywhere; }
+.request-detail dd:not(:has(code)) { white-space: pre-wrap; }
 .request-detail code { white-space: pre-wrap; font-size: .8125rem; }
 .request-detail .review-note { grid-column: 1/-1; padding-top: 12px; border-top: 1px solid var(--border); }
 .request-review-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 20px; }

@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge, SubmitButton } from "@/components/ui";
 import { type DnsRequest } from "./model";
@@ -13,6 +13,8 @@ export function ReviewDialog({ review, onClose, onSaved }: { review: { item: Dns
   const [pending, setPending] = useState(false);
   const sending = useRef(false);
   const [error, setError] = useState("");
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (sending.current) return;
@@ -27,7 +29,7 @@ export function ReviewDialog({ review, onClose, onSaved }: { review: { item: Dns
   }
   const approving = review.decision === "APPROVE";
   return <Dialog title={approving ? "核准這筆 DNS 申請？" : "不核准這筆 DNS 申請？"} description={approving ? "核准後會立即建立 DNS 紀錄，請確認名稱與解析內容。" : "申請人會看到你的審核回覆。"} pending={pending} onClose={onClose}><form onSubmit={submit}><fieldset className="dialog-fields" disabled={pending}>
-    <div className="modal-body"><div className="review-record"><Badge tone={review.item.recordType === "A" ? "orange" : "neutral"}>{review.item.recordType}</Badge><strong>{review.item.recordName}</strong><code>{review.item.content}</code><span>{review.item.zoneName} · {review.item.ttl}s TTL</span></div><label>審核回覆 <small>{approving ? "選填" : "建議填寫原因"}</small><textarea name="reviewNote" rows={3} maxLength={1000} placeholder="說明審核結果或需要補充的資料" /></label>{approving && <div className="warning"><AlertTriangle size={17} /><div><strong>即時變更 DNS</strong><p>同名稱、同類型的既有紀錄會保留。</p></div></div>}{error && <div className="form-error" role="alert"><AlertTriangle size={15} />{error}</div>}</div>
+    <div className="modal-body"><div className="review-record"><Badge tone={review.item.recordType === "A" ? "orange" : "neutral"}>{review.item.recordType}</Badge><strong>{review.item.recordName}</strong><code>{review.item.content}</code><span>{review.item.zoneName} · {review.item.ttl}s TTL</span></div><label>審核回覆 <small>{approving ? "選填" : "建議填寫原因"}</small><textarea name="reviewNote" rows={3} maxLength={1000} placeholder="說明審核結果或需要補充的資料" /></label>{approving && <div className="warning"><AlertTriangle size={17} /><div><strong>即時變更 DNS</strong><p>同名稱、同類型的既有紀錄會保留。</p></div></div>}{error && <div ref={errorRef} tabIndex={-1} className="form-error" role="alert"><AlertTriangle size={15} aria-hidden="true" />{error}</div>}</div>
     <div className="modal-foot"><button className="button" type="button" disabled={pending} onClick={onClose}>取消</button><SubmitButton pending={pending} label={approving ? "核准並建立紀錄" : "確認不核准"} /></div>
   </fieldset></form></Dialog>;
 }

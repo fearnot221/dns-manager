@@ -28,7 +28,17 @@ export const statuses: Array<{ key: "ALL" | RequestStatus; label: string }> = [
   { key: "PENDING", label: "待審核" },
   { key: "APPROVED", label: "已核准" },
   { key: "REJECTED", label: "未核准" },
+  { key: "CANCELLED", label: "已取消" },
 ];
+
+export function filterRequests(requests: DnsRequest[], query: string, status: "ALL" | RequestStatus) {
+  const needle = query.trim().toLowerCase();
+  return requests.filter((item) => (status === "ALL" || item.status === status) && [
+    item.zoneName, item.recordName, item.recordType, item.content,
+    item.user.studentId, item.user.accounts?.[0]?.providerAccountId,
+    item.applicantName, item.applicantUnit, item.applicantExtension, item.purpose, item.reviewNote,
+  ].filter(Boolean).join(" ").toLowerCase().includes(needle));
+}
 
 export function displayRecordName(name: string, zone: string) {
   const cleanName = name.replace(/\.$/, "");

@@ -21,7 +21,7 @@ export function Dialog({ title, description, pending = false, onClose, children 
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     dialog.showModal();
-    const initialFocus = dialog.querySelector<HTMLElement>("[data-dialog-initial-focus]") ?? dialog.querySelector<HTMLElement>("input:not([disabled]), textarea:not([disabled]), select:not([disabled])");
+    const initialFocus = dialog.querySelector<HTMLElement>("[data-dialog-initial-focus]:not(:disabled)") ?? dialog.querySelector<HTMLElement>("input:not(:disabled):not([readonly]), textarea:not(:disabled):not([readonly]), select:not(:disabled)");
     initialFocus?.focus();
     return () => {
       dialog.close();
@@ -31,7 +31,7 @@ export function Dialog({ title, description, pending = false, onClose, children 
   }, []);
 
   return (
-    <dialog ref={ref} className="modal" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined}
+    <dialog ref={ref} className="modal" aria-busy={pending} aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined}
       onCancel={(event) => { event.preventDefault(); if (!pending) onClose(); }}
       onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (!pending) onClose(); } }}
       onClick={(event) => {
