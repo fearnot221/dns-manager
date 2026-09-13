@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { registerWebhook } from '../deploy/register-webhook.mjs';
+import { registerWebhook, formatRegistrationError } from '../deploy/register-webhook.mjs';
 
 describe('Ubuntu installer release selection', () => {
   it('leaves the caller private directory before switching user and runs Compose from the checkout', async () => {
@@ -85,6 +85,39 @@ describe('VM full-stack restart deployment', () => {
 describe('one-time GitHub webhook registration', () => {
   const config = { DEPLOY_REPOSITORY: 'fearnot221/dns-manager', WEBHOOK_SECRET: 'ab'.repeat(32) };
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status });
+  it('identifies a probe timeout and preserves its cause without calling GitHub', async () => {
+    const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    const request = vi.fn().mockRejectedValue(timeout);
+    const log = vi.fn();
+    const error = await registerWebhook('test-token', config, request, log).catch((error) => error);
+    expect(error.message).toContain('Probe public webhook POST https://dnsmgr.ce.ncu.edu.tw/hooks/github');
+    expect(error.cause).toBe(timeout);
+    expect(formatRegistrationError(error)).toContain('TimeoutError');
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledTimes(1);
+  });
+  it('identifies GitHub network failures after a successful probe', async () => {
+    const cause = Object.assign(new Error('getaddrinfo failed'), { code: 'ENOTFOUND', hostname: 'api.github.com' });
+    const request = vi.fn().mockResolvedValueOnce(json({ message: 'ping' })).mockRejectedValueOnce(new TypeError('fetch failed', { cause }));
+    const error = await registerWebhook('test-token', config, request).catch((error) => error);
+    const output = formatRegistrationError(error);
+    expect(output).toContain('GitHub API GET');
+    expect(output).toContain('ENOTFOUND');
+    expect(output).toContain('api.github.com');
+    expect(output).toContain('at ');
+  });
+  it('redacts credentials in messages/stacks and never dumps arbitrary request objects', () => {
+    const token = 'test-private-token-123';
+    const secret = 'test/secret+value';
+    const cause = Object.assign(new Error(`${secret} ${encodeURIComponent(secret)}`), { code: 'ECONNREFUSED', request: { headers: { hidden: 'request-object-must-not-be-dumped' } } });
+    const error = new Error(`Bearer ${token}`, { cause: new AggregateError([cause], token) });
+    const output = formatRegistrationError(error, [token, secret]);
+    expect(output).toContain('ECONNREFUSED');
+    expect(output).toContain('[REDACTED]');
+    for (const value of [token, secret, encodeURIComponent(secret), 'request-object-must-not-be-dumped']) expect(output).not.toContain(value);
+    cause.cause = error;
+    expect(() => formatRegistrationError(error, [token, secret])).not.toThrow();
+  });
   it('probes signed HTTPS before creating a push-only webhook; sends PAT only to GitHub', async () => {
     const request = vi.fn().mockResolvedValueOnce(json({ message: 'ping' })).mockResolvedValueOnce(json([])).mockResolvedValueOnce(json({ id: 42 }, 201));
     expect(await registerWebhook('test-token', config, request)).toBe(42);
