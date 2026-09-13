@@ -155,7 +155,7 @@ Saved keys use authenticated AES-256-GCM encryption and are never returned to th
 
 ## Docker deployment
 
-For the production **dns.ce.ncu.edu.tw** topology (Ubuntu 22.04/24.04 private VM, separate Caddy proxy), use the [one-command VM installer and setup guide](deploy/QUICKSTART.md). It generates secrets, initializes the owner, installs a private IP-restricted gateway and signed webhook receiver, and includes a one-time GitHub webhook registration helper. Main pushes build first, then run Compose **down / up without deleting data volumes**.
+For the production **dnsmgr.ce.ncu.edu.tw** topology (Ubuntu 22.04/24.04 private VM, separate Caddy proxy), use the [one-command VM installer and setup guide](deploy/QUICKSTART.md). It generates secrets, initializes the owner, installs a private IP-restricted gateway and signed webhook receiver, and includes a one-time GitHub webhook registration helper. Main pushes build first, then run Compose **down / up without deleting data volumes**.
 
 For the current production Compose, NCU Portal and signed GitHub webhook setup, follow [the complete deployment guide](deploy/README.md). Keep production secrets outside the checkout using [deploy/app.env.example](deploy/app.env.example). The web image excludes local `.env` files and `.local-demo` data; a separate tools image runs migration and seed.
 

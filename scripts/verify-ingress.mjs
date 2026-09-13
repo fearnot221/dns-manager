@@ -17,12 +17,13 @@ try {
   docker('run', '-d', '--name', `${prefix}-backend`, '--network', `container:${prefix}`, 'node:22-bookworm-slim', 'node', '-e', mock);
   const published = docker('port', prefix, '8080/tcp').trim();
   let denied;
-  for (let attempt = 0; attempt < 30; attempt++) {
+  // Docker Desktop can take longer to expose a freshly allocated host port on cold start.
+  for (let attempt = 0; attempt < 150; attempt++) {
     try { denied = await fetch(`http://${published}/login`); break; } catch { await new Promise((resolve) => setTimeout(resolve, 200)); }
   }
   if (denied?.status !== 403) throw new Error('Private gateway failed to block non-Caddy source');
   if ((await fetch(`http://${published}/hooks/github`, { method: 'POST' })).status !== 403) throw new Error('Webhook gateway failed to block non-Caddy source');
-  const probe = "(async()=>{for(let i=0;i<30;i++){try{const a=await fetch('http://127.0.0.1:8080/login',{headers:{'Host':'untrusted.invalid','X-Forwarded-Proto':'http','X-Forwarded-For':'198.51.100.12'}});const b=await fetch('http://127.0.0.1:8080/hooks/github',{method:'POST'});if(!a.ok||!b.ok)throw Error();const web=await a.json(),hook=await b.json();if(web.port!==3000||web.host!=='dns.ce.ncu.edu.tw'||web.proto!=='https'||web.client!=='198.51.100.12'||hook.port!==9000||hook.path!=='/hooks/github')process.exit(2);console.log('Private ingress routing, HTTPS headers, client IP and webhook path verified');return}catch{await new Promise(r=>setTimeout(r,200))}}process.exit(1)})()";
+  const probe = "(async()=>{for(let i=0;i<30;i++){try{const a=await fetch('http://127.0.0.1:8080/login',{headers:{'Host':'untrusted.invalid','X-Forwarded-Proto':'http','X-Forwarded-For':'198.51.100.12'}});const b=await fetch('http://127.0.0.1:8080/hooks/github',{method:'POST'});if(!a.ok||!b.ok)throw Error();const web=await a.json(),hook=await b.json();if(web.port!==3000||web.host!=='dnsmgr.ce.ncu.edu.tw'||web.proto!=='https'||web.client!=='198.51.100.12'||hook.port!==9000||hook.path!=='/hooks/github')process.exit(2);console.log('Private ingress routing, HTTPS headers, client IP and webhook path verified');return}catch{await new Promise(r=>setTimeout(r,200))}}process.exit(1)})()";
   console.info(docker('exec', `${prefix}-backend`, 'node', '-e', probe).trim());
   console.info('Non-Caddy source denied: HTTP 403');
 } catch (error) {

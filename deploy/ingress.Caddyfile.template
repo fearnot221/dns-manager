@@ -18,8 +18,8 @@ http://:8080 {
         }
         handle {
             reverse_proxy 127.0.0.1:3000 {
-                header_up Host dns.ce.ncu.edu.tw
-                header_up X-Forwarded-Host dns.ce.ncu.edu.tw
+                header_up Host dnsmgr.ce.ncu.edu.tw
+                header_up X-Forwarded-Host dnsmgr.ce.ncu.edu.tw
                 header_up X-Forwarded-Proto https
                 # Only the IP-allowlisted external Caddy can supply the client chain.
                 header_up X-Forwarded-For {http.request.header.X-Forwarded-For}

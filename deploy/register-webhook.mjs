@@ -3,7 +3,8 @@ import { parseEnv } from 'node:util';
 import { createHmac } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
-const endpoint = 'https://dns.ce.ncu.edu.tw/hooks/github';
+const endpoint = 'https://dnsmgr.ce.ncu.edu.tw/hooks/github';
+const previousEndpoint = 'https://dns.ce.ncu.edu.tw/hooks/github';
 const repository = 'fearnot221/dns-manager';
 
 export async function registerWebhook(token, config, request = fetch) {
@@ -27,10 +28,11 @@ export async function registerWebhook(token, config, request = fetch) {
   const matches = [];
   for (let page = 1; ; page++) {
     const hooks = await api(`?per_page=100&page=${page}`);
-    matches.push(...hooks.filter((hook) => hook.config?.url === endpoint));
+    // Reuse the old domain's hook during migration rather than leaving duplicate deployments.
+    matches.push(...hooks.filter((hook) => [endpoint, previousEndpoint].includes(hook.config?.url)));
     if (hooks.length < 100) break;
   }
-  if (matches.length > 1) throw new Error('Multiple existing hooks use this URL. Resolve duplicates in GitHub Settings first.');
+  if (matches.length > 1) throw new Error('Multiple existing hooks use the old/new domain URLs. Resolve duplicates in GitHub Settings first.');
   const data = { active: true, events: ['push'], config: { url: endpoint, content_type: 'json', secret: config.WEBHOOK_SECRET, insecure_ssl: '0' } };
   const result = matches.length ? await api(`/${matches[0].id}`, 'PATCH', data) : await api('', 'POST', { name: 'web', ...data });
   return result.id;

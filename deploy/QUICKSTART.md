@@ -1,10 +1,29 @@
-# Ubuntu VM 快速安裝：dns.ce.ncu.edu.tw + 獨立 Caddy
+# Ubuntu VM 快速安裝：dnsmgr.ce.ncu.edu.tw + 獨立 Caddy
 
 適用於專用、全新 Ubuntu Server **22.04 或 24.04 LTS** VM（amd64 或 arm64，建議 4 vCPU / 8 GB RAM / 60 GB 磁碟）。腳本自動選擇 22.04 的 jammy 或 24.04 的 noble Docker 套件來源，既有 22.04 不必為此升級。需有 sudo、固定 RFC1918 內網 IPv4、可出站連線至 Ubuntu/Docker/Node/GitHub/NCU Portal。不是在 Proxmox host 或 CT 執行。
 
 `ubuntu-22.04.x-live-server-amd64.iso` 是安裝媒體名稱；用它安裝到 VM 硬碟並重開機後即可部署。若仍在 Live ISO／安裝程式的暫存環境，請先完成系統安裝；腳本會拒絕 overlay／squashfs 根檔案系統，避免把正式服務放在暫存系統上。
 
 ## 1. VM 上安裝
+
+### 已安裝的 VM：從舊網域遷移
+
+如果已使用 `dns.ce.ncu.edu.tw` 安裝，不能只重跑 installer：它刻意保留既有 app.env。請先建立新網域 `dnsmgr.ce.ncu.edu.tw` 的 DNS，指向外部 proxy 的入口，並在外部 Caddy 加入本頁的新站台設定、確認 TLS；Portal 回呼也需同步改為本頁的新網址。
+
+在既有 VM 上備份環境檔，再只修改 AUTH_URL（其他密鑰與資料庫設定不動）：
+
+```bash
+sudo cp -p --no-clobber /etc/dns-manager/app.env /etc/dns-manager/app.env.before-dnsmgr
+sudo sed -i 's|^AUTH_URL=.*$|AUTH_URL=https://dnsmgr.ce.ncu.edu.tw|' /etc/dns-manager/app.env
+curl -fL https://raw.githubusercontent.com/fearnot221/dns-manager/main/deploy/install-vm.sh -o install-dns-manager.sh
+sudo env VM_IP=10.213.40.62 CADDY_IP=10.213.40.7 bash install-dns-manager.sh
+```
+
+此處 IP 是目前部署的 VM / proxy 位址。新版 installer 會同步內網 gateway 的 Host headers、webhook 註冊工具與外部 Caddy 範例，重建／啟動網站；不重設最高帳號或密鑰，不刪 volume。切換期間可能中斷登入，新網域需重新登入。
+
+新網址可用後，若已有 GitHub webhook，在 GitHub Settings 將既有 Payload URL 改為 `https://dnsmgr.ce.ncu.edu.tw/hooks/github`，不要再加一個重複的 hook。也可執行第 3 節的註冊工具：新版會先驗證新入口，再把舊 `dns.ce.ncu.edu.tw` hook 更新到新網址。若新舊兩個 hook 都存在，工具會停止並要求先處理重複設定。
+
+### 全新 VM
 
 ```bash
 sudo apt-get update
@@ -39,7 +58,7 @@ sudo bash install-dns-manager.sh
 腳本會在 VM 產生 `/etc/dns-manager/Caddyfile.external`。將其中的站台 block **合併**到既有 proxy Caddyfile，不要覆蓋其他站台。內容如下，替換 `VM_PRIVATE_IP`：
 
 ```caddyfile
-dns.ce.ncu.edu.tw {
+dnsmgr.ce.ncu.edu.tw {
     reverse_proxy http://VM_PRIVATE_IP:8080
 }
 ```
@@ -51,13 +70,13 @@ sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 sudo systemctl reload caddy
 ```
 
-公開 DNS `dns.ce.ncu.edu.tw` 指向 **proxy 的對外服務位址**。TLS 憑證由既有 Caddy 管理；依其 ACME 設定開放 proxy 的 80/443 或使用 DNS challenge。VM 不需對外 IP 或憑證。
+公開 DNS `dnsmgr.ce.ncu.edu.tw` 指向 **proxy 的對外服務位址**。TLS 憑證由既有 Caddy 管理；依其 ACME 設定開放 proxy 的 80/443 或使用 DNS challenge。VM 不需對外 IP 或憑證。
 
 內網 ACL／防火牆僅允許 **Caddy → VM TCP 8080**；SSH 只給維運來源。腳本不會改防火牆或 SSH，避免斷線。VM gateway 另外用來源 IP allowlist 拒絕其他主機，網站 3000 與 webhook 9000 維持 loopback，PostgreSQL 不發布 port。Caddy→VM 的 HTTP 連線應置於受信任／隔離內網；若會跨不可信網段，先建立 VPN 或加 upstream TLS。
 
 外部 Caddy → VM:8080 的 gateway → 本機 web:3000 或 `/hooks/github` → 本機 webhook:9000。VM gateway 用獨立 Compose project `dns-manager-ingress` 執行，網站 down 時它和 host webhook service 都不會被停掉。它不是第二個對外 proxy，只提供內網來源限制與路徑分流。
 
-驗證 `https://dns.ce.ncu.edu.tw/login` 可正常開啟。若 403，核對 Caddy 實際來源 IP；若 502，檢查 VM 網路／容器狀態；若連線逾時，檢查 ACL、DNS 和路由。
+驗證 `https://dnsmgr.ce.ncu.edu.tw/login` 可正常開啟。若 403，核對 Caddy 實際來源 IP；若 502，檢查 VM 網路／容器狀態；若連線逾時，檢查 ACL、DNS 和路由。
 
 ## 3. 一次性註冊 GitHub webhook
 
@@ -69,11 +88,11 @@ sudo systemctl reload caddy
 sudo /opt/dns-manager-deploy/register-webhook.sh
 ```
 
-Token 以隱藏輸入讀取，只透過 stdin 傳入註冊程式，不存檔、不傳給網站、不傳給部署子程序。它會先對 `https://dns.ce.ncu.edu.tw/hooks/github` 送有簽章的 ping，確認 Caddy/DNS/TLS/receiver 真正連通，再建立或更新同網址的 push webhook（TLS 驗證開啟）。完成後可立即撤銷 PAT，不影響以後的 public repo fetch 或 webhook 驗章。
+Token 以隱藏輸入讀取，只透過 stdin 傳入註冊程式，不存檔、不傳給網站、不傳給部署子程序。它會先對 `https://dnsmgr.ce.ncu.edu.tw/hooks/github` 送有簽章的 ping，確認 Caddy/DNS/TLS/receiver 真正連通，再建立或更新同網址的 push webhook（TLS 驗證開啟）。完成後可立即撤銷 PAT，不影響以後的 public repo fetch 或 webhook 驗章。
 
 不想用 PAT，可手動在 GitHub → Repository Settings → Webhooks 新增：
 
-- Payload URL：`https://dns.ce.ncu.edu.tw/hooks/github`
+- Payload URL：`https://dnsmgr.ce.ncu.edu.tw/hooks/github`
 - Content type：`application/json`
 - Secret：VM `/etc/dns-manager/webhook.env` 的 `WEBHOOK_SECRET`（不要公開）
 - Just the push event；Active；Enable SSL verification
@@ -87,7 +106,7 @@ build 失敗不會執行 down；down/up 會短暫中斷網站和資料庫，但�
 ```bash
 sudo journalctl -u dns-manager-webhook -f
 sudo cat /var/lib/dns-manager-webhook/last-successful-commit
-curl -f https://dns.ce.ncu.edu.tw/healthz
+curl -f https://dnsmgr.ce.ncu.edu.tw/healthz
 ```
 
 **202 只代表接受排隊，不代表部署完成**；要看到 journal 的 `Healthy deployment` 及 healthz 成功。註冊腳本只驗證連通並建立 webhook，尚未代替這次真實 push 驗收。GitHub delivery 若因網路故障未送到 VM，或 `.failed` 部署失敗，修正問題後需在 Recent deliveries 按 Redeliver；不宣稱任何網路／磁碟故障下都能無人介入。已成功的 delivery 不會重複部署。
@@ -105,8 +124,8 @@ sudoedit /etc/dns-manager/app.env
 
 安裝程式**無法代填學校核發的秘密**。在 app.env 填 `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、人工核對最高帳號的 `NCU_OWNER_IDENTIFIER`；三者須一起設定。Portal：
 
-- Single Sign On URL：`https://dns.ce.ncu.edu.tw/login`
-- Return To Address：`https://dns.ce.ncu.edu.tw/api/auth/callback/ncu-portal`
+- Single Sign On URL：`https://dnsmgr.ce.ncu.edu.tw/login`
+- Return To Address：`https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/ncu-portal`
 - Scopes：`identifier chinese-name email`；關閉可代理登入。
 
 PowerDNS 填 `PDNS_API_URL`、`PDNS_API_KEY` 或先設定可信 `PDNS_ALLOWED_ORIGINS` 再從後台填 API。未配置時網站仍可用本機最高帳號登入，但 DNS 操作不會成功；`PDNS_MOCK=false` 不會偷換成 demo 資料。API 不要對外暴露。

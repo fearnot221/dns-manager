@@ -53,7 +53,7 @@ if [[ ! -f /etc/dns-manager/managed-install ]]; then
   done
   ! getent passwd dnsdeploy >/dev/null || { echo 'Existing dnsdeploy account: review manual installation first.'; exit 1; }
 fi
-echo 'Installing into /opt/dns-manager; HTTPS domain: dns.ce.ncu.edu.tw.'
+echo 'Installing into /opt/dns-manager; HTTPS domain: dnsmgr.ce.ncu.edu.tw.'
 echo 'No firewall/SSH changes. Allow only the Caddy source IP to VM TCP 8080 in your network firewall.'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -132,7 +132,7 @@ if [[ ! -f /etc/dns-manager/app.env ]]; then
       POSTGRES_PASSWORD=*) printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 32)" ;;
       AUTH_SECRET=*) printf 'AUTH_SECRET=%s\n' "$(openssl rand -hex 32)" ;;
       SETTINGS_ENCRYPTION_KEY=*) printf 'SETTINGS_ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" ;;
-      AUTH_URL=*) echo 'AUTH_URL=https://dns.ce.ncu.edu.tw' ;;
+      AUTH_URL=*) echo 'AUTH_URL=https://dnsmgr.ce.ncu.edu.tw' ;;
       OWNER_INITIAL_PASSWORD=*) printf 'OWNER_INITIAL_PASSWORD=%s\n' "$owner_password" ;;
       *) printf '%s\n' "$line" ;;
     esac
@@ -201,13 +201,13 @@ echo
 echo 'VM installation complete. External proxy / Portal / GitHub registration still require setup:'
 echo '1. Merge /etc/dns-manager/Caddyfile.external into your EXISTING external Caddy config; validate/reload there.'
 echo "   Permit Caddy $CADDY_IP -> VM $VM_IP TCP 8080; the gateway rejects other source IPs."
-echo '2. Once https://dns.ce.ncu.edu.tw/login works, run:'
+echo '2. Once https://dnsmgr.ce.ncu.edu.tw/login works, run:'
 echo '   sudo /opt/dns-manager-deploy/register-webhook.sh'
 echo '3. Owner: fearnot@ce.ncu.edu.tw; read initial password with:'
 echo '   sudo cat /etc/dns-manager/initial-owner-password'
 echo '   Store it securely, then remove that one password handoff file.'
 echo '4. Set Portal/PowerDNS credentials in /etc/dns-manager/app.env; then run:'
 echo '   sudo /opt/dns-manager-deploy/update-now.sh'
-echo 'Portal callback: https://dns.ce.ncu.edu.tw/api/auth/callback/ncu-portal'
+echo 'Portal callback: https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/ncu-portal'
 echo 'Deployment log: sudo journalctl -u dns-manager-webhook -f'
 echo 'A main push triggers fetch/build -> compose down (no -v) -> compose up -> healthcheck.'

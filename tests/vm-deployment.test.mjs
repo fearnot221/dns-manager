@@ -96,7 +96,7 @@ describe('one-time GitHub webhook registration', () => {
     expect(JSON.parse(options.body)).toMatchObject({ events: ['push'], active: true, config: { secret: config.WEBHOOK_SECRET, insecure_ssl: '0' } });
   });
   it('updates the existing URL without creating a duplicate', async () => {
-    const request = vi.fn().mockResolvedValueOnce(json({ message: 'ping' })).mockResolvedValueOnce(json([{ id: 42, config: { url: 'https://dns.ce.ncu.edu.tw/hooks/github' } }])).mockResolvedValueOnce(json({ id: 42 }));
+    const request = vi.fn().mockResolvedValueOnce(json({ message: 'ping' })).mockResolvedValueOnce(json([{ id: 42, config: { url: 'https://dnsmgr.ce.ncu.edu.tw/hooks/github' } }])).mockResolvedValueOnce(json({ id: 42 }));
     await registerWebhook('test-token', config, request);
     expect(request.mock.calls[2][0]).toMatch(/\/hooks\/42$/);
     expect(request.mock.calls[2][1].method).toBe('PATCH');
@@ -106,8 +106,24 @@ describe('one-time GitHub webhook registration', () => {
     await expect(registerWebhook('test-token', config, request)).rejects.toThrow('not ready');
     expect(request).toHaveBeenCalledTimes(1);
   });
+  it('moves the previous domain hook to the new domain instead of creating a duplicate', async () => {
+    const request = vi.fn().mockResolvedValueOnce(json({ message: 'ping' })).mockResolvedValueOnce(json([{ id: 42, config: { url: 'https://dns.ce.ncu.edu.tw/hooks/github' } }])).mockResolvedValueOnce(json({ id: 42 }));
+    await registerWebhook('test-token', config, request);
+    expect(request.mock.calls[0][0]).toBe('https://dnsmgr.ce.ncu.edu.tw/hooks/github');
+    expect(request.mock.calls[2][0]).toMatch(/\/hooks\/42$/);
+    expect(request.mock.calls[2][1].method).toBe('PATCH');
+    expect(JSON.parse(request.mock.calls[2][1].body).config.url).toBe('https://dnsmgr.ce.ncu.edu.tw/hooks/github');
+  });
   it('fails clearly on insufficient GitHub token permissions', async () => {
     const request = vi.fn().mockResolvedValueOnce(json({ message: 'ping' })).mockResolvedValueOnce(json({}, 403));
     await expect(registerWebhook('test-token', config, request)).rejects.toThrow('HTTP 403');
+  });
+  it('refuses ambiguous old/new hooks without changing either one', async () => {
+    const request = vi.fn().mockResolvedValueOnce(json({ message: 'ping' })).mockResolvedValueOnce(json([
+      { id: 42, config: { url: 'https://dns.ce.ncu.edu.tw/hooks/github' } },
+      { id: 43, config: { url: 'https://dnsmgr.ce.ncu.edu.tw/hooks/github' } },
+    ]));
+    await expect(registerWebhook('test-token', config, request)).rejects.toThrow('Multiple existing hooks');
+    expect(request).toHaveBeenCalledTimes(2);
   });
 });
