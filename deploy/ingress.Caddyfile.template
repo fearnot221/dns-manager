@@ -21,6 +21,8 @@ http://:8080 {
                 header_up Host dns.ce.ncu.edu.tw
                 header_up X-Forwarded-Host dns.ce.ncu.edu.tw
                 header_up X-Forwarded-Proto https
+                # Only the IP-allowlisted external Caddy can supply the client chain.
+                header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
             }
         }
     }
