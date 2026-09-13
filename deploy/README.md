@@ -29,7 +29,8 @@ sudo install -d -m 0700 -o dnsdeploy -g dnsdeploy /var/lib/dns-manager-webhook
 - `SETTINGS_ENCRYPTION_KEY`：再產生一個 `openssl rand -hex 32`；備份此值，不能隨意更換。
 - `AUTH_URL=https://你的正式網域`，無其他路徑。
 - `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、`NCU_OWNER_IDENTIFIER`。
-- `PDNS_MOCK=false`；設定 PowerDNS URL/key 或先將可信 API origin 加入 `PDNS_ALLOWED_ORIGINS`，登入後從管理頁設定。沒有連線時 DNS 頁會顯示錯誤，不會切換到假資料。
+- `PDNS_MOCK=false`；只在 env 設定 `PDNS_API_URL`、`PDNS_API_KEY`、`PDNS_SERVER_ID`，網址以 `/api/v1` 結尾。網頁設定入口已移除，舊資料庫連線設定不再生效。沒有連線時 DNS 頁會顯示錯誤，不會切換到假資料。
+- 正式環境只接受 NCU Portal 登入，舊密碼／Google session 需重新登入。Portal 未設定時沒有密碼登入備援；最高帳號 seed 僅用於 Portal 綁定。
 - `OWNER_INITIAL_PASSWORD`：初次建立最高帳號用，16 字元以上，與 demo 密碼不同。
 
 首次啟動（以能讀取 env 且有 Docker 權限的專用帳號執行）：

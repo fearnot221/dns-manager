@@ -28,11 +28,11 @@ Every API operation authenticates the caller, resolves effective direct/group pe
 
 ## Included
 
-- Email/password sign-in with scrypt hashes and optional verified Google OAuth
+- NCU Portal-only sign-in for database-backed environments; password sign-in only in local demo
 - Protected owner `fearnot@ce.ncu.edu.tw`, global `ADMIN` / `USER`, plus zone `VIEWER`, `EDITOR`, and `ADMIN` roles
 - Per-value applicant, unit, extension and purpose; grouped inventory with server-stamped inspection history
 - User creation, name editing and suspension; only the owner can assign administrator privileges
-- Encrypted PowerDNS API settings with a read-only connection test and server-side origin allowlist
+- Environment-only PowerDNS API configuration; no web credential input or database override
 - Direct and group-ready permission schema, expiry, resource patterns, and record-type policy fields
 - Backend-filtered zones and protected mutation endpoints
 - Zone listing/creation/deletion API and responsive management UI
@@ -93,7 +93,7 @@ npm run db:seed
 npm run dev
 ```
 
-Open `http://localhost:3000`. Configure the database and seed account passwords before starting. Google OAuth is optional. For the self-contained demo above, do not start PostgreSQL.
+Open `http://localhost:3000`. Configure the database, seed the protected owner and configure NCU Portal before signing in. For the self-contained password-login demo above, do not start PostgreSQL.
 
 ## Environment variables
 
@@ -102,29 +102,29 @@ Open `http://localhost:3000`. Configure the database and seed account passwords 
 | `DATABASE_URL` | Production | PostgreSQL connection string |
 | `AUTH_SECRET` / `NEXTAUTH_SECRET` | Yes | The same random 32+ byte signing secret |
 | `NEXTAUTH_URL` | Yes | Public app origin |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth web client |
+| `NCU_PORTAL_CLIENT_ID`, `NCU_PORTAL_CLIENT_SECRET`, `NCU_OWNER_IDENTIFIER` | Live login | Portal application credentials and verified owner Portal username |
 | `OWNER_INITIAL_PASSWORD` | One-time seed | Unique 16+ character password for the protected owner |
 | `PDNS_API_URL`, `PDNS_API_KEY` | Live mode | Server-side PowerDNS credentials |
 | `PDNS_SERVER_ID` | No | Defaults to `localhost` |
 | `PDNS_MOCK` | Development | Enables the in-memory DNS server |
-| `PDNS_ALLOWED_ORIGINS` | Saved live connections | Comma-separated exact trusted API origins; environment API origin is also allowed |
-| `SETTINGS_ENCRYPTION_KEY` | Saved DB-backed connections | 64 hex characters; AES-256-GCM key, generated with `openssl rand -hex 32` |
+| `SETTINGS_ENCRYPTION_KEY` | Legacy deployment compatibility | Retain the existing value when upgrading; web-saved API credentials are no longer read |
 | `DEV_OWNER_PASSWORD` | Local demo | Protected owner's initial demo password |
 | `DEV_ADMIN_EMAIL`, `DEV_ADMIN_PASSWORD` | Local demo | Administrator demo login |
 | `DEV_USER_EMAIL`, `DEV_USER_PASSWORD` | Local demo | User demo login |
 
 Generate secrets with `openssl rand -base64 32`. Never give a PowerDNS setting a `NEXT_PUBLIC_` prefix.
 
-## Google OAuth
+## Production authentication
 
-Create a Web OAuth client in Google Cloud and add:
+Only NCU Portal is supported outside the database-free local demo. Register the callback:
 
 ```text
-https://YOUR-DOMAIN/api/auth/callback/google
-http://localhost:3000/api/auth/callback/google
+https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/ncu-portal
 ```
 
-Configure the client values and `NEXTAUTH_URL`, then restart. New users default to `USER` and see no zones. Google must report a verified email. Only the exact protected owner email can receive `SUPER_ADMIN`; `SUPER_ADMIN_EMAILS` is no longer used. Existing password accounts are not automatically linked to Google accounts.
+Configure all three NCU variables and `AUTH_URL`, then recreate the web container. Existing legacy, Google and password sessions must log in again through Portal. Missing Portal configuration never enables password fallback. New users default to `USER`; the owner is bound by the operator-verified Portal identifier, not a supplied email. Existing accounts are not silently merged by email.
+
+PowerDNS reads only `PDNS_API_URL` (ending in `/api/v1`), `PDNS_API_KEY` and `PDNS_SERVER_ID`. Move previously web-entered settings to the server environment before upgrading. Existing encrypted database settings are retained but ignored. Inventory metadata remains scoped to the API URL/server ID; keep those unchanged to retain its associations. Unscoped legacy applications are not used to infer ownership on live servers.
 
 ## Database and first administrator
 

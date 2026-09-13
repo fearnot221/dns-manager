@@ -1,6 +1,6 @@
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import Google from "next-auth/providers/google";
+import { after } from "next/server";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
@@ -8,8 +8,8 @@ import { verifyPassword } from "@/lib/auth/password";
 import { demoUsers } from "@/lib/users/demo";
 import { isOwnerEmail, resolvedGlobalRole } from "@/lib/auth/owner";
 import { ncuPortalProvider, portalConfigured, portalIdentity } from "./ncu-portal";
+import { demoLoginEnabled, loginProviderAllowed } from "./policy";
 
-const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 const credentialsSchema = z.object({ email: z.email(), password: z.string().min(1).max(256) });
 
 const credentialsProvider = Credentials({
@@ -19,6 +19,7 @@ const credentialsProvider = Credentials({
     password: { label: "Password", type: "password" },
   },
   async authorize(raw) {
+    if (!demoLoginEnabled()) return null;
     const parsed = credentialsSchema.safeParse(raw);
     if (!parsed.success) return null;
     const email = parsed.data.email.trim().toLowerCase();
@@ -31,10 +32,7 @@ const credentialsProvider = Credentials({
       }
     }
 
-    if (!process.env.DATABASE_URL) return null;
-    const user = await db.user.findUnique({ where: { email } });
-    if (!user?.passwordHash || user.disabled || !await verifyPassword(password, user.passwordHash)) return null;
-    return { id: user.id, email: user.email, name: user.name, image: user.image, globalRole: resolvedGlobalRole(user.email, user.globalRole) };
+    return null;
   },
 });
 
@@ -42,17 +40,15 @@ const config: NextAuthConfig = {
   adapter: PrismaAdapter(db),
   session: { strategy: "jwt", maxAge: 8 * 60 * 60, updateAge: 60 * 60 },
   providers: [
-    credentialsProvider,
+    ...(demoLoginEnabled() ? [credentialsProvider] : []),
     ...(portalConfigured() ? [ncuPortalProvider()] : []),
-    ...(googleConfigured ? [Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: false,
-    })] : []),
   ],
   pages: { signIn: "/login", error: "/login" },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
+      if (account) token.loginProvider = account.provider;
+      // Invalidate legacy/password/Google sessions after switching to Portal-only.
+      if (!loginProviderAllowed(token.loginProvider)) return null;
       if (user) {
         token.userId = user.id;
         token.globalRole = user.globalRole ?? "USER";
@@ -66,10 +62,12 @@ const config: NextAuthConfig = {
       if (session.user) {
         session.user.id = String(token.userId);
         session.user.globalRole = token.globalRole ?? "USER";
+        session.loginProvider = token.loginProvider;
       }
       return session;
     },
     async signIn({ user, account, profile }) {
+      if (!loginProviderAllowed(account?.provider)) return false;
       if (account?.provider === "credentials") return Boolean(user.email);
       if (account?.provider === "ncu-portal") {
         try {
@@ -85,21 +83,20 @@ const config: NextAuthConfig = {
           return true;
         } catch { return false; }
       }
-      if (account?.provider !== "google" || !user.email || profile?.email_verified !== true) return false;
-      const existing = await db.user.findUnique({ where: { email: user.email.toLowerCase() }, select: { disabled: true } });
-      return !existing?.disabled;
+      return false;
     },
   },
   events: {
     async signIn({ user }) {
       if (!process.env.DATABASE_URL || !user.id || user.id.startsWith("dev-")) return;
-      await db.user.update({
-        where: { id: user.id },
-        data: {
-          lastLoginAt: new Date(),
-          ...(user.email && isOwnerEmail(user.email) ? { globalRole: "SUPER_ADMIN" } : {}),
-        },
-      }).catch(() => undefined);
+      const id = user.id;
+      const lastLoginAt = new Date();
+      // Informational bookkeeping must not delay the OAuth redirect.
+      // Identity checks and account linking above remain synchronous.
+      after(async () => {
+        await db.user.update({ where: { id }, data: { lastLoginAt } })
+          .catch(() => console.warn("[auth] lastLoginAt update failed"));
+      });
     },
   },
 };

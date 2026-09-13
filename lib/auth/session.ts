@@ -4,10 +4,12 @@ import { db } from "@/lib/db/client";
 import { demoUsers } from "@/lib/users/demo";
 import { resolvedGlobalRole } from "./owner";
 import type { Actor } from "@/lib/dns/types";
+import { loginProviderAllowed } from "./policy";
 
 export async function requireActor():Promise<Actor>{
   const session=await auth();
   if(!session?.user?.id||!session.user.email)throw new AuthError();
+  if(!loginProviderAllowed(session.loginProvider))throw new AuthError();
   if(process.env.NODE_ENV!=="production"&&!process.env.DATABASE_URL&&session.user.id.startsWith("dev-")){
     const user = await demoUsers((users) => users.find((item) => item.id === session.user.id));
     if (!user || user.disabled) throw new AuthError();

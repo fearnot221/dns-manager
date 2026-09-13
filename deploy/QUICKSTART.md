@@ -128,7 +128,11 @@ sudoedit /etc/dns-manager/app.env
 - Return To Address：`https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/ncu-portal`
 - Scopes：`identifier chinese-name email`；關閉可代理登入。
 
-PowerDNS 填 `PDNS_API_URL`、`PDNS_API_KEY` 或先設定可信 `PDNS_ALLOWED_ORIGINS` 再從後台填 API。未配置時網站仍可用本機最高帳號登入，但 DNS 操作不會成功；`PDNS_MOCK=false` 不會偷換成 demo 資料。API 不要對外暴露。
+PowerDNS 僅從 `/etc/dns-manager/app.env` 的 `PDNS_API_URL`、`PDNS_API_KEY`、`PDNS_SERVER_ID` 讀取，網址須以 `/api/v1` 結尾。後台連線表單已移除，資料庫中的舊設定不再使用。升級前請將連線設定填入 env；修改後重新建立 web 容器（單純 restart 不會載入新 env）。API 不要對外暴露。
+
+正式環境僅接受 NCU Portal 登入，不提供密碼或 Google 登入，也不接受舊版 session；升級後須重新登入。Portal 尚未設定時登入頁顯示未設定，不會開啟本機登入備援。資料庫最高帳號 seed 仍需執行，以供首次 Portal 綁定；初始密碼不再可用於正式登入。`npm run demo` 保留獨立的本機測試登入。
+
+登入延遲診斷：`docker logs --since 10m dns-manager-web-1 2>&1 | grep portal-timing`。同一 requestId 的 `token`、`userinfo` 為 Portal 請求（含回應內容）的耗時，`callback` 為網站回呼整體耗時（毫秒），不含使用者在 Portal 頁面停留的時間。紀錄不含授權碼、token 或使用者資料。最後登入時間於回應送出後更新；身分、停用及權限檢查仍同步完成。
 
 修改 app.env 後立即套用：
 

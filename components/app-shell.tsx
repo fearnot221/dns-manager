@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCheck, Users, Cable, FileCheck2, FilePlus2, Globe2, LogOut, Menu, Monitor, Moon, Sun, X } from "lucide-react";
+import { ClipboardCheck, Users, FileCheck2, FilePlus2, Globe2, LogOut, Menu, Monitor, Moon, Sun, X } from "lucide-react";
 import { Brand } from "@/components/brand";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -22,7 +22,7 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
   const menu = useRef<HTMLButtonElement>(null);
   const zones = pathname.startsWith("/zones");
   const applying = pathname === "/requests/new";
-  const sectionLabel = pathname === "/inventory" ? "DNS 定期清查" : pathname === "/admin/users" ? "使用者管理" : pathname === "/admin/powerdns" ? "PowerDNS API" : zones ? "Zone 管理" : admin ? "DNS 申請審核" : applying ? "申請 DNS" : "我的 DNS";
+  const sectionLabel = pathname === "/inventory" ? "DNS 定期清查" : pathname === "/admin/users" ? "使用者管理" : zones ? "Zone 管理" : admin ? "DNS 申請審核" : applying ? "申請 DNS" : "我的 DNS";
   const zone = zones && pathname.split("/")[2] ? decodeURIComponent(pathname.split("/")[2]) : null;
 
   useEffect(() => {
@@ -63,7 +63,7 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
         <Link className={pathname === "/requests" ? "active" : ""} aria-current={pathname === "/requests" ? "page" : undefined} href="/requests" onClick={() => setMobile(false)}><FileCheck2 size={18} /><span>{admin ? "DNS 申請審核" : "我的 DNS"}</span></Link>
         {admin && <Link className={zones ? "active" : ""} aria-current={zones ? "page" : undefined} href="/zones" onClick={() => setMobile(false)}><Globe2 size={18} /><span>Zone 管理</span></Link>}
         {admin && <Link href="/inventory" className={pathname === "/inventory" ? "active" : ""} aria-current={pathname === "/inventory" ? "page" : undefined} onClick={() => setMobile(false)}><ClipboardCheck size={18} /><span>DNS 定期清查</span></Link>}
-        {systemAdmin && <><Link href="/admin/users" className={pathname === "/admin/users" ? "active" : ""} aria-current={pathname === "/admin/users" ? "page" : undefined} onClick={() => setMobile(false)}><Users size={18} /><span>使用者管理</span></Link><Link href="/admin/powerdns" className={pathname === "/admin/powerdns" ? "active" : ""} aria-current={pathname === "/admin/powerdns" ? "page" : undefined} onClick={() => setMobile(false)}><Cable size={18} /><span>PowerDNS API</span></Link></>}
+        {systemAdmin && <Link href="/admin/users" className={pathname === "/admin/users" ? "active" : ""} aria-current={pathname === "/admin/users" ? "page" : undefined} onClick={() => setMobile(false)}><Users size={18} /><span>使用者管理</span></Link>}
       </nav>
       <div className="sidebar-bottom">
         {demo && <div className="demo-label"><Monitor size={15} /><span>Local demo</span></div>}

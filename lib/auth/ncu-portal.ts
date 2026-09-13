@@ -2,6 +2,7 @@ import { customFetch } from "@auth/core";
 import type { OAuthConfig } from "next-auth/providers";
 import { z } from "zod";
 import { isOwnerEmail, OWNER_EMAIL } from "./owner";
+import { measurePortalStep } from "./timing";
 
 const schema = z.object({ identifier: z.string().trim().min(1).max(200), chineseName: z.string().optional().nullable(), email: z.email().optional().nullable(), emailVerified: z.boolean().optional(), delegator: z.unknown().optional() });
 export function portalIdentity(raw: unknown, ownerIdentifier = process.env.NCU_OWNER_IDENTIFIER) {
@@ -26,6 +27,19 @@ export function ncuPortalProvider(): OAuthConfig<Record<string, unknown>> {
     profile(raw) { const identity = portalIdentity(raw); return { id: identity.id, name: identity.name, email: identity.email, globalRole: "USER" }; },
     // Do not retain Portal access/refresh tokens: the app only needs initial identity.
     account() { return {}; },
-    [customFetch](input, init) { const headers = new Headers(init?.headers); headers.set("Accept", "application/json"); return fetch(input, { ...init, headers, redirect: "error", signal: init?.signal ?? AbortSignal.timeout(10_000) }); },
+    [customFetch](input, init) {
+      const headers = new Headers(init?.headers);
+      headers.set("Accept", "application/json");
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const stage = url.pathname === "/oauth2/token" ? "token" : "userinfo";
+      const timeout = AbortSignal.timeout(10_000);
+      const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+      return measurePortalStep(stage, async () => {
+        const response = await fetch(input, { ...init, headers, cache: "no-store", redirect: "error", signal });
+        // Include response-body transfer in timing and timeout coverage.
+        const body = await response.arrayBuffer();
+        return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+      });
+    },
   };
 }

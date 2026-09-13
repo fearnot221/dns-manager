@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { db } from "@/lib/db/client";
 import { isLocalDemo, localDocument } from "@/lib/db/local-store";
 import { powerdns } from "@/lib/powerdns/client";
-import { connectionEnvironment, readConnection } from "@/lib/powerdns/settings";
+import { connectionEnvironment } from "@/lib/powerdns/settings";
 import { listDevRequests } from "@/lib/requests/dev-store";
 import { canManageZone } from "@/lib/auth/permissions";
 import { ApiError } from "@/lib/api/respond";
@@ -25,7 +25,7 @@ export async function describeRecords(actor: Actor, zoneName: string, rrsets: RR
   const saved = isLocalDemo() ? await localDocument<Store, Stored[]>("inventory", async () => ({ records: {} }), (data) => ids.flatMap((id) => data.records[id] ? [data.records[id]] : [])) : await db.dnsRecordMetadata.findMany({ where: { id: { in: ids } }, include: { inspections: { orderBy: { inspectedAt: "desc" } } } });
   const savedById = new Map(saved.map((item) => [item.id, item]));
   // Legacy applications have no connection ID; never infer ownership after switching a live server.
-  const legacyAllowed = scope === "local-mock" || !await readConnection();
+  const legacyAllowed = scope === "local-mock";
   const approved = !legacyAllowed ? [] : isLocalDemo() ? listDevRequests(actor).filter((r) => r.zoneName === zoneName && r.status === "APPROVED") : await db.dnsRecordRequest.findMany({ where: { zoneName, status: "APPROVED" }, include: { user: { select: { email: true, name: true } } }, orderBy: { reviewedAt: "asc" } });
   const applications = new Map(approved.map((r) => [identityKey(r), r]));
   return records.map((record) => {
