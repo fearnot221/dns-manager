@@ -63,13 +63,15 @@ export async function saveInventory(actor: Actor, input: Identity & { id: string
   const fields = input.mode === "metadata" ? { applicantName: input.applicantName, applicantEmail: input.applicantEmail, applicantUnit: input.applicantUnit, applicantExtension: input.applicantExtension, purpose: input.purpose } : { applicantName: live.ownership.applicantName, applicantEmail: live.ownership.applicantEmail, applicantUnit: live.ownership.applicantUnit, applicantExtension: live.ownership.applicantExtension, purpose: live.ownership.purpose };
   const inspection = { id: crypto.randomUUID(), inspectedAt: new Date().toISOString(), inspectorId: actor.id, inspectorEmail: actor.email, inspectorName: actor.name || actor.email, note: input.note };
   const checkVersion = (updatedAt: string | Date | null | undefined) => { if ((updatedAt ? new Date(updatedAt).toISOString() : null) !== input.expectedUpdatedAt) throw new ApiError("資料已由其他人更新，請重新載入後再儲存。", 409); };
-  if (isLocalDemo()) return localDocument<Store, void>("inventory", async () => ({ records: {} }), (data) => {
+  if (isLocalDemo()) return localDocument("inventory", async () => ({ records: {} } as Store), (data) => {
     const previous = data.records[input.id]; checkVersion(previous?.updatedAt);
     data.records[input.id] = { id: input.id, zoneName, recordName, recordType, content, ...fields, updatedAt: new Date().toISOString(), updatedBy: actor.email, inspections: input.mode === "inspect" ? [inspection, ...(previous?.inspections || [])] : previous?.inspections || [] };
+    return { before: previous ?? live.ownership, after: data.records[input.id] };
   }, true);
-  await db.$transaction(async (tx) => {
+  return db.$transaction(async (tx) => {
     const current = await tx.dnsRecordMetadata.findUnique({ where: { id: input.id } }); checkVersion(current?.updatedAt);
-    await tx.dnsRecordMetadata.upsert({ where: { id: input.id }, create: { id: input.id, zoneName, recordName, recordType, content, ...fields, updatedBy: actor.email }, update: { ...fields, updatedBy: actor.email, updatedAt: new Date() } });
+    const saved = await tx.dnsRecordMetadata.upsert({ where: { id: input.id }, create: { id: input.id, zoneName, recordName, recordType, content, ...fields, updatedBy: actor.email }, update: { ...fields, updatedBy: actor.email, updatedAt: new Date() } });
     if (input.mode === "inspect") await tx.dnsInspection.create({ data: { ...inspection, recordId: input.id, inspectedAt: new Date(inspection.inspectedAt) } });
+    return { before: current ?? live.ownership, after: { ...saved, ...(input.mode === "inspect" ? { inspection } : {}) } };
   }, { isolationLevel: "Serializable" });
 }

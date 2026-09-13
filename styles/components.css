@@ -1,4 +1,11 @@
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+.zone-category-tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.zone-category-tabs > button { display: flex; align-items: center; gap: 18px; flex-shrink: 0; padding: 12px 16px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--muted); text-align: left; }
+.zone-category-tabs strong { display: block; font-size: .875rem; font-weight: 600; }
+.zone-category-tabs small { display: block; margin-top: 3px; font-family: var(--font-mono), monospace; font-size: .75rem; }
+.zone-category-tabs > button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); background: var(--accent-soft); border-radius: 6px 6px 0 0; }
+.zone-category-tabs > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.zone-category-count { padding: 2px 7px; border-radius: 6px; background: var(--surface-soft); font-size: .75rem; font-variant-numeric: tabular-nums; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 8px 14px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--panel); color: var(--ink); font-size: .875rem; font-weight: 550; text-decoration: none; white-space: nowrap; transition: background .15s, border-color .15s; }
 .button:hover:not(:disabled) { background: var(--surface-soft); border-color: var(--muted); }
 .button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }

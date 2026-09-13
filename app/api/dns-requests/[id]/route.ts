@@ -1,3 +1,4 @@
+import { auditMutation } from "@/lib/audit/mutation";
 import type { RecordType, RRSet } from "@/lib/dns/types";
 import { captureApprovedRequest } from "@/lib/inventory/service";
 import { requireActor } from "@/lib/auth/session";
@@ -10,7 +11,7 @@ import { dnsRequestDecisionSchema } from "@/lib/validation/api";
 import { logAuditEvent } from "@/lib/audit/service";
 import { findDevRequest, isDevRequestStore, reviewDevRequest } from "@/lib/requests/dev-store";
 
-export async function PATCH(request: Request, { params }: RouteContext<"/api/dns-requests/[id]">) {
+async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns-requests/[id]">) {
   let actor;
   let recordRequest;
   try {
@@ -33,6 +34,7 @@ export async function PATCH(request: Request, { params }: RouteContext<"/api/dns
           recordRequest!.content,
         );
         await powerdns.replaceRRSet(recordRequest!.zoneName, next);
+        await logAuditEvent({ actor, zone: recordRequest!.zoneName, recordName: recordRequest!.recordName, recordType, action: "APPLY_APPROVED_DNS_RECORD", before: current, after: next, success: true, request });
       }
       // Keep approval retryable if storing ownership fails after PowerDNS succeeds.
       await captureApprovedRequest(actor, recordRequest!);
@@ -80,3 +82,5 @@ export async function PATCH(request: Request, { params }: RouteContext<"/api/dns
     return apiError(error);
   }
 }
+
+export const PATCH = auditMutation(PATCHHandler);

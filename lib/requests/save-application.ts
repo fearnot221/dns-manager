@@ -4,11 +4,14 @@ import type { Actor } from "@/lib/dns/types";
 import { db } from "@/lib/db/client";
 import { ApplicationInputError, requestRecordKey, type PreparedApplication } from "./application";
 import { createDevApplication, isDevRequestStore } from "./dev-store";
+import { logAuditEvent } from "@/lib/audit/service";
+import { redactAudit } from "@/lib/audit/redact";
 
 export async function saveApplication(actor: Actor, input: PreparedApplication, request: Request) {
   const applicationId = crypto.randomUUID();
   if (isDevRequestStore()) {
     createDevApplication(actor, input, applicationId);
+    await logAuditEvent({ actor, zone: "", action: "REQUEST_DNS_APPLICATION", after: { ...input, applicationId }, success: true, request });
     return { applicationId, count: input.records.length };
   }
   try {
@@ -33,9 +36,10 @@ export async function saveApplication(actor: Actor, input: PreparedApplication, 
         await tx.dnsRecordRequest.createMany({ data: chunk.map((record) => ({ ...record, ...applicant, applicationId, userId })) });
         await tx.auditLog.createMany({ data: chunk.map((record) => ({
           userId, userEmail: actor.email, zone: record.zoneName, recordName: record.recordName, recordType: record.recordType,
-          action: "REQUEST_DNS_RECORD", success: true, requestId: applicationId,
+          action: "REQUEST_DNS_RECORD", success: true, requestId: request.headers.get("x-request-id") || applicationId,
+          ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
           userAgent: request.headers.get("user-agent")?.slice(0, 500),
-          newValue: { ...record, ...applicant, applicationId },
+          newValue: redactAudit({ ...record, ...applicant, applicationId }) as Prisma.InputJsonValue,
         })) });
       }
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });

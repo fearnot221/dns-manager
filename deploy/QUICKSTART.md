@@ -130,7 +130,16 @@ sudoedit /etc/dns-manager/app.env
 
 PowerDNS 僅從 `/etc/dns-manager/app.env` 的 `PDNS_API_URL`、`PDNS_API_KEY`、`PDNS_SERVER_ID` 讀取，網址須以 `/api/v1` 結尾。後台連線表單已移除，資料庫中的舊設定不再使用。升級前請將連線設定填入 env；修改後重新建立 web 容器（單純 restart 不會載入新 env）。API 不要對外暴露。
 
-正式環境僅接受 NCU Portal 登入，不提供密碼或 Google 登入，也不接受舊版 session；升級後須重新登入。Portal 尚未設定時登入頁顯示未設定，不會開啟本機登入備援。資料庫最高帳號 seed 仍需執行，以供首次 Portal 綁定；初始密碼不再可用於正式登入。`npm run demo` 保留獨立的本機測試登入。
+Portal 登入須符合管理員在 `/admin/allowlist` 維護的完整 Email 白名單；最高帳號為不可移除的內建項目，仍以受信任 identifier 綁定。其他既有使用者不會自動加入白名單。移除後現有 Portal session 下次使用即失效；升級後既有 Portal session 須重新登入。新增白名單不會新增角色或合併既有帳號。帳密登入暫時保留且不受 Portal 白名單限制，測試後可設 `AUTH_PASSWORD_LOGIN_ENABLED=false` 並重新建立 web 容器關閉。
+
+建立一般測試帳號（只在需要時執行，不會隨 push 自動建立）：
+
+```bash
+cd /opt/dns-manager
+sudo env DEPLOY_TAG="$(git rev-parse HEAD)" docker compose --project-name dns-manager --env-file /etc/dns-manager/app.env -f /opt/dns-manager/docker-compose.yml run --rm --no-deps migrate npx tsx scripts/create-test-user.ts
+```
+
+帳號為 `dns-test@example.invalid`，密碼現場隨機產生並只輸出一次，角色固定為 USER。如果帳號已存在則拒絕覆寫。請保存密碼，測試後在使用者管理停用；密碼不會寫入 GitHub。此命令須在新版部署成功後執行。
 
 登入延遲診斷：`docker logs --since 10m dns-manager-web-1 2>&1 | grep portal-timing`。同一 requestId 的 `token`、`userinfo` 為 Portal 請求（含回應內容）的耗時，`callback` 為網站回呼整體耗時（毫秒），不含使用者在 Portal 頁面停留的時間。紀錄不含授權碼、token 或使用者資料。最後登入時間於回應送出後更新；身分、停用及權限檢查仍同步完成。
 

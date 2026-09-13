@@ -1,3 +1,4 @@
+import { auditMutation } from "@/lib/audit/mutation";
 import { z } from "zod";
 import { requireActor } from "@/lib/auth/session";
 import { isGlobalAdmin, isOwner, isOwnerEmail, resolvedGlobalRole } from "@/lib/auth/owner";
@@ -18,7 +19,7 @@ export async function GET() {
     return Response.json({ users: users.map((user) => ({ ...user, globalRole: resolvedGlobalRole(user.email, user.globalRole), protected: isOwnerEmail(user.email) })), canAssignAdmin: isOwner(actor) });
   } catch (error) { return apiError(error); }
 }
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
@@ -29,7 +30,9 @@ export async function POST(request: Request) {
     const passwordHash = await hashPassword(input.password);
     const data = { email: input.email, name: input.name, globalRole: input.globalRole, passwordHash };
     const user = isLocalDemo() ? await demoUsers((users) => { if (users.some((u) => u.email === input.email)) throw new ApiError("此電子郵件已存在。", 409); const user = { ...data, id: "dev-" + crypto.randomUUID(), disabled: false, createdAt: new Date().toISOString() }; users.push(user); return user; }, true) : await db.user.create({ data });
-    await logAuditEvent({ actor, zone: "", action: "CREATE_USER", after: { id: user.id, email: user.email, globalRole: user.globalRole }, success: true, request });
+    await logAuditEvent({ actor, zone: "", action: "CREATE_USER", before: null, after: { id: user.id, email: user.email, name: user.name, disabled: user.disabled, globalRole: user.globalRole, passwordConfigured: true }, success: true, request });
     return Response.json({ user: { id: user.id, name: user.name, email: user.email, globalRole: user.globalRole, disabled: user.disabled } }, { status: 201 });
   } catch (error) { if ((error as { code?: string }).code === "P2002") return apiError(new ApiError("此電子郵件已存在。", 409)); return apiError(error); }
 }
+
+export const POST = auditMutation(POSTHandler);

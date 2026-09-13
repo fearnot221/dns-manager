@@ -35,3 +35,11 @@
   .settings-form input { font-size: 1rem; }
   .settings-form .modal-foot { flex-wrap: wrap; }
 }
+.audit-toolbar { flex-wrap: wrap; }
+.audit-time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.audit-detail { min-width: 140px; max-width: 560px; }
+.audit-detail summary { cursor: pointer; color: var(--accent); padding: 6px 0; }
+.audit-detail dl { display: grid; gap: 4px; margin: 12px 0; }
+.audit-detail dt { color: var(--muted); font-size: .75rem; }
+.audit-detail dd { margin: 0 0 8px; overflow-wrap: anywhere; }
+.audit-detail pre { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--surface-soft); border: 1px solid var(--border); border-radius: 6px; font-size: .75rem; }

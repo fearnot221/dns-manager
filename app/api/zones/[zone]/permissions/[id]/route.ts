@@ -1,3 +1,4 @@
+import { auditMutation } from "@/lib/audit/mutation";
 import { isOwnerEmail } from "@/lib/auth/owner";
 import { requireActor } from "@/lib/auth/session";
 import { canManagePermissions, canViewZone } from "@/lib/auth/permissions";
@@ -7,7 +8,7 @@ import { normalizeZoneName } from "@/lib/dns/names";
 import { db } from "@/lib/db/client";
 import { mockPermissions } from "@/lib/mock/permissions";
 
-export async function DELETE(request:Request,{params}:{params:Promise<{zone:string;id:string}>}){
+async function DELETEHandler(request:Request,{params}:{params:Promise<{zone:string;id:string}>}){
   let actor;let zone="";
   try{
     const resolved=await params;actor=await requireActor();zone=normalizeZoneName(decodeURIComponent(resolved.zone));notFoundUnless(canViewZone(actor,zone)&&canManagePermissions(actor,zone));let previous:unknown;
@@ -16,3 +17,5 @@ export async function DELETE(request:Request,{params}:{params:Promise<{zone:stri
     await logAuditEvent({actor,zone,action:"UPDATE_PERMISSION",before:previous,after:null,success:true,request});return new Response(null,{status:204});
   }catch(error){if(actor)await logAuditEvent({actor,zone,action:"UPDATE_PERMISSION",success:false,errorMessage:error instanceof Error?error.message:"Unknown error",request}).catch(()=>undefined);return apiError(error);}
 }
+
+export const DELETE = auditMutation(DELETEHandler);

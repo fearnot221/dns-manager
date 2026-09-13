@@ -28,7 +28,10 @@ Every API operation authenticates the caller, resolves effective direct/group pe
 
 ## Included
 
-- NCU Portal-only sign-in for database-backed environments; password sign-in only in local demo
+- Read-only administrator operation log at `/activity`, with filters, pagination, before/after details and request correlation
+- Collapsible sidebar groups and desktop navigation toggle
+
+- NCU Portal with administrator-managed exact-email allowlist; optional password login for testing
 - Protected owner `fearnot@ce.ncu.edu.tw`, global `ADMIN` / `USER`, plus zone `VIEWER`, `EDITOR`, and `ADMIN` roles
 - Per-value applicant, unit, extension and purpose; grouped inventory with server-stamped inspection history
 - User creation, name editing and suspension; only the owner can assign administrator privileges
@@ -114,15 +117,21 @@ Open `http://localhost:3000`. Configure the database, seed the protected owner a
 
 Generate secrets with `openssl rand -base64 32`. Never give a PowerDNS setting a `NEXT_PUBLIC_` prefix.
 
-## Production authentication
+## Operation log scope
 
-Only NCU Portal is supported outside the database-free local demo. Register the callback:
+Application mutation APIs record a durable `MUTATION_STARTED` before execution, domain-specific details, and `MUTATION_COMPLETED` with HTTP status/duration. If the initial write fails, the mutation is blocked. An interrupted operation may have only a start event; check the target state before retrying, especially when PowerDNS succeeded but a later database write failed. Completion-write failures emit `AUDIT_COMPLETION_FAILED` to server stderr and an `X-Audit-Warning` response header. These are not distributed transactions with PowerDNS.
+
+Logs include DNS/Zone changes, requests/reviews, permissions, users, allowlist membership, ownership/inspection details, sign-in/sign-out and explicit test-user creation. Secret fields and known environment secrets are redacted; DNS record content and personal applicant data remain visible only to global administrators. Local demo writes real new events to `.local-demo/audit.json`; old mock examples are no longer shown. There is no web edit/delete log endpoint. VM env edits, direct SQL/PowerDNS changes, deployments and pre-existing changes are outside this application log and need infrastructure logs; no historical details are invented.
+
+## Login configuration
+
+NCU Portal checks an administrator-managed email allowlist. Register the callback:
 
 ```text
 https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/ncu-portal
 ```
 
-Configure all three NCU variables and `AUTH_URL`, then recreate the web container. Existing legacy, Google and password sessions must log in again through Portal. Missing Portal configuration never enables password fallback. New users default to `USER`; the owner is bound by the operator-verified Portal identifier, not a supplied email. Existing accounts are not silently merged by email.
+Configure all three NCU variables and `AUTH_URL`, then recreate the web container. Password login is temporarily enabled by default; set `AUTH_PASSWORD_LOGIN_ENABLED=false` to disable it after testing. It is independent of the Portal allowlist. Google is not supported. New Portal users must have an allowlisted verified email and default to `USER`; the owner is bound by the operator-verified Portal identifier, not a supplied email, and is a protected built-in allowlist member. Existing accounts are not silently merged by email. Removing a member revokes their Portal session on its next use. Administrators manage membership at `/admin/allowlist`; changes are audited. All existing Portal sessions must log in again after this upgrade.
 
 PowerDNS reads only `PDNS_API_URL` (ending in `/api/v1`), `PDNS_API_KEY` and `PDNS_SERVER_ID`. Move previously web-entered settings to the server environment before upgrading. Existing encrypted database settings are retained but ignored. Inventory metadata remains scoped to the API URL/server ID; keep those unchanged to retain its associations. Unscoped legacy applications are not used to infer ownership on live servers.
 

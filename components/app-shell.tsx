@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCheck, Users, FileCheck2, FilePlus2, Globe2, LogOut, Menu, Monitor, Moon, Sun, X } from "lucide-react";
+import { ClipboardCheck, Users, FileCheck2, FilePlus2, Globe2, LogOut, Menu, Monitor, Moon, Sun, X, History, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Brand } from "@/components/brand";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -18,11 +18,12 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
   const [mobile, setMobile] = useState(false);
+  const [desktopOpen, setDesktopOpen] = useState(true);
   const sidebar = useRef<HTMLElement>(null);
   const menu = useRef<HTMLButtonElement>(null);
   const zones = pathname.startsWith("/zones");
   const applying = pathname === "/requests/new";
-  const sectionLabel = pathname === "/inventory" ? "DNS 定期清查" : pathname === "/admin/users" ? "使用者管理" : zones ? "Zone 管理" : admin ? "DNS 申請審核" : applying ? "申請 DNS" : "我的 DNS";
+  const sectionLabel = pathname === "/activity" ? "操作紀錄" : pathname === "/inventory" ? "DNS 定期清查" : pathname === "/admin/allowlist" ? "登入白名單" : pathname === "/admin/users" ? "使用者管理" : zones ? "Zone 管理" : admin ? "DNS 申請審核" : applying ? "申請 DNS" : "我的 DNS";
   const zone = zones && pathname.split("/")[2] ? decodeURIComponent(pathname.split("/")[2]) : null;
 
   useEffect(() => {
@@ -35,7 +36,7 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setMobile(false);
       if (event.key !== "Tab") return;
-      const controls = [...navigation.querySelectorAll<HTMLElement>("a[href], button:not([disabled])")].filter((element) => element.getClientRects().length);
+      const controls = [...navigation.querySelectorAll<HTMLElement>("a[href], summary, button:not([disabled])")].filter((element) => element.getClientRects().length);
       const first = controls[0];
       const last = controls.at(-1);
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
@@ -52,18 +53,24 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
     };
   }, [mobile]);
 
-  return <div className="shell">
+  return <div className={`shell ${desktopOpen ? "" : "navigation-collapsed"}`}>
     <a href="#workspace-content" className="skip-link">跳至主要內容</a>
     {mobile && <button type="button" className="navigation-backdrop" tabIndex={-1} aria-label="關閉導覽選單" onClick={() => setMobile(false)} />}
     <aside ref={sidebar} id="workspace-navigation" className={`sidebar ${mobile ? "mobile-open" : ""}`}>
       <div className="brand"><Brand /><button className="icon-button mobile-close" onClick={() => setMobile(false)} aria-label="關閉導覽選單"><X size={20} /></button></div>
       <p className="nav-label">{admin ? "管理員工作區" : "個人工作區"}</p>
       <nav className="nav" aria-label="工作區導覽">
+        <details className="nav-group" open><summary>{admin ? "DNS 管理" : "DNS 服務"}<ChevronDown size={15} /></summary><div>
         {!admin && <Link className={applying ? "active" : ""} aria-current={applying ? "page" : undefined} href="/requests/new" onClick={() => setMobile(false)}><FilePlus2 size={18} /><span>申請 DNS</span></Link>}
         <Link className={pathname === "/requests" ? "active" : ""} aria-current={pathname === "/requests" ? "page" : undefined} href="/requests" onClick={() => setMobile(false)}><FileCheck2 size={18} /><span>{admin ? "DNS 申請審核" : "我的 DNS"}</span></Link>
         {admin && <Link className={zones ? "active" : ""} aria-current={zones ? "page" : undefined} href="/zones" onClick={() => setMobile(false)}><Globe2 size={18} /><span>Zone 管理</span></Link>}
         {admin && <Link href="/inventory" className={pathname === "/inventory" ? "active" : ""} aria-current={pathname === "/inventory" ? "page" : undefined} onClick={() => setMobile(false)}><ClipboardCheck size={18} /><span>DNS 定期清查</span></Link>}
+        </div></details>
+        {systemAdmin && <details className="nav-group" open><summary>系統管理<ChevronDown size={15} /></summary><div>
         {systemAdmin && <Link href="/admin/users" className={pathname === "/admin/users" ? "active" : ""} aria-current={pathname === "/admin/users" ? "page" : undefined} onClick={() => setMobile(false)}><Users size={18} /><span>使用者管理</span></Link>}
+        {systemAdmin && <Link href="/admin/allowlist" className={pathname === "/admin/allowlist" ? "active" : ""} aria-current={pathname === "/admin/allowlist" ? "page" : undefined} onClick={() => setMobile(false)}><Users size={18} /><span>登入白名單</span></Link>}
+        <Link href="/activity" className={pathname === "/activity" ? "active" : ""} aria-current={pathname === "/activity" ? "page" : undefined} onClick={() => setMobile(false)}><History size={18} /><span>操作紀錄</span></Link>
+        </div></details>}
       </nav>
       <div className="sidebar-bottom">
         {demo && <div className="demo-label"><Monitor size={15} /><span>Local demo</span></div>}
@@ -77,6 +84,7 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
     <div className="main" inert={mobile || undefined}>
       <header className="topbar">
         <div className="crumb"><button ref={menu} className="icon-button menu" onClick={() => setMobile(true)} aria-expanded={mobile} aria-controls="workspace-navigation" aria-label="開啟導覽選單"><Menu size={20} /></button>
+          <button className="icon-button desktop-navigation-toggle" onClick={() => setDesktopOpen(!desktopOpen)} aria-expanded={desktopOpen} aria-controls="workspace-navigation" aria-label={desktopOpen ? "收合側邊導覽" : "展開側邊導覽"} title={desktopOpen ? "收合側邊導覽" : "展開側邊導覽"}>{desktopOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}</button>
           {zone ? <><Link href="/zones">{sectionLabel}</Link><span aria-hidden="true">/</span><strong>{zone}</strong></> : <strong>{sectionLabel}</strong>}
         </div>
         <button className="icon-button theme-toggle" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")} aria-label="切換明暗模式" title="切換明暗模式"><Sun size={18} className="theme-sun" /><Moon size={18} className="theme-moon" /></button>

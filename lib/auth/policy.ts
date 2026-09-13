@@ -1,8 +1,13 @@
-/** Password authentication is restricted to the database-free local demo. */
+/** Local demo does not use Portal. Password login can be disabled after testing. */
 export function demoLoginEnabled(env: NodeJS.ProcessEnv = process.env) {
   return env.NODE_ENV !== "production" && !env.DATABASE_URL;
 }
 
 export function loginProviderAllowed(provider: unknown, env: NodeJS.ProcessEnv = process.env) {
-  return demoLoginEnabled(env) ? provider === "credentials" : provider === "ncu-portal";
+  if (provider === "credentials") return passwordLoginEnabled(env);
+  return !demoLoginEnabled(env) && provider === "ncu-portal";
+}
+
+export function passwordLoginEnabled(env: NodeJS.ProcessEnv = process.env) {
+  return demoLoginEnabled(env) || env.AUTH_PASSWORD_LOGIN_ENABLED !== "false";
 }

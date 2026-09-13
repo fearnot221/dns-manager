@@ -1,3 +1,4 @@
+import { auditMutation } from "@/lib/audit/mutation";
 import { powerdns } from "@/lib/powerdns/client";
 import { ApplicationInputError, prepareApplication } from "@/lib/requests/application";
 import { saveApplication } from "@/lib/requests/save-application";
@@ -47,7 +48,7 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   let actor;
   try {
     actor = await requireActor();
@@ -61,3 +62,5 @@ export async function POST(request: Request) {
     return apiError(error instanceof ApplicationInputError ? new ApiError(error.message, error.status) : error);
   }
 }
+
+export const POST = auditMutation(POSTHandler);

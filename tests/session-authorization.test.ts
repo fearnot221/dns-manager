@@ -23,5 +23,6 @@ it("rejects existing sessions after account suspension", async () => {
 });
 it("rejects legacy/password sessions in production before querying permissions", async () => {
   vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("AUTH_PASSWORD_LOGIN_ENABLED", "false");
   await expect(requireActor()).rejects.toMatchObject({ status: 401 });
 });

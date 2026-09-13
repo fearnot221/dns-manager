@@ -6,6 +6,7 @@ x-app-environment: &app-environment
   AUTH_URL: ${AUTH_URL:?Set the public HTTPS origin}
   AUTH_SECRET: ${AUTH_SECRET:?Set a persistent random session secret}
   AUTH_TRUST_HOST: "true"
+  AUTH_PASSWORD_LOGIN_ENABLED: ${AUTH_PASSWORD_LOGIN_ENABLED:-true}
   SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?Set a persistent 64-character hex key}
   PDNS_MOCK: ${PDNS_MOCK:-false}
   PDNS_API_URL: ${PDNS_API_URL:-}

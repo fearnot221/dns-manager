@@ -8,7 +8,9 @@ import { verifyPassword } from "@/lib/auth/password";
 import { demoUsers } from "@/lib/users/demo";
 import { isOwnerEmail, resolvedGlobalRole } from "@/lib/auth/owner";
 import { ncuPortalProvider, portalConfigured, portalIdentity } from "./ncu-portal";
-import { demoLoginEnabled, loginProviderAllowed } from "./policy";
+import { passwordLoginEnabled, loginProviderAllowed } from "./policy";
+import { portalEmailAllowed } from "./allowlist";
+import { logAuditEvent } from "@/lib/audit/service";
 
 const credentialsSchema = z.object({ email: z.email(), password: z.string().min(1).max(256) });
 
@@ -19,7 +21,7 @@ const credentialsProvider = Credentials({
     password: { label: "Password", type: "password" },
   },
   async authorize(raw) {
-    if (!demoLoginEnabled()) return null;
+    if (!passwordLoginEnabled()) return null;
     const parsed = credentialsSchema.safeParse(raw);
     if (!parsed.success) return null;
     const email = parsed.data.email.trim().toLowerCase();
@@ -32,7 +34,10 @@ const credentialsProvider = Credentials({
       }
     }
 
-    return null;
+    if (!process.env.DATABASE_URL) return null;
+    const user = await db.user.findUnique({ where: { email } });
+    if (!user?.passwordHash || user.disabled || !await verifyPassword(password, user.passwordHash)) return null;
+    return { id: user.id, email: user.email, name: user.name, globalRole: resolvedGlobalRole(user.email, user.globalRole) };
   },
 });
 
@@ -40,15 +45,17 @@ const config: NextAuthConfig = {
   adapter: PrismaAdapter(db),
   session: { strategy: "jwt", maxAge: 8 * 60 * 60, updateAge: 60 * 60 },
   providers: [
-    ...(demoLoginEnabled() ? [credentialsProvider] : []),
+    ...(passwordLoginEnabled() ? [credentialsProvider] : []),
     ...(portalConfigured() ? [ncuPortalProvider()] : []),
   ],
   pages: { signIn: "/login", error: "/login" },
   callbacks: {
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, profile }) {
       if (account) token.loginProvider = account.provider;
-      // Invalidate legacy/password/Google sessions after switching to Portal-only.
+      if (account?.provider === "ncu-portal") token.portalEmail = portalIdentity(profile).email;
+      // Recheck membership on session access: removed emails lose existing sessions too.
       if (!loginProviderAllowed(token.loginProvider)) return null;
+      if (token.loginProvider === "ncu-portal" && !await portalEmailAllowed(token.portalEmail)) return null;
       if (user) {
         token.userId = user.id;
         token.globalRole = user.globalRole ?? "USER";
@@ -73,6 +80,7 @@ const config: NextAuthConfig = {
         try {
           const identity = portalIdentity(profile);
           if (identity.id !== account.providerAccountId) return false;
+          if (!await portalEmailAllowed(identity.email)) return false;
           const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "ncu-portal", providerAccountId: identity.id } }, include: { user: true } });
           if (linked) return !linked.user.disabled && (identity.owner ? isOwnerEmail(linked.user.email) && linked.user.globalRole === "SUPER_ADMIN" : !isOwnerEmail(linked.user.email));
           const existing = await db.user.findUnique({ where: { email: identity.email } });
@@ -87,16 +95,24 @@ const config: NextAuthConfig = {
     },
   },
   events: {
-    async signIn({ user }) {
-      if (!process.env.DATABASE_URL || !user.id || user.id.startsWith("dev-")) return;
+    async signIn({ user, account }) {
+      if (!user.id || !user.email) return;
       const id = user.id;
+      const email = user.email;
       const lastLoginAt = new Date();
       // Informational bookkeeping must not delay the OAuth redirect.
       // Identity checks and account linking above remain synchronous.
       after(async () => {
-        await db.user.update({ where: { id }, data: { lastLoginAt } })
+        await logAuditEvent({ actor: { id, email, globalRole: user.globalRole ?? "USER", zoneRoles: {} }, zone: "", action: "SIGN_IN", after: { provider: account?.provider ?? "credentials" }, success: true }).catch(() => console.error("[audit] SIGN_IN persistence failed"));
+        if (process.env.DATABASE_URL && !id.startsWith("dev-")) await db.user.update({ where: { id }, data: { lastLoginAt } })
           .catch(() => console.warn("[auth] lastLoginAt update failed"));
       });
+    },
+    async signOut(message) {
+      const token = "token" in message ? message.token : null;
+      if (!token?.userId || !token.email) return;
+      const actor = { id: token.userId, email: token.email, globalRole: token.globalRole ?? "USER" as const, zoneRoles: {} };
+      after(async () => { await logAuditEvent({ actor, zone: "", action: "SIGN_OUT", success: true }).catch(() => console.error("[audit] SIGN_OUT persistence failed")); });
     },
   },
 };

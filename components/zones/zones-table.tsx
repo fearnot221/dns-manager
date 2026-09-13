@@ -12,6 +12,7 @@ import { ResourceError } from "@/components/ui/resource-error";
 import { apiRequest, jsonRequest } from "@/lib/client/api";
 import { Dialog } from "@/components/ui/dialog";
 import { ScrollRegion } from "@/components/ui/scroll-region";
+import { filterZones, zoneCategories, zoneCategory, type ZoneCategory } from "@/lib/dns/zone-category";
 
 type ZoneRow = Omit<Zone, "rrsets"> & { recordCount: number; permission: string };
 
@@ -20,7 +21,12 @@ const emptyZones: ZoneRow[] = [];
 export function ZonesTable({ canCreate = false }: { canCreate?: boolean }) {
   const { data, loading, error, reload: load } = useResource<{ zones: ZoneRow[] }>("/api/zones");
   const zones = data?.zones ?? emptyZones;
-  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<ZoneCategory>("forward");
+  const [queries, setQueries] = useState<Record<ZoneCategory, string>>({ forward: "", ipv4: "", ipv6: "" });
+  const query = queries[category];
+  const setQuery = (value: string) => setQueries((previous) => ({ ...previous, [category]: value }));
+  const selected = zoneCategories.find((item) => item.id === category)!;
+  const counts = useMemo(() => zones.reduce((result, zone) => { result[zoneCategory(zone.name)]++; return result; }, { forward: 0, ipv4: 0, ipv6: 0 }), [zones]);
   const [open, setOpen] = useState(false);
   const [createError, setCreateError] = useState("");
   const [pending, setPending] = useState(false);
@@ -28,8 +34,8 @@ export function ZonesTable({ canCreate = false }: { canCreate?: boolean }) {
 
 
   const rows = useMemo(
-    () => zones.filter((zone) => zone.name.toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => a.name.localeCompare(b.name)),
-    [zones, query],
+    () => filterZones(zones, category, query),
+    [zones, category, query],
   );
 
   async function create(event: React.FormEvent<HTMLFormElement>) {
@@ -46,6 +52,9 @@ export function ZonesTable({ canCreate = false }: { canCreate?: boolean }) {
           nameservers: String(form.get("nameservers")).split(",").map((value) => value.trim()),
       }));
       toast.success("已建立 DNS 網域");
+      const createdCategory = zoneCategory(String(form.get("name")));
+      setCategory(createdCategory);
+      setQueries((previous) => ({ ...previous, [createdCategory]: "" }));
       setOpen(false);
       await load();
     } catch (error) {
@@ -58,14 +67,29 @@ export function ZonesTable({ canCreate = false }: { canCreate?: boolean }) {
 
   return <>
     <div className="card table-card">
+      <div className="zone-category-tabs" role="tablist" aria-label="網域類別">
+        {zoneCategories.map((item, index) => <button key={item.id} type="button" role="tab" id={`zone-tab-${item.id}`} aria-controls="zone-category-panel" aria-selected={category === item.id} tabIndex={category === item.id ? 0 : -1} onClick={() => setCategory(item.id)} onKeyDown={(event) => {
+          let next = index;
+          if (event.key === "ArrowRight") next = (index + 1) % zoneCategories.length;
+          else if (event.key === "ArrowLeft") next = (index + zoneCategories.length - 1) % zoneCategories.length;
+          else if (event.key === "Home") next = 0;
+          else if (event.key === "End") next = zoneCategories.length - 1;
+          else return;
+          event.preventDefault(); setCategory(zoneCategories[next].id);
+          document.getElementById(`zone-tab-${zoneCategories[next].id}`)?.focus();
+        }}><span><strong>{item.label}</strong><small>{item.suffix}</small></span><span className="zone-category-count">{loading || error ? "—" : counts[item.id]}</span></button>)}
+      </div>
+      <div id="zone-category-panel" role="tabpanel" aria-labelledby={`zone-tab-${category}`} tabIndex={0}>
       <div className="table-tools">
         <div className="filter-input">
           <Search size={15} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋網域名稱" aria-label="搜尋網域" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`搜尋${selected.label}`} aria-label={`搜尋${selected.label}`} />
         </div>
+        {query && <button type="button" className="button" onClick={() => setQuery("")}>清除搜尋</button>}
         <div className="tool-spacer" />
         {canCreate && <button className="button" onClick={() => { setCreateError(""); setOpen(true); }}><Plus size={15} /> 新增網域</button>}
       </div>
+      {!loading && !error && <p className="record-results" role="status">{selected.description} · 顯示 {rows.length} / {counts[category]} 個</p>}
       {error ? <ResourceError message={error} retry={load} /> : <ScrollRegion className="table-wrap" label="DNS 網域，可用方向鍵水平捲動">
         <table>
           <thead><tr><th scope="col">網域名稱</th><th scope="col">模式</th><th scope="col">序號</th><th scope="col">DNSSEC</th><th scope="col">紀錄數</th><th scope="col">權限</th><th scope="col"><span className="sr-only">操作</span></th></tr></thead>
@@ -73,7 +97,7 @@ export function ZonesTable({ canCreate = false }: { canCreate?: boolean }) {
             {loading ? <LoadingRows columns={7} /> : rows.map((zone) => {
               const path = zone.name.replace(/\.$/, "");
               return <tr key={zone.id}>
-                <td><Link className="zone-link" href={`/zones/${encodeURIComponent(path)}`}><span className="zone-icon"><Globe2 size={15} /></span><div><strong>{path}</strong><small>權威 DNS 網域</small></div></Link></td>
+                <td><Link className="zone-link" href={`/zones/${encodeURIComponent(path)}`}><span className="zone-icon"><Globe2 size={15} /></span><strong>{path}</strong></Link></td>
                 <td>{zone.kind}</td>
                 <td className="mono">{zone.serial}</td>
                 <td><Badge tone={zone.dnssec ? "green" : "neutral"}>{zone.dnssec ? "已啟用" : "未啟用"}</Badge></td>
@@ -85,7 +109,8 @@ export function ZonesTable({ canCreate = false }: { canCreate?: boolean }) {
           </tbody>
         </table>
       </ScrollRegion>}
-      {!loading && !error && rows.length === 0 && <EmptyState title={query ? "沒有符合條件的網域" : "目前沒有可管理的網域"} description={query ? "請改用其他網域名稱，或清除搜尋。" : "目前帳號尚未分配可管理的網域。"} />}
+      {!loading && !error && rows.length === 0 && <EmptyState title={query ? "此分類沒有符合條件的網域" : `目前沒有可管理的${selected.label}`} description={query ? "請改用其他網域名稱，或清除搜尋。" : "請切換其他分類，或確認帳號的網域授權。"} />}
+      </div>
     </div>
 
     {open && <Dialog title="新增 DNS 網域" description="在 PowerDNS 建立權威 DNS 網域。" pending={pending} onClose={() => setOpen(false)}>
