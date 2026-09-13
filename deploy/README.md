@@ -1,6 +1,6 @@
 # Docker 自架與 GitHub push 自動部署
 
-**目前正式架構：Ubuntu 24.04 內網 VM + 另一台 Caddy，網域 `dns.ce.ncu.edu.tw`。請優先使用 [VM 一鍵安裝指南](QUICKSTART.md) 與 [install-vm.sh](install-vm.sh)。** 它會自動建立環境檔、安裝依賴、初始化帳號、配置私有 gateway/webhook，並提供一次性 GitHub webhook 註冊工具。下列是手動安裝／同機 Nginx 的替代方案。
+**目前正式架構：Ubuntu 22.04／24.04 內網 VM + 另一台 Caddy，網域 `dns.ce.ncu.edu.tw`。請優先使用 [VM 一鍵安裝指南](QUICKSTART.md) 與 [install-vm.sh](install-vm.sh)。** 它會自動建立環境檔、安裝依賴、初始化帳號、配置私有 gateway/webhook，並提供一次性 GitHub webhook 註冊工具。下列是手動安裝／同機 Nginx 的替代方案。
 
 本方案使用 Linux 主機上的 Docker Compose、PostgreSQL、Nginx（HTTPS）及一個獨立的 webhook service。網站容器不掛載 Docker socket。Webhook 的部署帳號具有 Docker 權限，等同主機高權限，務必限制 SSH、repository 寫入者與正式分支。
 

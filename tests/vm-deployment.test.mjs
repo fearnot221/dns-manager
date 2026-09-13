@@ -6,6 +6,24 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { registerWebhook } from '../deploy/register-webhook.mjs';
 
+describe('Ubuntu installer release selection', () => {
+  it.each([
+    ['ubuntu', '22.04', 'jammy'], ['ubuntu', '24.04', 'noble'],
+    ['ubuntu', '20.04', null], ['debian', '22.04', null], ['ubuntu', '22.04; echo unsafe', null],
+  ])('selects a trusted suite for %s %s', async (id, version, expected) => {
+    const source = await readFile(new URL('../deploy/install-vm.sh', import.meta.url), 'utf8');
+    // Exercise the exact pure function without running privileged installer operations.
+    const definition = source.match(/^ubuntu_suite\(\) \{[\s\S]*?^\}/m)?.[0];
+    expect(definition).toBeTruthy();
+    const result = spawnSync('/bin/bash', ['-c', `${definition}\nubuntu_suite "$1" "$2"`, 'installer-test', id, version], { encoding: 'utf8' });
+    if (expected) {
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim()).toBe(expected);
+    } else expect(result.status).not.toBe(0);
+    expect(source).toContain('"$ubuntu_codename" > /etc/apt/sources.list.d/dns-manager-docker.list');
+  });
+});
+
 async function deploy(overrides = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'dns-deploy-flow-'));
   try {

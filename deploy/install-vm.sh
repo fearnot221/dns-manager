@@ -1,19 +1,30 @@
 #!/usr/bin/env bash
-# Dedicated Ubuntu 24.04 VM bootstrap. Download/review this file before running sudo bash.
+# Dedicated Ubuntu 22.04/24.04 VM bootstrap. Download/review before running sudo bash.
 set -Eeuo pipefail
 umask 077
 if [[ ${1:-} == --help ]]; then
-  echo 'sudo bash install-vm.sh (Ubuntu 24.04, amd64/arm64, dedicated VM)'
+  echo 'sudo bash install-vm.sh (Ubuntu 22.04/24.04 LTS, amd64/arm64, installed VM)'
   echo 'Prompts for VM and separate Caddy private IPv4 addresses. Optional env: VM_IP CADDY_IP.'
   echo 'Installs Docker/Compose, Node 22, application, private ingress, signed webhook service.'
   echo 'Preserves application secrets/data on rerun; does not configure the external Caddy or DNS.'
   exit 0
 fi
+ubuntu_suite() {
+  case "$1:$2" in
+    ubuntu:22.04) echo jammy ;;
+    ubuntu:24.04) echo noble ;;
+    *) return 1 ;;
+  esac
+}
 [[ $# -eq 0 && $EUID -eq 0 ]] || { echo 'Run: sudo bash install-vm.sh'; exit 1; }
 [[ -d /run/systemd/system ]] || { echo 'Requires a booted Linux VM with systemd, not a container.'; exit 1; }
 # shellcheck source=/dev/null
 . /etc/os-release
-[[ $ID == ubuntu && $VERSION_ID == 24.04 ]] || { echo 'This installer supports Ubuntu Server 24.04 LTS only.'; exit 1; }
+ubuntu_codename=$(ubuntu_suite "$ID" "$VERSION_ID") || { echo 'This installer supports Ubuntu Server 22.04 and 24.04 LTS.'; exit 1; }
+root_filesystem=$(findmnt --noheadings --output FSTYPE /)
+case "$root_filesystem" in
+  overlay|squashfs) echo 'Install Ubuntu onto the VM disk and reboot out of the Live ISO before deploying.'; exit 1 ;;
+esac
 case "$(dpkg --print-architecture)" in
   amd64) node_arch=x64 ;;
   arm64) node_arch=arm64 ;;
@@ -67,7 +78,7 @@ if ! command -v docker >/dev/null; then
   install -d -m 0755 /etc/apt/keyrings
   curl --proto '=https' --tlsv1.2 -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/dns-manager-docker.asc
   chmod 0644 /etc/apt/keyrings/dns-manager-docker.asc
-  printf 'deb [arch=%s signed-by=/etc/apt/keyrings/dns-manager-docker.asc] https://download.docker.com/linux/ubuntu noble stable\n' "$(dpkg --print-architecture)" > /etc/apt/sources.list.d/dns-manager-docker.list
+  printf 'deb [arch=%s signed-by=/etc/apt/keyrings/dns-manager-docker.asc] https://download.docker.com/linux/ubuntu %s stable\n' "$(dpkg --print-architecture)" "$ubuntu_codename" > /etc/apt/sources.list.d/dns-manager-docker.list
   chmod 0644 /etc/apt/sources.list.d/dns-manager-docker.list
   apt-get update
   apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin

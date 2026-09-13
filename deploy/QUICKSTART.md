@@ -1,6 +1,8 @@
 # Ubuntu VM 快速安裝：dns.ce.ncu.edu.tw + 獨立 Caddy
 
-適用於專用、全新 Ubuntu Server **24.04 LTS** VM（amd64 或 arm64，建議 4 vCPU / 8 GB RAM / 60 GB 磁碟）。需有 sudo、固定 RFC1918 內網 IPv4、可出站連線至 Ubuntu/Docker/Node/GitHub/NCU Portal。不是在 Proxmox host 或 CT 執行。
+適用於專用、全新 Ubuntu Server **22.04 或 24.04 LTS** VM（amd64 或 arm64，建議 4 vCPU / 8 GB RAM / 60 GB 磁碟）。腳本自動選擇 22.04 的 jammy 或 24.04 的 noble Docker 套件來源，既有 22.04 不必為此升級。需有 sudo、固定 RFC1918 內網 IPv4、可出站連線至 Ubuntu/Docker/Node/GitHub/NCU Portal。不是在 Proxmox host 或 CT 執行。
+
+`ubuntu-22.04.x-live-server-amd64.iso` 是安裝媒體名稱；用它安裝到 VM 硬碟並重開機後即可部署。若仍在 Live ISO／安裝程式的暫存環境，請先完成系統安裝；腳本會拒絕 overlay／squashfs 根檔案系統，避免把正式服務放在暫存系統上。
 
 ## 1. VM 上安裝
 
