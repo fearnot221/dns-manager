@@ -30,7 +30,7 @@ sudo install -d -m 0700 -o dnsdeploy -g dnsdeploy /var/lib/dns-manager-webhook
 - `AUTH_URL=https://你的正式網域`，無其他路徑。
 - `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、`NCU_OWNER_IDENTIFIER`。
 - `PDNS_MOCK=false`；只在 env 設定 `PDNS_API_URL`、`PDNS_API_KEY`、`PDNS_SERVER_ID`，網址以 `/api/v1` 結尾。網頁設定入口已移除，舊資料庫連線設定不再生效。沒有連線時 DNS 頁會顯示錯誤，不會切換到假資料。
-- Portal 採完整 Email 白名單（後台「登入白名單」）；最高帳號為受保護內建項目。移除成員會撤銷其 Portal session。帳密登入暫時保留以供測試，可設 `AUTH_PASSWORD_LOGIN_ENABLED=false` 關閉；它不受 Portal 白名單限制。測試帳號建立命令見 QUICKSTART。
+- Portal 不需白名單；驗證成功會自動建立一般使用者。管理員僅由最高使用者手動指派，停用帳號仍禁止使用。帳密登入保留以供測試，可設 `AUTH_PASSWORD_LOGIN_ENABLED=false` 關閉。測試帳號建立命令見 QUICKSTART。
 - `OWNER_INITIAL_PASSWORD`：初次建立最高帳號用，16 字元以上，與 demo 密碼不同。
 
 首次啟動（以能讀取 env 且有 Docker 權限的專用帳號執行）：

@@ -3,8 +3,9 @@ import { randomBytes } from "node:crypto";
 import { hashPassword } from "../lib/auth/password";
 
 // Run explicitly on the VM using the tools image. Never part of automatic deployment.
-const db = new PrismaClient();
-try {
+async function main() {
+  const db = new PrismaClient();
+  try {
   const email = "dns-test@example.invalid";
   if (await db.user.findUnique({ where: { email } })) throw new Error("Test account already exists; no password or roles were changed.");
   const password = randomBytes(24).toString("base64url");
@@ -17,4 +18,10 @@ try {
 } catch (error) {
   console.error(error instanceof Error && error.message.startsWith("Test account") ? error.message : "Unable to create test account. Check database connectivity and permissions.");
   process.exitCode = 1;
-} finally { await db.$disconnect(); }
+  } finally { await db.$disconnect(); }
+}
+
+void main().catch(() => {
+  console.error("Test account creation failed unexpectedly.");
+  process.exitCode = 1;
+});

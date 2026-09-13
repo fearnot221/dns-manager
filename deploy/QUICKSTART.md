@@ -130,7 +130,7 @@ sudoedit /etc/dns-manager/app.env
 
 PowerDNS 僅從 `/etc/dns-manager/app.env` 的 `PDNS_API_URL`、`PDNS_API_KEY`、`PDNS_SERVER_ID` 讀取，網址須以 `/api/v1` 結尾。後台連線表單已移除，資料庫中的舊設定不再使用。升級前請將連線設定填入 env；修改後重新建立 web 容器（單純 restart 不會載入新 env）。API 不要對外暴露。
 
-Portal 登入須符合管理員在 `/admin/allowlist` 維護的完整 Email 白名單；最高帳號為不可移除的內建項目，仍以受信任 identifier 綁定。其他既有使用者不會自動加入白名單。移除後現有 Portal session 下次使用即失效；升級後既有 Portal session 須重新登入。新增白名單不會新增角色或合併既有帳號。帳密登入暫時保留且不受 Portal 白名單限制，測試後可設 `AUTH_PASSWORD_LOGIN_ENABLED=false` 並重新建立 web 容器關閉。
+Portal 已移除白名單限制：任何通過 Portal 驗證並授權已驗證 Email 的使用者，首次登入會自動建立一般帳號。管理員須由最高使用者於「使用者管理」手動指派，不根據 Email 網域或 Portal 欄位自動升權。建議先讓本人登入，再指派該帳號；同 Email 的既有帳密帳號不會自動合併，以免冒用既有權限。停用帳號仍不能使用。舊白名單資料保留但不再作用。帳密測試登入仍可使用；測試後可設 `AUTH_PASSWORD_LOGIN_ENABLED=false` 並重新建立 web 容器關閉。
 
 建立一般測試帳號（只在需要時執行，不會隨 push 自動建立）：
 

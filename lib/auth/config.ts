@@ -9,8 +9,8 @@ import { demoUsers } from "@/lib/users/demo";
 import { isOwnerEmail, resolvedGlobalRole } from "@/lib/auth/owner";
 import { ncuPortalProvider, portalConfigured, portalIdentity } from "./ncu-portal";
 import { passwordLoginEnabled, loginProviderAllowed } from "./policy";
-import { portalEmailAllowed } from "./allowlist";
 import { logAuditEvent } from "@/lib/audit/service";
+import { createIdleSession, readIdleSession, revokeIdleSession } from "./idle-session";
 
 const credentialsSchema = z.object({ email: z.email(), password: z.string().min(1).max(256) });
 
@@ -53,15 +53,22 @@ const config: NextAuthConfig = {
     async jwt({ token, user, account, profile }) {
       if (account) token.loginProvider = account.provider;
       if (account?.provider === "ncu-portal") token.portalEmail = portalIdentity(profile).email;
-      // Recheck membership on session access: removed emails lose existing sessions too.
+      // Roles come from the database, never Portal claims or an email domain.
       if (!loginProviderAllowed(token.loginProvider)) return null;
-      if (token.loginProvider === "ncu-portal" && !await portalEmailAllowed(token.portalEmail)) return null;
       if (user) {
         token.userId = user.id;
         token.globalRole = user.globalRole ?? "USER";
         if (!user.globalRole && process.env.DATABASE_URL) {
           token.globalRole = (await db.user.findUnique({ where: { id: user.id }, select: { globalRole: true } }))?.globalRole ?? "USER";
         }
+      }
+      if (user?.id && account) {
+        token.idleSessionId = crypto.randomUUID();
+        token.idleExpiresAt = await createIdleSession(token.idleSessionId, user.id);
+      } else {
+        const expires = await readIdleSession(token.idleSessionId);
+        if (!expires) return null;
+        token.idleExpiresAt = expires;
       }
       return token;
     },
@@ -70,6 +77,8 @@ const config: NextAuthConfig = {
         session.user.id = String(token.userId);
         session.user.globalRole = token.globalRole ?? "USER";
         session.loginProvider = token.loginProvider;
+        session.idleSessionId = token.idleSessionId;
+        session.idleExpiresAt = token.idleExpiresAt;
       }
       return session;
     },
@@ -80,7 +89,6 @@ const config: NextAuthConfig = {
         try {
           const identity = portalIdentity(profile);
           if (identity.id !== account.providerAccountId) return false;
-          if (!await portalEmailAllowed(identity.email)) return false;
           const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "ncu-portal", providerAccountId: identity.id } }, include: { user: true } });
           if (linked) return !linked.user.disabled && (identity.owner ? isOwnerEmail(linked.user.email) && linked.user.globalRole === "SUPER_ADMIN" : !isOwnerEmail(linked.user.email));
           const existing = await db.user.findUnique({ where: { email: identity.email } });
@@ -110,6 +118,7 @@ const config: NextAuthConfig = {
     },
     async signOut(message) {
       const token = "token" in message ? message.token : null;
+      if (token?.idleSessionId) await revokeIdleSession(token.idleSessionId);
       if (!token?.userId || !token.email) return;
       const actor = { id: token.userId, email: token.email, globalRole: token.globalRole ?? "USER" as const, zoneRoles: {} };
       after(async () => { await logAuditEvent({ actor, zone: "", action: "SIGN_OUT", success: true }).catch(() => console.error("[audit] SIGN_OUT persistence failed")); });

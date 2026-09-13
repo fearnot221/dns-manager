@@ -4,6 +4,10 @@ import { isSameOrigin } from '@/lib/api/origin';
 const profile = { identifier: 'student-test', chineseName: '測試', email: 'test@example.com', emailVerified: true };
 afterEach(() => vi.unstubAllEnvs());
 describe('NCU Portal identity', () => {
+  it('always provisions ordinary users regardless of claimed administrator roles', async () => {
+    const provider = ncuPortalProvider();
+    expect(await provider.profile!({ ...profile, globalRole: 'SUPER_ADMIN', role: 'ADMIN' }, {})).toMatchObject({ globalRole: 'USER' });
+  });
   it('maps a verified user without granting administrator access', () => {
     expect(portalIdentity(profile, 'owner-id')).toMatchObject({ id: 'student-test', email: profile.email, owner: false });
     expect(ncuPortalProvider().allowDangerousEmailAccountLinking).toBe(false);

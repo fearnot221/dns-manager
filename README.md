@@ -31,14 +31,14 @@ Every API operation authenticates the caller, resolves effective direct/group pe
 - Read-only administrator operation log at `/activity`, with filters, pagination, before/after details and request correlation
 - Collapsible sidebar groups and desktop navigation toggle
 
-- NCU Portal with administrator-managed exact-email allowlist; optional password login for testing
+- Open NCU Portal sign-in with automatic USER provisioning; administrator roles assigned manually by the protected owner
 - Protected owner `fearnot@ce.ncu.edu.tw`, global `ADMIN` / `USER`, plus zone `VIEWER`, `EDITOR`, and `ADMIN` roles
 - Per-value applicant, unit, extension and purpose; grouped inventory with server-stamped inspection history
 - User creation, name editing and suspension; only the owner can assign administrator privileges
 - Environment-only PowerDNS API configuration; no web credential input or database override
 - Direct and group-ready permission schema, expiry, resource patterns, and record-type policy fields
 - Backend-filtered zones and protected mutation endpoints
-- Zone listing/creation/deletion API and responsive management UI
+- Zone listing/deletion API and responsive management UI; creating zones is disabled in the website and API
 - Correct multi-value RRsets using PowerDNS `REPLACE` and `DELETE`
 - SHA-256 optimistic concurrency hashes that reject stale edits
 - Validation for FQDN, A, AAAA, CNAME, MX, TXT, SRV, CAA, and TTL
@@ -125,13 +125,15 @@ Logs include DNS/Zone changes, requests/reviews, permissions, users, allowlist m
 
 ## Login configuration
 
-NCU Portal checks an administrator-managed email allowlist. Register the callback:
+Sessions have a server-enforced 15-minute inactivity deadline, stored per login in the existing `Session` table (local demo uses `.local-demo/idle-sessions.json`). Background reads do not extend it. The browser sends throttled activity notifications for keyboard/pointer/scroll interactions and warns during the final minute; inactive, sleeping or closed browsers cannot revive an expired session. Same-origin checks protect the activity endpoint. Sign-out removes the server session. Existing sessions must sign in again after upgrading; no database migration is needed. Unsaved forms are not automatically submitted on timeout.
+
+Anyone with a valid NCU Portal identity and verified contact email can sign in; no allowlist or advance user creation is needed. Register the callback:
 
 ```text
 https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/ncu-portal
 ```
 
-Configure all three NCU variables and `AUTH_URL`, then recreate the web container. Password login is temporarily enabled by default; set `AUTH_PASSWORD_LOGIN_ENABLED=false` to disable it after testing. It is independent of the Portal allowlist. Google is not supported. New Portal users must have an allowlisted verified email and default to `USER`; the owner is bound by the operator-verified Portal identifier, not a supplied email, and is a protected built-in allowlist member. Existing accounts are not silently merged by email. Removing a member revokes their Portal session on its next use. Administrators manage membership at `/admin/allowlist`; changes are audited. All existing Portal sessions must log in again after this upgrade.
+Configure all three NCU variables and `AUTH_URL`, then recreate the web container. Password login remains available for testing; set `AUTH_PASSWORD_LOGIN_ENABLED=false` to disable it. Google is not supported. New Portal accounts always default to `USER`, never to administrator based on email/domain or Portal role claims. Only the protected owner can manually grant ADMIN through user management; existing roles and suspended-account checks remain enforced. The owner is bound by the operator-verified Portal identifier. Existing accounts are not silently merged by email; sign in through Portal first, then assign the role to the resulting account. The former allowlist page/API are retired. Old membership data and historical audit events are preserved, but have no effect on login.
 
 PowerDNS reads only `PDNS_API_URL` (ending in `/api/v1`), `PDNS_API_KEY` and `PDNS_SERVER_ID`. Move previously web-entered settings to the server environment before upgrading. Existing encrypted database settings are retained but ignored. Inventory metadata remains scoped to the API URL/server ID; keep those unchanged to retain its associations. Unscoped legacy applications are not used to infer ownership on live servers.
 

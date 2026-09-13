@@ -13,7 +13,7 @@ export default async function ZonesPage() {
   return (
     <div className="content">
       <PageHeader title="Zone 管理" description="查看與管理授權範圍內的網域。" />
-      <ZonesTable canCreate={actor.globalRole === "SUPER_ADMIN"} />
+      <ZonesTable />
     </div>
   );
 }

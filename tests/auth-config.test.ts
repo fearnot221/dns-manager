@@ -7,10 +7,9 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   accountFind: vi.fn(),
   accountCreate: vi.fn(),
-  emailAllowed: vi.fn(async () => true),
 }));
-vi.mock("@/lib/auth/allowlist", () => ({ portalEmailAllowed: mocks.emailAllowed }));
 vi.mock("@/lib/audit/service", () => ({ logAuditEvent: vi.fn(async () => undefined) }));
+vi.mock("@/lib/auth/idle-session", () => ({ createIdleSession: vi.fn(async () => Date.now() + 900000), readIdleSession: vi.fn(async () => Date.now() + 900000), revokeIdleSession: vi.fn(async () => undefined) }));
 vi.mock("next-auth", () => ({ default: mocks.nextAuth }));
 vi.mock("next/server", () => ({ after: mocks.after }));
 vi.mock("server-only", () => ({}));
@@ -63,15 +62,20 @@ it("rejects old JWTs and preserves Portal provenance on new JWTs", async () => {
   }
   expect(await jwt({ token: {}, user: { id: "owner", globalRole: "SUPER_ADMIN" }, account: { type: "oauth", providerAccountId: "owner-test", provider: "ncu-portal" }, profile: { identifier: "owner-test" } })).toMatchObject({ loginProvider: "ncu-portal", userId: "owner", globalRole: "SUPER_ADMIN" });
 });
-it("rejects unlisted Portal users and revokes their existing JWT", async () => {
+it("accepts a new verified Portal user without pre-registration", async () => {
   const config = await configuration();
-  mocks.emailAllowed.mockResolvedValueOnce(false);
+  mocks.accountFind.mockResolvedValue(null);
+  mocks.findUnique.mockResolvedValue(null);
   const signIn = config.callbacks!.signIn!;
-  expect(await signIn({ user: {}, account: { type: "oauth", provider: "ncu-portal", providerAccountId: "student" }, profile: { identifier: "student", email: "student@example.com", emailVerified: true } })).toBe(false);
-  expect(mocks.accountFind).not.toHaveBeenCalled();
-  mocks.emailAllowed.mockResolvedValueOnce(false);
-  const jwt = config.callbacks!.jwt!;
-  expect(await jwt({ token: { loginProvider: "ncu-portal", portalEmail: "removed@example.com" } } as Parameters<typeof jwt>[0])).toBeNull();
+  expect(await signIn({ user: {}, account: { type: "oauth", provider: "ncu-portal", providerAccountId: "student" }, profile: { identifier: "student", email: "student@example.com", emailVerified: true } })).toBe(true);
+  expect(mocks.accountCreate).not.toHaveBeenCalled();
+});
+it("does not merge an existing administrator account just by matching email", async () => {
+  const config = await configuration();
+  mocks.accountFind.mockResolvedValue(null);
+  mocks.findUnique.mockResolvedValue({ id: "admin", globalRole: "ADMIN", disabled: false });
+  expect(await config.callbacks!.signIn!({ user: {}, account: { type: "oauth", provider: "ncu-portal", providerAccountId: "someone" }, profile: { identifier: "someone", email: "admin@example.com", emailVerified: true } })).toBe(false);
+  expect(mocks.accountCreate).not.toHaveBeenCalled();
 });
 it("keeps disabled-user checks synchronous and defers only last-login bookkeeping", async () => {
   const config = await configuration();
