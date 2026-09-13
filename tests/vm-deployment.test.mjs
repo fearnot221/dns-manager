@@ -7,6 +7,15 @@ import { spawnSync } from 'node:child_process';
 import { registerWebhook } from '../deploy/register-webhook.mjs';
 
 describe('Ubuntu installer release selection', () => {
+  it('leaves the caller private directory before switching user and runs Compose from the checkout', async () => {
+    const source = await readFile(new URL('../deploy/install-vm.sh', import.meta.url), 'utf8');
+    const safeRoot = source.indexOf('\ncd /\n');
+    const checkout = source.indexOf('\ncd /opt/dns-manager\n');
+    expect(safeRoot).toBeGreaterThan(0);
+    expect(safeRoot).toBeLessThan(source.indexOf('runuser -u dnsdeploy'));
+    expect(checkout).toBeGreaterThan(source.indexOf('git clone'));
+    expect(checkout).toBeLessThan(source.indexOf('compose=(runuser'));
+  });
   it.each([
     ['ubuntu', '22.04', 'jammy'], ['ubuntu', '24.04', 'noble'],
     ['ubuntu', '20.04', null], ['debian', '22.04', null], ['ubuntu', '22.04; echo unsafe', null],

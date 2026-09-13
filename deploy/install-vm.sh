@@ -17,6 +17,8 @@ ubuntu_suite() {
   esac
 }
 [[ $# -eq 0 && $EUID -eq 0 ]] || { echo 'Run: sudo bash install-vm.sh'; exit 1; }
+# runuser inherits cwd. A caller's private home may be unreadable to dnsdeploy.
+cd /
 [[ -d /run/systemd/system ]] || { echo 'Requires a booted Linux VM with systemd, not a container.'; exit 1; }
 # shellcheck source=/dev/null
 . /etc/os-release
@@ -119,6 +121,8 @@ else
   [[ -z $(runuser -u dnsdeploy -- git -C /opt/dns-manager status --porcelain) ]] || { echo 'Dirty checkout: preserve changes before rerun.'; exit 1; }
   runuser -u dnsdeploy -- git -C /opt/dns-manager pull --ff-only origin main
 fi
+# Compose schema loading inspects cwd even when -f and --env-file are absolute.
+cd /opt/dns-manager
 
 if [[ ! -f /etc/dns-manager/app.env ]]; then
   owner_password=$(openssl rand -hex 24)

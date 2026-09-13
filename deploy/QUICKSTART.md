@@ -30,6 +30,8 @@ sudo bash install-dns-manager.sh
 
 可以重跑本腳本恢復中斷的安裝，既有 env 密鑰與最高帳號不會重設。若有不是本腳本管理的同名目錄會停止，避免覆寫手動部署。重跑會更新 main、重裝受管理的 host scripts/gateway 設定並重啟服務；日常更新請用 `update-now.sh`，不要重跑 installer。已安裝的獨立 Node runtime 需另行維護安全更新。
 
+若舊版停在 `compose-spec.json: stat .: permission denied`，這是切換 dnsdeploy 後繼承了私人家目錄，不是 Docker 安裝失敗。重新下載修正版 installer 再執行即可接續，無需刪目錄、重裝 Docker，或把自己的家目錄改成公開可讀。
+
 ## 2. 在另一台 Caddy proxy 加入站台
 
 腳本會在 VM 產生 `/etc/dns-manager/Caddyfile.external`。將其中的站台 block **合併**到既有 proxy Caddyfile，不要覆蓋其他站台。內容如下，替換 `VM_PRIVATE_IP`：

@@ -23,3 +23,4 @@ jobs:
       - run: docker build --target tools -t dns-manager-tools:verification .
       - run: node scripts/verify-docker.mjs
       - run: node scripts/verify-ingress.mjs
+      - run: node scripts/verify-compose-cwd.mjs
