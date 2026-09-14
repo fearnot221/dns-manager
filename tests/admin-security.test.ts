@@ -44,13 +44,13 @@ describe("protected owner and user management", () => {
     expect((await PATCH(request({ note: "forbidden" }), { params: Promise.resolve({ id: owner.id }) })).status).toBe(403);
     expect(users[0].note).toBeUndefined();
   });
-  it("stores notes, displays login email, hides nickname and rejects identity edits", async () => {
+  it("stores notes, displays login email, displays the user name and rejects identity edits", async () => {
     const result = await PATCH(request({ note: "網管測試帳號" }), { params: Promise.resolve({ id: "dev-user" }) });
     expect(result.status).toBe(200);
     expect(users[2].note).toBe("網管測試帳號");
     const body = await result.json();
     expect(body.user.email).toBe("user@example.com");
-    expect(body.user).not.toHaveProperty("name");
+    expect(body.user.name).toBe("Test");
     expect((await PATCH(request({ studentId: "115502532" }), { params: Promise.resolve({ id: "dev-user" }) })).status).toBe(400);
     expect((await PATCH(request({ note: "x".repeat(1001) }), { params: Promise.resolve({ id: "dev-user" }) })).status).toBe(400);
   });

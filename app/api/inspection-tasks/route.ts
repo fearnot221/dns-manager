@@ -1,0 +1,12 @@
+import { z } from "zod";
+export const DELETE = auditMutation(async (request: Request) => { try { assertSameOrigin(request); const actor = await requireActor(); const { id } = z.object({ id: z.string().min(1).max(100) }).strict().parse(await request.json()); await cancelInspection(actor, id); return Response.json({ saved: true }); } catch (error) { return apiError(error); } });
+import { db } from "@/lib/db/client";
+import { requireActor } from "@/lib/auth/session";
+import { isGlobalAdmin } from "@/lib/auth/owner";
+import { assertSameOrigin } from "@/lib/api/security";
+import { apiError, ApiError } from "@/lib/api/respond";
+import { auditMutation } from "@/lib/audit/mutation";
+import { cancelInspection, assignInspection, publicContact, publicUserSelect, requireWorkflowDatabase, respondInspection } from "@/lib/workflows/service";
+export async function GET() { try { const actor = await requireActor(); requireWorkflowDatabase(); const tasks = await db.inspectionTask.findMany({ where: isGlobalAdmin(actor) ? {} : { userId: actor.id }, include: { user: { select: publicUserSelect } }, orderBy: { createdAt: "desc" } }); return Response.json({ tasks: tasks.map(({ user, ...task }) => ({ ...task, user: publicContact(user) })) }, { headers: { "Cache-Control": "no-store" } }); } catch (error) { return apiError(error); } }
+export const POST = auditMutation(async (request: Request) => { try { assertSameOrigin(request); const actor = await requireActor(); const input = z.object({ userId: z.string().min(1).max(100), record: z.object({ zoneName: z.string().min(1).max(253), recordName: z.string().min(1).max(253), recordType: z.string().min(1).max(20), content: z.string().min(1).max(65535) }).strict() }).strict().parse(await request.json()); return Response.json({ task: await assignInspection(actor, input.record, input.userId) }, { status: 201 }); } catch (error) { if ((error as { code?: string }).code === "P2002") return apiError(new ApiError("此使用者已有待回覆的清查通知。", 409)); return apiError(error); } });
+export const PATCH = auditMutation(async (request: Request) => { try { assertSameOrigin(request); const actor = await requireActor(); const input = z.object({ id: z.string().min(1).max(100), status: z.enum(["CONFIRMED", "ISSUE"]), response: z.string().trim().max(2000) }).strict().refine((data) => data.status !== "ISSUE" || data.response.length > 0, "請說明問題").parse(await request.json()); await respondInspection(actor, input.id, input.status, input.response); return Response.json({ saved: true }); } catch (error) { return apiError(error); } });

@@ -10,7 +10,7 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
     throw error;
   });
   return <AppShell systemAdmin={isGlobalAdmin(actor)} admin={canAccessZoneManagement(actor)} demo={process.env.NODE_ENV !== "production" && process.env.PDNS_MOCK === "true"}
-    identity={{ name: actor.studentId || actor.portalIdentifier || "本機測試帳號", email: "" }}>
+    identity={{ name: actor.name || actor.portalIdentifier || "本機測試帳號", email: "" }}>
     {children}
   </AppShell>;
 }

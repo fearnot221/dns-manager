@@ -24,7 +24,7 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
   const menu = useRef<HTMLButtonElement>(null);
   const zones = pathname.startsWith("/zones");
   const applying = pathname === "/requests/new";
-  const sectionLabel = pathname === "/units" ? "單位與共享 DNS" : pathname === "/activity" ? "操作紀錄" : pathname === "/inventory" ? "DNS 定期清查" : pathname === "/admin/users" ? "使用者管理" : zones ? "Zone 管理" : applying ? "申請 DNS" : admin ? "DNS 申請審核" : "我的 DNS";
+  const sectionLabel = pathname === "/contact" ? "聯絡管理員" : pathname === "/inspections" ? "清查通知" : pathname === "/admin/application-policy" ? "申請設定" : pathname === "/units" ? "單位與共享 DNS" : pathname === "/activity" ? "操作紀錄" : pathname === "/inventory" ? "DNS 定期清查" : pathname === "/admin/users" ? "使用者管理" : zones ? "Zone 管理" : applying ? "申請 DNS" : admin ? "DNS 申請審核" : "我的 DNS";
   const zone = zones && pathname.split("/")[2] ? decodeURIComponent(pathname.split("/")[2]) : null;
 
   useEffect(() => {
@@ -65,12 +65,12 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
         <Link className={applying ? "active" : ""} aria-current={applying ? "page" : undefined} href="/requests/new" onClick={() => setMobile(false)}><FilePlus2 size={18} /><span>申請 DNS</span></Link>
         <Link className={pathname === "/units" ? "active" : ""} aria-current={pathname === "/units" ? "page" : undefined} href="/units" onClick={() => setMobile(false)}><Users size={18} /><span>單位與共享 DNS</span></Link>
         <Link className={pathname === "/requests" ? "active" : ""} aria-current={pathname === "/requests" ? "page" : undefined} href="/requests" onClick={() => setMobile(false)}><FileCheck2 size={18} /><span>{admin ? "DNS 申請審核" : "我的 DNS"}</span></Link>
-        {admin && <Link className={zones ? "active" : ""} aria-current={zones ? "page" : undefined} href="/zones" onClick={() => setMobile(false)}><Globe2 size={18} /><span>Zone 管理</span></Link>}
+        <Link href="/contact" className={pathname === "/contact" ? "active" : ""} onClick={() => setMobile(false)}><FileCheck2 size={18} /><span>聯絡管理員</span></Link><Link href="/inspections" className={pathname === "/inspections" ? "active" : ""} onClick={() => setMobile(false)}><ClipboardCheck size={18} /><span>清查通知</span></Link>{admin && <Link className={zones ? "active" : ""} aria-current={zones ? "page" : undefined} href="/zones" onClick={() => setMobile(false)}><Globe2 size={18} /><span>Zone 管理</span></Link>}
         {admin && <Link href="/inventory" className={pathname === "/inventory" ? "active" : ""} aria-current={pathname === "/inventory" ? "page" : undefined} onClick={() => setMobile(false)}><ClipboardCheck size={18} /><span>DNS 定期清查</span></Link>}
         </div></details>
         {systemAdmin && <details className="nav-group" open><summary>系統管理<ChevronDown size={15} /></summary><div>
         {systemAdmin && <Link href="/admin/users" className={pathname === "/admin/users" ? "active" : ""} aria-current={pathname === "/admin/users" ? "page" : undefined} onClick={() => setMobile(false)}><Users size={18} /><span>使用者管理</span></Link>}
-        <Link href="/activity" className={pathname === "/activity" ? "active" : ""} aria-current={pathname === "/activity" ? "page" : undefined} onClick={() => setMobile(false)}><History size={18} /><span>操作紀錄</span></Link>
+        <Link href="/admin/application-policy" className={pathname === "/admin/application-policy" ? "active" : ""} onClick={() => setMobile(false)}><FileCheck2 size={18} /><span>申請設定</span></Link><Link href="/activity" className={pathname === "/activity" ? "active" : ""} aria-current={pathname === "/activity" ? "page" : undefined} onClick={() => setMobile(false)}><History size={18} /><span>操作紀錄</span></Link>
         </div></details>}
       </nav>
       <div className="sidebar-bottom">

@@ -25,7 +25,7 @@ export type DnsRequest = {
   reviewer?: { name?: string | null; email: string } | null;
 };
 
-export const requestTypes: RecordType[] = ["A", "AAAA", "CNAME", "MX", "TXT", "SRV", "CAA"];
+export const requestTypes: RecordType[] = ["A", "AAAA", "CNAME", "MX", "TXT", "SRV", "CAA", "PTR"];
 export const statuses: Array<{ key: "ALL" | RequestStatus; label: string }> = [
   { key: "ALL", label: "全部" },
   { key: "PENDING", label: "待審核" },

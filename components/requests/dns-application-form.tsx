@@ -5,12 +5,13 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { RecordType } from "@/lib/dns/types";
-import { requestTypes, contentHelp } from "./model";
+import { contentHelp } from "./model";
 import { apiRequest, jsonRequest } from "@/lib/client/api";
 import { useResource } from "@/lib/client/use-resource";
 import { Dialog } from "@/components/ui/dialog";
 import { canSubmitUnitRequest, type UnitRole } from "@/lib/units/policy";
 
+import { policyViolation, type ApplicationPolicy } from "@/lib/requests/policy-model";
 type DraftRecord = { id: number; zoneName: string; name: string; type: RecordType; content: string; ttl: string; purpose: string };
 const blankRecord = (id: number, zoneName = ""): DraftRecord => ({ id, zoneName, name: "", type: "A", content: "", ttl: "300", purpose: "" });
 const hints: Partial<Record<RecordType, string>> = { A: "192.0.2.10", AAAA: "2001:db8::1", CNAME: "target.example.com", MX: "10 mail.example.com", TXT: "v=spf1 include:_spf.example.com ~all", SRV: "10 5 443 service.example.com", CAA: "0 issue letsencrypt.org" };
@@ -19,6 +20,8 @@ export function DnsApplicationForm() {
   const router = useRouter();
   const { data, loading, error: zoneError, reload } = useResource<{ zones: { name: string }[] }>("/api/dns-requests/zones");
   const zones = data?.zones ?? [];
+  const policyResource = useResource<{ policy: ApplicationPolicy }>("/api/application-policy");
+  const requestTypes = policyResource.data?.policy.allowedTypes || [];
   const unitResource = useResource<{ units: { id: string; name: string; role: UnitRole }[] }>("/api/units");
   const [unitId, setUnitId] = useState("");
   const selectedUnit = unitResource.data?.units.find((unit) => unit.id === unitId);
@@ -97,6 +100,9 @@ export function DnsApplicationForm() {
     if (sending.current || loading || zoneError || !zones.length) return;
     setError("");
     setErrorRecordId(null);
+    if (!policyResource.data) { setError("無法取得申請規則，請重新載入。"); return; }
+    const violation = policyViolation(policyResource.data.policy, records.map((r) => r.type), unitId || undefined, !!unitResource.data?.units.length);
+    if (violation) { setError(violation); return; }
     const unavailable = records.findIndex((record) => !zones.some((zone) => zone.name === record.zoneName));
     if (unavailable !== -1) { setErrorRecordId(records[unavailable].id); setError("第 " + (unavailable + 1) + " 筆：請選擇目前可申請的 Zone 網域。"); return; }
     const formData = new FormData(event.currentTarget);
@@ -124,7 +130,7 @@ export function DnsApplicationForm() {
     }
   }
 
-  return <><form className="card dns-application" onSubmit={submit} onChange={() => { dirty.current = true; }} aria-label="申請 DNS" aria-busy={pending}>
+  return <><p className="record-results" role="status">{policyResource.error || (policyResource.loading ? "載入申請規則…" : policyResource.data?.policy.ownership === "UNIT_ONLY" ? "目前僅接受單位共享 DNS，請先加入單位並選擇歸屬。" : policyResource.data?.policy.ownership === "MEMBERS_ONLY" ? "目前僅限已加入單位的使用者提出申請。" : "可申請個人或單位 DNS。")}</p><form className="card dns-application" onSubmit={submit} onChange={() => { dirty.current = true; }} aria-label="申請 DNS" aria-busy={pending}>
     <div className="modal-body">
       <fieldset className="application-section" disabled={pending}>
         <legend>申請人資料</legend>
@@ -155,7 +161,7 @@ export function DnsApplicationForm() {
               {zones.map((zone) => <option key={zone.name} value={zone.name}>{zone.name.replace(/\.$/, "")}</option>)}
             </select></label>
             <label>名稱<input value={record.name} onChange={(event) => update(record.id, { name: event.target.value })} placeholder="www 或 @" required maxLength={253} autoCapitalize="none" spellCheck={false} ref={(node) => { if (node && focusId.current === record.id) { if (!record.zoneName) node.closest("fieldset")?.querySelector("select")?.focus(); else node.focus(); focusId.current = null; } }} /></label>
-            <label>類型<select value={record.type} onChange={(event) => update(record.id, { type: event.target.value as RecordType })}>{requestTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
+            <label>類型<select value={record.type} onChange={(event) => update(record.id, { type: event.target.value as RecordType })}>{!requestTypes.includes(record.type as typeof requestTypes[number]) && <option value={record.type} disabled>{record.type}（未開放，請改選）</option>}{requestTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
             <label className="content-field">解析內容<input value={record.content} onChange={(event) => update(record.id, { content: event.target.value })} placeholder={hints[record.type]} required maxLength={65535} autoCapitalize="none" spellCheck={false} aria-label="解析內容" aria-describedby={`content-help-${record.id}`} /><small id={`content-help-${record.id}`}>{contentHelp(record.type)}</small></label>
             <label>TTL<select value={record.ttl} onChange={(event) => update(record.id, { ttl: event.target.value })}><option value="60">1 分鐘</option><option value="300">5 分鐘</option><option value="600">10 分鐘</option><option value="1800">30 分鐘</option><option value="3600">1 小時</option></select></label>
             <label className="purpose-field">用途（選填）<input value={record.purpose} onChange={(event) => update(record.id, { purpose: event.target.value })} placeholder="服務名稱或申請原因" maxLength={1000} /></label>

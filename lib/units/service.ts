@@ -11,6 +11,11 @@ import { redactAudit } from "@/lib/audit/redact";
 export function requireUnitDatabase() {
   if (!process.env.DATABASE_URL) throw new ApiError("單位功能需要資料庫，請在已完成資料庫設定的環境使用。", 503);
 }
+export async function lockActiveUser(tx: Prisma.TransactionClient, id: string) {
+  await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${id} FOR UPDATE`;
+  const user = await tx.user.findUnique({ where: { id }, select: { disabled: true, removedAt: true } });
+  if (!user || user.disabled || user.removedAt) throw new ApiError("此帳號已停用或移除。", 403);
+}
 export async function lockUnit(tx: Prisma.TransactionClient, id: string) {
   const found = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "DnsUnit" WHERE "id" = ${id} FOR UPDATE`;
   if (!found.length) throw new ApiError("找不到單位。", 404);
@@ -34,6 +39,7 @@ export async function createUnit(actor: Actor, name: string) {
   const passcode = newPasscode();
   try {
     const unit = await db.$transaction(async (tx) => {
+      await lockActiveUser(tx, actor.id);
       const unit = await tx.dnsUnit.create({ data: { name, passcodeHash: passcodeHash(passcode), members: { create: { userId: actor.id, role: "ADMIN" } } }, select: { id: true, name: true } });
       await unitAudit(tx, actor, "CREATE_DNS_UNIT", null, { ...unit, creatorId: actor.id });
       return unit;
@@ -48,6 +54,7 @@ export async function joinUnit(actor: Actor, passcode: string) {
   requireUnitDatabase();
   const hash = passcodeHash(passcode);
   return db.$transaction(async (tx) => {
+    await lockActiveUser(tx, actor.id);
     const unit = await tx.dnsUnit.findUnique({ where: { passcodeHash: hash }, select: { id: true, name: true } });
     if (!unit) throw new ApiError("加入碼無效或已重設，請向單位管理員索取。", 400);
     await lockUnit(tx, unit.id);

@@ -36,7 +36,7 @@ const credentialsProvider = Credentials({
 
     if (!process.env.DATABASE_URL) return null;
     const user = await db.user.findUnique({ where: { email } });
-    if (!user?.passwordHash || user.disabled || !await verifyPassword(password, user.passwordHash)) return null;
+    if (!user?.passwordHash || user.disabled || user.removedAt || !await verifyPassword(password, user.passwordHash)) return null;
     return { id: user.id, email: user.email, name: user.name, globalRole: resolvedGlobalRole(user.email, user.globalRole) };
   },
 });
@@ -91,12 +91,12 @@ const config: NextAuthConfig = {
           if (identity.id !== account.providerAccountId) return false;
           const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "ncu-portal", providerAccountId: identity.id } }, include: { user: true } });
           if (linked) {
-            if (linked.user.disabled) return false;
+            if (linked.user.disabled || linked.user.removedAt) return false;
             await db.user.update({ where: { id: linked.user.id }, data: { studentId: identity.studentId, portalEmail: identity.portalEmail, name: identity.name, ...(identity.owner ? { globalRole: "SUPER_ADMIN" } : {}) } });
             return true;
           }
           const existing = await db.user.findUnique({ where: { email: identity.email } });
-          if (existing?.disabled) return false;
+          if (existing?.disabled || existing?.removedAt) return false;
           if (!identity.owner) return !existing; // Never silently merge existing accounts by email.
           if (!existing || existing.globalRole !== "SUPER_ADMIN") return false; // Trusted seed required first.
           await db.account.create({ data: { userId: existing.id, type: "oauth", provider: "ncu-portal", providerAccountId: identity.id } });

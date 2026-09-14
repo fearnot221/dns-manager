@@ -9,6 +9,7 @@ import { isLocalDemo } from "@/lib/db/local-store";
 import { apiError, ApiError } from "@/lib/api/respond";
 import { assertSameOrigin } from "@/lib/api/security";
 import { logAuditEvent } from "@/lib/audit/service";
+import { removeUser } from "@/lib/users/remove";
 const schema = z.object({ note: z.string().trim().max(1000).optional(), disabled: z.boolean().optional(), globalRole: z.enum(["USER", "ADMIN"]).optional() }).strict();
 async function PATCHHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   let before: unknown;
@@ -18,7 +19,8 @@ async function PATCHHandler(request: Request, { params }: { params: Promise<{ id
     const input = schema.parse(await request.json());
     const noteOnly = Object.keys(input).length === 1 && typeof input.note === "string";
     if (input.globalRole !== undefined && !isOwner(actor)) throw new ApiError("只有最高使用者可以指派或移除管理員。", 403);
-    const check = (user: { email: string; name?: string | null; portalIdentifier?: string | null; note?: string; disabled?: boolean; globalRole: "USER" | "ADMIN" | "SUPER_ADMIN"; zoneAdmin?: boolean }) => {
+    const check = (user: { email: string; name?: string | null; removedAt?: Date | null; portalIdentifier?: string | null; note?: string; disabled?: boolean; globalRole: "USER" | "ADMIN" | "SUPER_ADMIN"; zoneAdmin?: boolean }) => {
+      if (user.removedAt) throw new ApiError("已移除帳號不可重新啟用或修改。", 409);
       const protectedNote = user.portalIdentifier === OWNER_IDENTIFIER && isGlobalAdmin(actor) && noteOnly;
       if (!protectedNote && !mayManageUser(actor, user)) throw new ApiError("此帳號受保護，僅能修改備註。", 403);
       before = { account: user.portalIdentifier || "未綁定 Portal", note: user.note || "", disabled: user.disabled, globalRole: user.globalRole };
@@ -35,3 +37,7 @@ async function PATCHHandler(request: Request, { params }: { params: Promise<{ id
 }
 
 export const PATCH = auditMutation(PATCHHandler);
+export const DELETE = auditMutation(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
+  try { assertSameOrigin(request); const actor = await requireActor(); const { id } = await params; const input = z.object({ confirmId: z.string().min(1) }).strict().parse(await request.json()); if (input.confirmId !== id) throw new ApiError("確認的使用者不符。", 400); await removeUser(actor, id); return Response.json({ removed: true }); }
+  catch (error) { if ((error as { code?: string }).code === "P2034") return apiError(new ApiError("資料同時被更新，請重新載入後重試。", 409)); return apiError(error); }
+});

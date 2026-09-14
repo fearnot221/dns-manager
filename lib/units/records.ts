@@ -5,10 +5,11 @@ import type { Actor, RecordType, RRSet } from "@/lib/dns/types";
 import { powerdns } from "@/lib/powerdns/client";
 import { connectionScope, recordId } from "@/lib/inventory/service";
 import { ApiError } from "@/lib/api/respond";
-import { lockUnit, requireUnitDatabase, unitAccess, unitAudit } from "./service";
+import { lockActiveUser, lockUnit, requireUnitDatabase, unitAccess, unitAudit } from "./service";
 import { replaceUnitValue } from "./change";
 import { normalizeRecordContent } from "@/lib/dns/names";
 import { rrsetHash } from "@/lib/dns/rrset";
+import { assertApplicationPolicy } from "@/lib/requests/policy";
 
 export async function unitDetail(actor: Actor, unitId: string) {
   requireUnitDatabase();
@@ -36,10 +37,12 @@ export async function unitDetail(actor: Actor, unitId: string) {
 export async function requestUnitChange(actor: Actor, unitId: string, input: { recordId: string; content: string; purpose: string; expectedHash: string }) {
   requireUnitDatabase();
   return db.$transaction(async (tx) => {
+    await lockActiveUser(tx, actor.id);
     await lockUnit(tx, unitId);
     await unitAccess(actor, unitId, "edit", tx);
     const source = await tx.dnsRecordMetadata.findUnique({ where: { id: input.recordId } });
     if (!source || source.unitId !== unitId) throw new ApiError("找不到此單位的 DNS 紀錄。", 404);
+    await assertApplicationPolicy(actor, [source.recordType], unitId, tx);
     const scope = await connectionScope();
     if (source.id !== recordId(scope, source)) throw new ApiError("DNS 連線已變更，請重新載入。", 409);
     if (!["A", "AAAA", "CNAME", "MX", "TXT", "SRV", "CAA", "PTR"].includes(source.recordType)) throw new ApiError("此類型需由系統管理員處理。", 403);

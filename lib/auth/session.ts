@@ -16,7 +16,7 @@ export async function requireActor():Promise<Actor>{
     return {id:user.id,email:user.email,name:user.name,portalIdentifier:user.id === "dev-owner" ? "115502532" : user.portalIdentifier,studentId:user.studentId,globalRole:resolvedGlobalRole(user.email,user.globalRole,user.id === "dev-owner" ? "115502532" : user.portalIdentifier),zoneRoles:{}};
   }
   const user=await db.user.findUnique({where:{id:session.user.id},include:{accounts:{where:{provider:"ncu-portal"},select:{providerAccountId:true}},zonePermissions:{where:{OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]}},groupMemberships:{include:{group:{include:{zonePermissions:{where:{OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]}}}}}}}});
-  if(!user || user.disabled)throw new AuthError();
+  if(!user || user.disabled || user.removedAt)throw new AuthError();
   const zoneRoles:Actor["zoneRoles"]={};
   for(const permission of [...user.zonePermissions,...user.groupMemberships.flatMap((m)=>m.group.zonePermissions)]){
     const current=zoneRoles[permission.zoneName]; const rank={VIEWER:1,EDITOR:2,ADMIN:3}; if(!current||rank[permission.role]>rank[current])zoneRoles[permission.zoneName]=permission.role;

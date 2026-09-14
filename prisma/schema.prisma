@@ -35,6 +35,7 @@ model User {
   email            String           @unique
   passwordHash     String?
   disabled         Boolean          @default(false)
+  removedAt        DateTime?
   emailVerified    DateTime?
   image            String?
   globalRole       GlobalRole       @default(USER)
@@ -49,6 +50,8 @@ model User {
   recordRequests   DnsRecordRequest[] @relation("RecordRequestOwner")
   reviewedRequests DnsRecordRequest[] @relation("RecordRequestReviewer")
   unitMemberships UnitMember[]
+  contactMessages ContactMessage[]
+  inspectionTasks InspectionTask[]
 }
 
 model Account {
@@ -233,8 +236,38 @@ model DnsRecordMetadata {
   updatedBy          String
   updatedAt          DateTime @updatedAt
   inspections        DnsInspection[]
+  inspectionTasks    InspectionTask[]
   @@index([zoneName])
   @@index([unitId])
+}
+
+model ContactMessage {
+  id String @id @default(cuid())
+  userId String
+  subject String
+  body String @db.Text
+  reply String? @db.Text
+  repliedBy String?
+  repliedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  @@index([userId, createdAt])
+}
+
+model InspectionTask {
+  id String @id @default(cuid())
+  recordId String
+  userId String
+  createdBy String
+  createdAt DateTime @default(now())
+  status String @default("PENDING")
+  snapshot Json
+  response String? @db.Text
+  respondedAt DateTime?
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  record DnsRecordMetadata @relation(fields: [recordId], references: [id], onDelete: Restrict)
+  @@index([userId, status])
+  @@index([recordId, createdAt])
 }
 
 enum UnitRole {

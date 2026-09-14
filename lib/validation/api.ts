@@ -7,7 +7,7 @@ export const rrsetReplaceSchema=z.object({name:z.string().min(1),type:z.enum(REC
 export const recordDeleteSchema=z.object({name:z.string().min(1),type:z.enum(RECORD_TYPES),content:z.string().optional(),expectedHash:z.string().min(10).max(100)}).strict();
 export const permissionSchema=z.object({userId:z.string().min(1).optional(),userEmail:z.email().optional(),role:z.enum(["VIEWER","EDITOR","ADMIN"]),expiresAt:z.iso.datetime().nullable().optional(),resourcePattern:z.string().max(253).nullable().optional()}).refine((value)=>Boolean(value.userId||value.userEmail),"A user is required");
 export const userRoleSchema=z.object({globalRole:z.enum(["USER","SUPER_ADMIN"])}).strict();
-export const dnsRequestSchema=z.object({zoneName:z.string().min(1).max(253),name:z.string().min(1).max(253),type:z.enum(["A","AAAA","CNAME","MX","TXT","SRV","CAA"]),ttl:z.number().int().min(30).max(2147483647),content:z.string().min(1).max(65535),purpose:z.string().trim().max(1000).optional()}).strict();
+export const dnsRequestSchema=z.object({zoneName:z.string().min(1).max(253),name:z.string().min(1).max(253),type:z.enum(["A","AAAA","CNAME","MX","TXT","SRV","CAA","PTR"]),ttl:z.number().int().min(30).max(2147483647),content:z.string().min(1).max(65535),purpose:z.string().trim().max(1000).optional()}).strict();
 export const dnsApplicationSchema = z.object({
   unitId: z.string().min(1).max(100).optional(),
   applicantName: z.string().trim().min(1, "請填寫申請人姓名").max(100),

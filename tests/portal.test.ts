@@ -16,14 +16,14 @@ describe('NCU Portal identity', () => {
     expect(first.portalEmail).toBe('first@example.com');
     expect(second.portalEmail).toBe('second@example.com');
     expect(portalIdentity({ identifier: 'someone' }).portalEmail).toBeNull();
-    expect(ncuPortalProvider().authorization).toMatchObject({ params: { scope: 'identifier student-id email' } });
+    expect(ncuPortalProvider().authorization).toMatchObject({ params: { scope: 'identifier student-id email chinese-name' } });
   });
   it('always provisions ordinary users regardless of claimed administrator roles', async () => {
     const provider = ncuPortalProvider();
     expect(await provider.profile!({ ...profile, globalRole: 'SUPER_ADMIN', role: 'ADMIN' }, {})).toMatchObject({ globalRole: 'USER' });
   });
   it('maps a verified user without granting administrator access', () => {
-    expect(portalIdentity(profile, 'owner-id')).toMatchObject({ id: 'student-test', name: "student-test", owner: false });
+    expect(portalIdentity(profile, 'owner-id')).toMatchObject({ id: 'student-test', name: "測試", owner: false });
     expect(ncuPortalProvider().allowDangerousEmailAccountLinking).toBe(false);
   });
   it('blocks delegated login', () => {

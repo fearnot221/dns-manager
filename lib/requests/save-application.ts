@@ -6,14 +6,16 @@ import { ApplicationInputError, requestRecordKey, type PreparedApplication } fro
 import { createDevApplication, isDevRequestStore } from "./dev-store";
 import { logAuditEvent } from "@/lib/audit/service";
 import { redactAudit } from "@/lib/audit/redact";
-import { lockUnit, unitAccess } from "@/lib/units/service";
+import { lockActiveUser, lockUnit, unitAccess } from "@/lib/units/service";
 import { connectionScope } from "@/lib/inventory/service";
 import { powerdns } from "@/lib/powerdns/client";
 import type { RRSet } from "@/lib/dns/types";
+import { assertApplicationPolicy } from "./policy";
 
 export async function saveApplication(actor: Actor, input: PreparedApplication, request: Request) {
   const applicationId = crypto.randomUUID();
   if (isDevRequestStore()) {
+    await assertApplicationPolicy(actor, input.records.map((r) => r.recordType), input.unitId);
     if (input.unitId) throw new ApplicationInputError("單位申請需要資料庫。", 503);
     createDevApplication(actor, input, applicationId);
     await logAuditEvent({ actor, zone: "", action: "REQUEST_DNS_APPLICATION", after: { ...input, applicationId }, success: true, request });
@@ -30,6 +32,8 @@ export async function saveApplication(actor: Actor, input: PreparedApplication, 
       }
     }
     await db.$transaction(async (tx) => {
+      if (actor.id !== "dev-admin") await lockActiveUser(tx, actor.id);
+      await assertApplicationPolicy(actor, input.records.map((r) => r.recordType), input.unitId, tx);
       if (input.unitId) {
         await lockUnit(tx, input.unitId);
         await unitAccess(actor, input.unitId, "edit", tx);

@@ -17,6 +17,9 @@ import { saveApplication } from "@/lib/requests/save-application";
 import { recordId } from "@/lib/inventory/service";
 import type { Actor, Zone } from "@/lib/dns/types";
 import { rrsetHash } from "@/lib/dns/rrset";
+import { sendContact, replyContact, assignInspection, respondInspection, cancelInspection } from "@/lib/workflows/service";
+import { removeUser } from "@/lib/users/remove";
+import { assertApplicationPolicy, saveApplicationPolicy, readApplicationPolicy } from "@/lib/requests/policy";
 
 const url = process.env.UNIT_TEST_DATABASE_URL;
 let zone: Zone;
@@ -45,6 +48,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
   afterAll(async () => { await db.$disconnect(); vi.unstubAllEnvs(); });
   beforeEach(async () => {
     vi.clearAllMocks();
+    await db.systemSetting.deleteMany({ where: { key: "dns-application-policy" } });
     zone = { id: "example.com.", name: "example.com.", kind: "Native", serial: 1, dnssec: false, rrsets: [] };
     vi.mocked(powerdns.getZone).mockImplementation(async () => structuredClone(zone));
     vi.mocked(powerdns.replaceRRSet).mockImplementation(async (_name, rrset) => { zone.rrsets = [structuredClone(rrset)]; });
@@ -61,6 +65,61 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect(JSON.stringify(await listUnits(viewer))).not.toContain(code);
     expect((await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } })).passcodeHash).not.toBe(code);
     expect(await db.auditLog.count({ where: { newValue: { path: ["passcode"], equals: code } } })).toBe(0);
+  });
+  it("enforces type and membership rules in application services and detects stale policy edits", async () => {
+    const saved = await saveApplicationPolicy({ allowedTypes: ["A"], ownership: "MEMBERS_ONLY" }, null);
+    await expect(assertApplicationPolicy(outsider, ["A"])).rejects.toMatchObject({ status: 403 });
+    await expect(assertApplicationPolicy(editor, ["AAAA"], unitId)).rejects.toMatchObject({ status: 403 });
+    await expect(assertApplicationPolicy(editor, ["A"], unitId)).resolves.toBeUndefined();
+    await expect(saveApplicationPolicy({ allowedTypes: [], ownership: "ANY" }, null)).rejects.toMatchObject({ status: 409 });
+    expect((await readApplicationPolicy()).updatedAt).toBe(saved.after.updatedAt);
+    const source = await sourceRecord();
+    await saveApplicationPolicy({ allowedTypes: [], ownership: "ANY" }, saved.after.updatedAt);
+    await expect(requestUnitChange(editor, unitId, changeInput(source))).rejects.toMatchObject({ status: 403 });
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+  });
+  it("stores messages and audited administrator replies without allowing a user to reply", async () => {
+    const message = await sendContact(viewer, { subject: "問題", body: "DNS 用途需要確認" });
+    await expect(replyContact(outsider, message.id, "偽造回覆")).rejects.toMatchObject({ status: 403 });
+    await replyContact(admin, message.id, "已收到");
+    await expect(replyContact(admin, message.id, "再次回覆")).rejects.toMatchObject({ status: 409 });
+    expect((await db.contactMessage.findUniqueOrThrow({ where: { id: message.id } })).repliedBy).toBe(admin.id);
+    expect(await db.auditLog.count({ where: { userId: admin.id, action: "REPLY_CONTACT_MESSAGE" } })).toBe(1);
+  });
+  it("only permits the assigned user to confirm a live DNS once, with an authenticated inspector", async () => {
+    const source = await sourceRecord();
+    const identity = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    await expect(assignInspection(viewer, identity, viewer.id)).rejects.toMatchObject({ status: 403 });
+    const task = await assignInspection(admin, identity, viewer.id);
+    await expect(assignInspection(admin, identity, viewer.id)).rejects.toMatchObject({ code: "P2002" });
+    await expect(respondInspection(outsider, task.id, "CONFIRMED", "")).rejects.toMatchObject({ status: 404 });
+    await respondInspection(viewer, task.id, "CONFIRMED", "仍使用");
+    await expect(respondInspection(viewer, task.id, "CONFIRMED", "")).rejects.toMatchObject({ status: 404 });
+    expect((await db.dnsInspection.findFirstOrThrow({ where: { recordId: source.id } })).inspectorId).toBe(viewer.id);
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+  });
+  it("rejects stale DNS confirmation and lets an admin withdraw and reassign", async () => {
+    const source = await sourceRecord();
+    const identity = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    const task = await assignInspection(admin, identity, viewer.id);
+    zone.rrsets = [];
+    await expect(respondInspection(viewer, task.id, "CONFIRMED", "")).rejects.toMatchObject({ status: 409 });
+    await expect(cancelInspection(viewer, task.id)).rejects.toMatchObject({ status: 403 });
+    await cancelInspection(admin, task.id);
+    expect((await db.inspectionTask.findUniqueOrThrow({ where: { id: task.id } })).status).toBe("CANCELLED");
+  });
+  it("restricts account removal and preserves the last unit administrator", async () => {
+    const owner = { ...admin, globalRole: "SUPER_ADMIN" as const, portalIdentifier: "115502532" };
+    await expect(removeUser(admin, viewer.id)).rejects.toMatchObject({ status: 403 });
+    await expect(removeUser(owner, owner.id)).rejects.toMatchObject({ status: 403 });
+    await expect(removeUser(owner, creator.id)).rejects.toMatchObject({ status: 409 });
+    await expect(removeUser(owner, viewer.id)).resolves.toBeUndefined();
+    const removed = await db.user.findUniqueOrThrow({ where: { id: viewer.id } });
+    expect(removed.disabled).toBe(true); expect(removed.removedAt).toBeTruthy();
+    expect(await db.unitMember.count({ where: { userId: viewer.id } })).toBe(0);
+    await expect(joinUnit(viewer, code)).rejects.toMatchObject({ status: 403 });
+    await expect(joinUnit(outsider, code)).rejects.toMatchObject({ status: 400 });
+    await expect(assignInspection(admin, { zoneName: zone.name, recordName: "x", recordType: "A", content: "1" }, viewer.id)).rejects.toBeTruthy();
   });
   it("blocks viewer/outsider membership changes and never upgrades a duplicate join", async () => {
     await expect(manageUnit(viewer, unitId, { action: "rotate" })).rejects.toMatchObject({ status: 403 });
