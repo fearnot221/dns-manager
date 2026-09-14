@@ -169,7 +169,7 @@ compose=(runuser -u dnsdeploy -- docker compose --project-name dns-manager --env
 "${compose[@]}" config --quiet
 "${compose[@]}" build --pull web migrate
 "${compose[@]}" up -d --wait --wait-timeout 180
-owner_exists=$("${compose[@]}" exec -T postgres psql -U aegis -d aegis_dns -tAc "SELECT count(*) FROM \"User\" WHERE email='fearnot@ce.ncu.edu.tw' AND \"globalRole\"='SUPER_ADMIN'")
+owner_exists=$("${compose[@]}" exec -T postgres psql -U aegis -d aegis_dns -tAc "SELECT count(*) FROM \"User\" WHERE \"globalRole\"='SUPER_ADMIN'")
 if [[ $owner_exists == 0 ]]; then
   "${compose[@]}" --profile maintenance run --rm --no-deps seed
 elif [[ $owner_exists != 1 ]]; then
@@ -203,7 +203,7 @@ echo '1. Merge /etc/dns-manager/Caddyfile.external into your EXISTING external C
 echo "   Permit Caddy $CADDY_IP -> VM $VM_IP TCP 8080; the gateway rejects other source IPs."
 echo '2. Once https://dnsmgr.ce.ncu.edu.tw/login works, run:'
 echo '   sudo /opt/dns-manager-deploy/register-webhook.sh'
-echo '3. Owner: fearnot@ce.ncu.edu.tw; Portal users sign up automatically as USER. Assign admins manually.'
+echo '3. Owner: verified LOGTO_OWNER_SUB plus stored SUPER_ADMIN role; Portal users sign up automatically as USER. Assign admins manually.'
 echo '   Password login is temporarily enabled; set AUTH_PASSWORD_LOGIN_ENABLED=false after testing.'
 echo '4. Set Portal/PowerDNS credentials in /etc/dns-manager/app.env; then run:'
 echo '   sudo /opt/dns-manager-deploy/update-now.sh'

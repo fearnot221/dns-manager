@@ -14,7 +14,7 @@ try {
   // Exercise the requested down/up path on real PostgreSQL and prove named-volume durability.
   compose(['down', '--timeout', '30']);
   compose(['up', '-d', '--no-build', '--wait', '--wait-timeout', '180']);
-  const ownerCount = compose(['exec', '-T', 'postgres', 'psql', '-U', 'aegis', '-d', 'aegis_dns', '-tAc', 'SELECT count(*) FROM "User" WHERE email=\'fearnot@ce.ncu.edu.tw\' AND "globalRole"=\'SUPER_ADMIN\';'], true).trim();
+  const ownerCount = compose(['exec', '-T', 'postgres', 'psql', '-U', 'aegis', '-d', 'aegis_dns', '-tAc', 'SELECT count(*) FROM "User" WHERE "globalRole"=\'SUPER_ADMIN\';'], true).trim();
   if (ownerCount !== '1') throw new Error('Owner record did not survive compose down/up');
   compose(['exec', '-T', 'web', 'node', '-e', "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]);
   console.info('Compose down/up preserved PostgreSQL owner record and restored healthy web');

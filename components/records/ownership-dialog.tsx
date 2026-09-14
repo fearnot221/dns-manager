@@ -28,7 +28,7 @@ export function OwnershipDialog({ record, inspection = false, onClose, onSaved }
       <label>用途<textarea name="purpose" defaultValue={owner.purpose} maxLength={1000} rows={3} /></label>
       {owner.updatedAt && <p className="description">最近更新：{new Date(owner.updatedAt).toLocaleString("zh-TW")} · {owner.updatedByName || (owner.updatedBy.endsWith("@accounts.invalid") ? "未提供姓名" : owner.updatedBy)}</p>}
     </>}
-    <section className="inspection-history"><h3>歷次清查 <span>（{owner.inspections.length}）</span></h3>{owner.inspections.length ? <ol>{owner.inspections.map((item) => <li key={item.id}><strong>{new Date(item.inspectedAt).toLocaleString("zh-TW")}</strong><PersonName name={item.inspectorName} email={item.inspectorEmail} /><p>{item.note || "未填備註"}</p></li>)}</ol> : <p className="description">尚無清查紀錄。</p>}</section>
+    <section className="inspection-history"><h3>歷次清查 <span>（{owner.inspections.length}）</span></h3>{owner.inspections.length ? <ol>{owner.inspections.map((item) => <li key={item.id}><strong>{new Date(item.inspectedAt).toLocaleString("zh-TW")}</strong><PersonName name={item.inspectorName} email={item.inspectorEmail} studentId={item.inspectorStudentId} /><p>{item.note || "未填備註"}</p></li>)}</ol> : <p className="description">尚無清查紀錄。</p>}</section>
     {error && <div ref={errorRef} tabIndex={-1} className="form-error" role="alert">{error}</div>}
   </div><div className="modal-foot"><button type="button" className="button" disabled={pending} onClick={onClose}>取消</button><SubmitButton pending={pending} label={inspection ? "確認清查並記錄" : "儲存歸屬資料"} /></div></fieldset></form></Dialog>;
 }

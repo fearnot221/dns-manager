@@ -27,7 +27,9 @@ AUTH_PASSWORD_LOGIN_ENABLED=true
 
 舊 `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、`NCU_OWNER_IDENTIFIER` 不再用於登入；新版本 Docker Compose 已傳遞 Logto 變數。保留 `AUTH_SECRET`、資料庫、既有內部 email 與原使用者 ID，不重建資料庫或重新 seed 覆寫帳號。
 
-請在 Logto 的上游 NCU Portal connector 映射真實姓名到 `name`，電子郵件映射到 `email`，只有可信且已驗證的電子郵件才標為 `email_verified=true`。應用程式只要求 `openid profile email`，不讀取 Logto roles 當作系統管理權。
+請在 Logto 的上游 NCU Portal connector 取得 `chinese-name` scope 的中文姓名，並映射到 Logto 標準 `name`；也支援 UserInfo 頂層 `chinese-name` 或 `chineseName`。解析順序為 `chinese-name` → `chineseName` → `name`，不把 username 當姓名。每次登入更新共用 `User.name`，全站姓名欄位使用它；未回傳姓名時保留既有姓名，不猜測中文姓名。學號可由頂層 `student-id`／`studentId` 同步，僅作輔助顯示。電子郵件映射到 `email`，只有可信且已驗證的電子郵件才標為 `email_verified=true`。
+
+本站要求 Logto 的 `openid profile custom_data`，不再要求 `email` scope，因此不保證回傳電子郵件。這次 scope 調整不自動將 `custom_data` 內的欄位當作姓名或權限，欄位映射需另行確認。NCU scope 並不是可直接追加的 Logto scope。若姓名只存在上游 connector 原始資料、尚未映射至 UserInfo，網站無法取得，需先在 Logto 配置。參考 [Logto 使用者資料](https://docs.logto.io/user-management/user-data)。不讀取 Logto roles、姓名、email 或學號當作系統管理權；最高權限只以 `LOGTO_OWNER_SUB` 綁定加資料庫 `SUPER_ADMIN` 判斷。保留既有資料庫 email 及歷史稽核值，不執行資料清洗或改寫歷史。
 
 ## 既有帳號綁定
 

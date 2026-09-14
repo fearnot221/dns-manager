@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { customFetch } from "@auth/core";
 import type { OAuthConfig } from "next-auth/providers";
 import { z } from "zod";
-import { OWNER_IDENTIFIER, OWNER_EMAIL } from "./owner";
+import { OWNER_IDENTIFIER } from "./owner";
 import { measurePortalStep } from "./timing";
 
 const schema = z.object({ studentId: z.string().trim().min(1).max(100).optional().nullable(), identifier: z.string().trim().min(1).max(200), chineseName: z.string().optional().nullable(), email: z.email().optional().nullable(), emailVerified: z.boolean().optional(), delegator: z.unknown().optional() });
@@ -12,7 +12,7 @@ export function portalIdentity(raw: unknown, ownerIdentifier = OWNER_IDENTIFIER)
   const owner = !!ownerIdentifier && profile.identifier === ownerIdentifier;
   // Bind the owner by an operator-verified Portal identifier, never a supplied email.
 
-  return { id: profile.identifier, name: profile.chineseName?.trim() || profile.identifier, studentId: profile.studentId || null, portalEmail: profile.email || null, email: owner ? OWNER_EMAIL : `portal-${createHash("sha256").update(profile.identifier).digest("hex")}@accounts.invalid`, owner };
+  return { id: profile.identifier, name: profile.chineseName?.trim() || profile.identifier, studentId: profile.studentId || null, portalEmail: profile.email || null, email: `portal-${createHash("sha256").update(profile.identifier).digest("hex")}@accounts.invalid`, owner };
 }
 export const portalConfigured = () => Boolean(process.env.DATABASE_URL && process.env.NCU_PORTAL_CLIENT_ID && process.env.NCU_PORTAL_CLIENT_SECRET && process.env.NCU_OWNER_IDENTIFIER);
 export function ncuPortalProvider(): OAuthConfig<Record<string, unknown>> {

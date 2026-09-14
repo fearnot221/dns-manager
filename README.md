@@ -46,7 +46,7 @@ Every API operation authenticates the caller, resolves effective direct/group pe
 - Collapsible sidebar groups and desktop navigation toggle
 
 - Open NCU Portal sign-in with automatic USER provisioning; administrator roles assigned manually by the protected owner
-- Protected owner `fearnot@ce.ncu.edu.tw`, global `ADMIN` / `USER`, plus zone `VIEWER`, `EDITOR`, and `ADMIN` roles
+- Owner authorization requires a linked `LOGTO_OWNER_SUB` and stored `SUPER_ADMIN` role; email and student IDs grant no privileges. Global `ADMIN` / `USER` and zone `VIEWER`, `EDITOR`, `ADMIN` roles remain separate.
 - Per-value applicant, unit, extension and purpose; grouped inventory with server-stamped inspection history
 - User creation, name editing and suspension; only the owner can assign administrator privileges
 - Environment-only PowerDNS API configuration; no web credential input or database override
@@ -73,7 +73,7 @@ Open `http://localhost:3000`. The first screen is the login page.
 
 | Role | Email | Password |
 | --- | --- | --- |
-| Protected owner | `fearnot@ce.ncu.edu.tw` | `DemoOwner!2026` |
+| Demo owner | `owner@aegis.local` | `DemoOwner!2026` |
 | Admin | `admin@aegis.local` | `AegisAdmin!2026` |
 | User | `user@aegis.local` | `AegisUser!2026` |
 
@@ -95,7 +95,7 @@ Record views show applicant, unit and purpose beside each individual DNS value; 
 
 `/inventory` groups current DNS records by applicant, unit, purpose or zone, with search and filters for uninspected records or incomplete ownership. Each inspection appends the server time, authenticated account ID/name/email and an optional note. Clients cannot supply dates or impersonate inspectors. Editing ownership does not erase inspection history. Stale edits return HTTP 409. Historical rows remain stored if a DNS value disappears, but this screen only lists values currently in PowerDNS. This is an on-demand inventory workflow, not an automatically scheduled inspection.
 
-`/admin/users` lets global administrators create and suspend ordinary users and edit their names. Only `fearnot@ce.ncu.edu.tw` can create/promote other administrators or delegate zone permissions. No backend account-management action, including the owner's own actions, can edit, disable, delete or demote this protected account. Automatic sign-in timestamps are still updated. Disabled accounts and role changes are checked against server-side data on every protected request, including existing sessions. Existing non-owner `SUPER_ADMIN` accounts are treated as ordinary `ADMIN` accounts.
+`/admin/users` manages account roles, status and notes. Only the account with both a verified `LOGTO_OWNER_SUB` binding and stored `SUPER_ADMIN` role may assign administrators or delegate zone permissions. The owner's role and status cannot be changed through the UI; notes remain editable. Names are synchronized from Logto Chinese-name claims (or the mapped standard `name`). Email, student ID and display names do not authorize access. Disabled accounts and current database roles are checked on protected requests. Unlinked historical `SUPER_ADMIN` accounts receive ordinary `ADMIN` access, not owner privileges.
 
 ## Database-backed local setup
 
@@ -147,7 +147,7 @@ Anyone with a valid NCU Portal identity and verified contact email can sign in; 
 https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/logto
 ```
 
-Configure all three NCU variables and `AUTH_URL`, then recreate the web container. Password login remains available for testing; set `AUTH_PASSWORD_LOGIN_ENABLED=false` to disable it. Google is not supported. New Portal accounts always default to `USER`, never to administrator based on email/domain or Portal role claims. Only the protected owner can manually grant ADMIN through user management; existing roles and suspended-account checks remain enforced. The owner is bound through the operator-verified Logto User ID and an explicitly linked existing owner account. Existing accounts require explicit operator linking before signing in through Logto; they are never silently merged by email. New accounts start as USER. The former allowlist page/API are retired. Old membership data and historical audit events are preserved, but have no effect on login.
+Configure AUTH_LOGTO_ID, AUTH_LOGTO_SECRET and LOGTO_OWNER_SUB and `AUTH_URL`, then recreate the web container. Password login remains available for testing; set `AUTH_PASSWORD_LOGIN_ENABLED=false` to disable it. Google is not supported. New Portal accounts always default to `USER`, never to administrator based on email/domain or Portal role claims. Only the protected owner can manually grant ADMIN through user management; existing roles and suspended-account checks remain enforced. The owner is bound through the operator-verified Logto User ID and an explicitly linked existing owner account. Access to existing account data requires explicit operator linking; otherwise a new subject creates an independent USER account; they are never silently merged by email. New accounts start as USER. The former allowlist page/API are retired. Old membership data and historical audit events are preserved, but have no effect on login.
 
 PowerDNS reads only `PDNS_API_URL` (ending in `/api/v1`), `PDNS_API_KEY` and `PDNS_SERVER_ID`. Move previously web-entered settings to the server environment before upgrading. Existing encrypted database settings are retained but ignored. Inventory metadata remains scoped to the API URL/server ID; keep those unchanged to retain its associations. Unscoped legacy applications are not used to infer ownership on live servers.
 
@@ -158,7 +158,7 @@ npm run db:migrate
 npm run db:seed
 ```
 
-The seed creates only `fearnot@ce.ncu.edu.tw` with a scrypt password hash using `OWNER_INITIAL_PASSWORD` (16+ characters). It refuses to overwrite an existing owner account, including its password. Initialize the owner through this trusted operator command; do not expose a public bootstrap route. Remove the initial password from the runtime environment after seeding. Then sign in as owner to create other admins through `/admin/users`; new account passwords require 12+ characters. Legacy seed variables are no longer used. For schema changes use `npm run db:migrate:dev -- --name descriptive_name` and commit the migration.
+The seed creates only `owner-bootstrap@accounts.invalid` with a scrypt password hash using `OWNER_INITIAL_PASSWORD` (16+ characters). It refuses to overwrite an existing owner account, including its password. Initialize the owner through this trusted operator command; do not expose a public bootstrap route. Remove the initial password from the runtime environment after seeding. Explicitly link the verified LOGTO_OWNER_SUB to this stored SUPER_ADMIN account before using owner-only controls in `/admin/users`; new account passwords require 12+ characters. Legacy seed variables are no longer used. For schema changes use `npm run db:migrate:dev -- --name descriptive_name` and commit the migration.
 
 ## PowerDNS configuration
 

@@ -67,12 +67,12 @@ it("allows the owner subject as an independent USER but preserves explicit owner
   const config = await configuration();
   const signIn = config.callbacks!.signIn!;
   mocks.accountFind.mockResolvedValue(null);
-  expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "owner-test" }, profile: { sub: "owner-test", email: "fearnot@ce.ncu.edu.tw", email_verified: true } })).toBe(true);
+  expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "owner-test" }, profile: { sub: "owner-test", email: "owner@example.invalid", email_verified: true } })).toBe(true);
   expect(mocks.accountCreate).not.toHaveBeenCalled();
   expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "one" }, profile: { sub: "another" } })).toBe(false);
   mocks.accountFind.mockResolvedValue({ user: { id: "ordinary", email: "u@example.com", accounts: [], globalRole: "USER", disabled: false } });
   expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "owner-test" }, profile: { sub: "owner-test" } })).toBe(true);
-  mocks.accountFind.mockResolvedValue({ user: { id: "owner", email: "fearnot@ce.ncu.edu.tw", accounts: [{ provider: "ncu-portal", providerAccountId: "115502532" }], globalRole: "SUPER_ADMIN", disabled: false } });
+  mocks.accountFind.mockResolvedValue({ user: { id: "owner", email: "owner@example.invalid", accounts: [{ provider: "ncu-portal", providerAccountId: "115502532" }], globalRole: "SUPER_ADMIN", disabled: false } });
   expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "owner-test" }, profile: { sub: "owner-test", name: "管理者姓名" } })).toBe(true);
   expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "owner" }, data: { name: "管理者姓名", portalEmail: null } });
   expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "wrong-sub" }, profile: { sub: "wrong-sub" } })).toBe(false);
@@ -99,6 +99,17 @@ it("refreshes Portal display email and account name without changing the login e
   expect(mocks.update).toHaveBeenCalledWith({ where: { id: "linked" }, data: { portalEmail: "display@example.com", name: "王小明" } });
   expect(await signIn({ user: {}, account: { type: "oauth", provider: "logto", providerAccountId: "account" }, profile: { sub: "account" } })).toBe(true);
   expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { portalEmail: null, name: "未提供姓名" } });
+});
+
+it("synchronizes Chinese names and auxiliary student IDs without granting roles or rewriting login email", async () => {
+  const config = await configuration();
+  mocks.accountFind.mockResolvedValue({ user: { id: "linked", name: "舊姓名", disabled: false, globalRole: "USER", accounts: [] } });
+  const user: { name?: string } = {};
+  expect(await config.callbacks!.signIn!({ user, account: { type: "oidc", provider: "logto", providerAccountId: "ordinary" }, profile: { sub: "ordinary", "chinese-name": "王小明", name: "English", "student-id": "115502532" } })).toBe(true);
+  expect(user.name).toBe("王小明");
+  expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { portalEmail: null, name: "王小明", studentId: "115502532" } });
+  expect(await config.callbacks!.signIn!({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "ordinary" }, profile: { sub: "ordinary" } })).toBe(true);
+  expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { portalEmail: null, name: "舊姓名" } });
 });
 it("ignores matching real email and only rejects a synthetic identity collision", async () => {
   const config = await configuration();

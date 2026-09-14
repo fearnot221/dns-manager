@@ -113,7 +113,7 @@ curl -f https://dnsmgr.ce.ncu.edu.tw/healthz
 
 ## 4. 最高帳號、Portal 與 PowerDNS
 
-最高帳號是 `fearnot@ce.ncu.edu.tw`；初始密碼是獨立隨機值，不是 demo 密碼：
+全新安裝的 bootstrap 登入地址為 `owner-bootstrap@accounts.invalid`，只用於初始帳密登入，地址本身沒有授權效果。既有帳號不改 email；最高權限須將經核對的 `LOGTO_OWNER_SUB` 綁到資料庫 `SUPER_ADMIN` 帳號（見 [Logto 設定](LOGTO.md)）。初始密碼是獨立隨機值，不是 demo 密碼：
 
 ```bash
 sudo cat /etc/dns-manager/initial-owner-password
@@ -126,7 +126,7 @@ sudoedit /etc/dns-manager/app.env
 
 - 重定向 URI：`https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/logto`
 - 登出後重定向 URI：`https://dnsmgr.ce.ncu.edu.tw/login`
-- Scopes：`openid profile email`；User ID 不可直接猜測為學號。
+- Scopes：`openid profile custom_data`；User ID 不可直接猜測為學號。
 
 PowerDNS 僅從 `/etc/dns-manager/app.env` 的 `PDNS_API_URL`、`PDNS_API_KEY`、`PDNS_SERVER_ID` 讀取，網址須以 `/api/v1` 結尾。後台連線表單已移除，資料庫中的舊設定不再使用。升級前請將連線設定填入 env；修改後重新建立 web 容器（單純 restart 不會載入新 env）。API 不要對外暴露。
 

@@ -30,8 +30,8 @@ describe('NCU Portal identity', () => {
     for (const extra of [{ delegator: { identifier: 'other' } }]) expect(() => portalIdentity({ ...profile, ...extra }, 'owner-id')).toThrow();
   });
   it('never elevates a user by the owner email; binds only the configured identifier', () => {
-    expect(portalIdentity({ ...profile, email: 'fearnot@ce.ncu.edu.tw' }, 'owner-id').owner).toBe(false);
-    expect(portalIdentity({ identifier: 'owner-id' }, 'owner-id')).toMatchObject({ owner: true, email: 'fearnot@ce.ncu.edu.tw' });
+    expect(portalIdentity({ ...profile, email: 'owner@example.invalid' }, 'owner-id').owner).toBe(false);
+    expect(portalIdentity({ identifier: 'owner-id' }, 'owner-id')).toMatchObject({ owner: true, email: expect.stringMatching(/^portal-.*@accounts\.invalid$/) });
   });
 });
 describe('reverse proxy origin checks', () => {

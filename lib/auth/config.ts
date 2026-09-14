@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { verifyPassword } from "@/lib/auth/password";
 import { demoUsers } from "@/lib/users/demo";
-import { accountOwnerIdentifier, OWNER_IDENTIFIER, OWNER_EMAIL, resolvedGlobalRole } from "@/lib/auth/owner";
+import { resolvedGlobalRole } from "@/lib/auth/owner";
 import { logtoProvider, logtoConfigured, logtoIdentity } from "./logto";
 import { passwordLoginEnabled, loginProviderAllowed } from "./policy";
 import { logAuditEvent } from "@/lib/audit/service";
@@ -97,11 +97,11 @@ const config: NextAuthConfig = {
           const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "logto", providerAccountId: identity.id } }, include: { user: { include: { accounts: true } } } });
           if (linked) {
             if (linked.user.disabled || linked.user.removedAt) return denyLogtoLogin("account_inactive");
-            const ownerTarget = accountOwnerIdentifier(linked.user.accounts.filter((a) => a.provider !== "logto")) === OWNER_IDENTIFIER || (linked.user.globalRole === "SUPER_ADMIN" && linked.user.email === OWNER_EMAIL);
+            const ownerTarget = linked.user.globalRole === "SUPER_ADMIN";
             if (ownerTarget && identity.id !== ownerSub) return denyLogtoLogin("owner_binding_mismatch");
             const displayName = identity.hasName ? identity.name : linked.user.name || identity.name;
             failureStage = "profile_update_failed";
-            await db.user.update({ where: { id: linked.user.id }, data: { portalEmail: identity.portalEmail, name: displayName } });
+            await db.user.update({ where: { id: linked.user.id }, data: { portalEmail: identity.portalEmail, name: displayName, ...(identity.studentId ? { studentId: identity.studentId } : {}) } });
             user.name = displayName;
             return true;
           }
