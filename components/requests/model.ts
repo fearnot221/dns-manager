@@ -4,6 +4,9 @@ export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 export type DnsRequest = {
   id: string;
   applicationId?: string | null;
+  unitId?: string | null;
+  sourceRecordId?: string | null;
+  originalContent?: string | null;
   applicantName?: string | null;
   applicantUnit?: string | null;
   applicantExtension?: string | null;

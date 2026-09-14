@@ -24,7 +24,7 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
   const menu = useRef<HTMLButtonElement>(null);
   const zones = pathname.startsWith("/zones");
   const applying = pathname === "/requests/new";
-  const sectionLabel = pathname === "/activity" ? "操作紀錄" : pathname === "/inventory" ? "DNS 定期清查" : pathname === "/admin/users" ? "使用者管理" : zones ? "Zone 管理" : admin ? "DNS 申請審核" : applying ? "申請 DNS" : "我的 DNS";
+  const sectionLabel = pathname === "/units" ? "單位與共享 DNS" : pathname === "/activity" ? "操作紀錄" : pathname === "/inventory" ? "DNS 定期清查" : pathname === "/admin/users" ? "使用者管理" : zones ? "Zone 管理" : applying ? "申請 DNS" : admin ? "DNS 申請審核" : "我的 DNS";
   const zone = zones && pathname.split("/")[2] ? decodeURIComponent(pathname.split("/")[2]) : null;
 
   useEffect(() => {
@@ -62,7 +62,8 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
       <p className="nav-label">{admin ? "管理員工作區" : "個人工作區"}</p>
       <nav className="nav" aria-label="工作區導覽">
         <details className="nav-group" open><summary>{admin ? "DNS 管理" : "DNS 服務"}<ChevronDown size={15} /></summary><div>
-        {!admin && <Link className={applying ? "active" : ""} aria-current={applying ? "page" : undefined} href="/requests/new" onClick={() => setMobile(false)}><FilePlus2 size={18} /><span>申請 DNS</span></Link>}
+        <Link className={applying ? "active" : ""} aria-current={applying ? "page" : undefined} href="/requests/new" onClick={() => setMobile(false)}><FilePlus2 size={18} /><span>申請 DNS</span></Link>
+        <Link className={pathname === "/units" ? "active" : ""} aria-current={pathname === "/units" ? "page" : undefined} href="/units" onClick={() => setMobile(false)}><Users size={18} /><span>單位與共享 DNS</span></Link>
         <Link className={pathname === "/requests" ? "active" : ""} aria-current={pathname === "/requests" ? "page" : undefined} href="/requests" onClick={() => setMobile(false)}><FileCheck2 size={18} /><span>{admin ? "DNS 申請審核" : "我的 DNS"}</span></Link>
         {admin && <Link className={zones ? "active" : ""} aria-current={zones ? "page" : undefined} href="/zones" onClick={() => setMobile(false)}><Globe2 size={18} /><span>Zone 管理</span></Link>}
         {admin && <Link href="/inventory" className={pathname === "/inventory" ? "active" : ""} aria-current={pathname === "/inventory" ? "page" : undefined} onClick={() => setMobile(false)}><ClipboardCheck size={18} /><span>DNS 定期清查</span></Link>}

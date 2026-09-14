@@ -9,6 +9,7 @@ import { requestTypes, contentHelp } from "./model";
 import { apiRequest, jsonRequest } from "@/lib/client/api";
 import { useResource } from "@/lib/client/use-resource";
 import { Dialog } from "@/components/ui/dialog";
+import { canSubmitUnitRequest, type UnitRole } from "@/lib/units/policy";
 
 type DraftRecord = { id: number; zoneName: string; name: string; type: RecordType; content: string; ttl: string; purpose: string };
 const blankRecord = (id: number, zoneName = ""): DraftRecord => ({ id, zoneName, name: "", type: "A", content: "", ttl: "300", purpose: "" });
@@ -18,6 +19,9 @@ export function DnsApplicationForm() {
   const router = useRouter();
   const { data, loading, error: zoneError, reload } = useResource<{ zones: { name: string }[] }>("/api/dns-requests/zones");
   const zones = data?.zones ?? [];
+  const unitResource = useResource<{ units: { id: string; name: string; role: UnitRole }[] }>("/api/units");
+  const [unitId, setUnitId] = useState("");
+  const selectedUnit = unitResource.data?.units.find((unit) => unit.id === unitId);
   const [records, setRecords] = useState<DraftRecord[]>([blankRecord(0)]);
   const nextId = useRef(1);
   const focusId = useRef<number | null>(null);
@@ -101,7 +105,8 @@ export function DnsApplicationForm() {
     try {
       const result = await apiRequest<{ applicationId: string; count: number }>("/api/dns-requests", jsonRequest("POST", {
         applicantName: formData.get("applicantName"),
-        applicantUnit: formData.get("applicantUnit"),
+        applicantUnit: selectedUnit?.name || formData.get("applicantUnit"),
+        ...(unitId ? { unitId } : {}),
         applicantExtension: formData.get("applicantExtension"),
         records: records.map((record) => ({ zoneName: record.zoneName, name: record.name, type: record.type, content: record.content, purpose: record.purpose, ttl: Number(record.ttl) })),
       }));
@@ -123,9 +128,12 @@ export function DnsApplicationForm() {
     <div className="modal-body">
       <fieldset className="application-section" disabled={pending}>
         <legend>申請人資料</legend>
+        <label>DNS 歸屬<select value={unitId} onChange={(event) => setUnitId(event.target.value)} disabled={unitResource.loading || Boolean(unitResource.error)}><option value="">個人（不與單位共享）</option>{unitResource.data?.units.filter((unit) => canSubmitUnitRequest(unit.role)).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}（單位共享）</option>)}</select></label>
+        <p className="application-help">選擇單位後，核准的 DNS 與申請進度會供單位成員查看；查看角色不能代單位申請。</p>
+        {unitResource.error && <p className="request-notice" role="status">無法載入共享單位，目前僅可申請個人 DNS。<button className="button" type="button" onClick={() => void unitResource.reload()}>重新載入單位</button></p>}
         <div className="applicant-grid">
           <label>申請人姓名<input name="applicantName" autoComplete="name" required maxLength={100} placeholder="請填寫姓名" /></label>
-          <label>申請單位<input name="applicantUnit" autoComplete="organization" required maxLength={200} placeholder="系所、實驗室或行政單位" /></label>
+          <label>申請單位{unitId ? <input value={selectedUnit?.name || "請重新載入單位"} readOnly /> : <input name="applicantUnit" autoComplete="organization" required maxLength={200} placeholder="系所、實驗室或行政單位" />}</label>
           <label>單位分機<input name="applicantExtension" inputMode="numeric" autoComplete="tel-extension" required pattern="[0-9]{1,10}" maxLength={10} title="請填入 1–10 位數字" placeholder="例如 1234" /></label>
         </div>
         <p className="application-help">聯絡資料為必填，同一份申請只需填一次。</p>
@@ -160,6 +168,6 @@ export function DnsApplicationForm() {
       <p className="application-review-note">送出後由管理員逐筆審核，核准前不會建立 DNS 紀錄。</p>
       {error && errorRecordId === null && <div className="form-error" role="alert"><AlertTriangle size={17} /><p ref={errorTarget} tabIndex={-1}>{error}。填寫內容已保留。</p></div>}
     </div>
-    <div className="modal-foot"><span className="application-count" aria-live="polite">共 {records.length} 筆待送出</span><button className="button" type="button" data-leave-workspace disabled={pending} onClick={() => router.push("/requests")}>返回我的 DNS</button><button type="submit" className="button primary" disabled={pending || loading || Boolean(zoneError) || !zones.length}>{pending && <Loader2 className="spin" size={16} />}{pending ? "送出中…" : "送出 " + records.length + " 筆申請"}</button></div>
+    <div className="modal-foot"><span className="application-count" aria-live="polite">共 {records.length} 筆待送出</span><button className="button" type="button" data-leave-workspace disabled={pending} onClick={() => router.push("/requests")}>返回我的 DNS</button><button type="submit" className="button primary" disabled={pending || loading || Boolean(zoneError) || !zones.length || Boolean(unitId && (!selectedUnit || unitResource.loading || unitResource.error))}>{pending && <Loader2 className="spin" size={16} />}{pending ? "送出中…" : "送出 " + records.length + " 筆申請"}</button></div>
   </form>{leaveTarget && <Dialog title="要離開尚未送出的申請嗎？" description="離開後，這次填寫的聯絡資料和 DNS 紀錄不會保留。" onClose={() => setLeaveTarget(null)}><div className="modal-foot"><button type="button" className="button" onClick={() => { dirty.current = false; setLeaveTarget(null); leaveTarget.click(); }}>離開並捨棄</button><button type="button" className="button primary" data-dialog-initial-focus onClick={() => setLeaveTarget(null)}>繼續填寫</button></div></Dialog>}</>;
 }

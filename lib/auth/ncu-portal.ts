@@ -12,20 +12,20 @@ export function portalIdentity(raw: unknown, ownerIdentifier = OWNER_IDENTIFIER)
   const owner = !!ownerIdentifier && profile.identifier === ownerIdentifier;
   // Bind the owner by an operator-verified Portal identifier, never a supplied email.
 
-  return { id: profile.identifier, name: profile.studentId || profile.identifier, studentId: profile.studentId || null, email: owner ? OWNER_EMAIL : `portal-${createHash("sha256").update(profile.identifier).digest("hex")}@accounts.invalid`, owner };
+  return { id: profile.identifier, name: profile.identifier, studentId: profile.studentId || null, portalEmail: profile.email || null, email: owner ? OWNER_EMAIL : `portal-${createHash("sha256").update(profile.identifier).digest("hex")}@accounts.invalid`, owner };
 }
 export const portalConfigured = () => Boolean(process.env.DATABASE_URL && process.env.NCU_PORTAL_CLIENT_ID && process.env.NCU_PORTAL_CLIENT_SECRET && process.env.NCU_OWNER_IDENTIFIER);
 export function ncuPortalProvider(): OAuthConfig<Record<string, unknown>> {
   return {
     id: "ncu-portal", name: "NCU Portal", type: "oauth",
     clientId: process.env.NCU_PORTAL_CLIENT_ID, clientSecret: process.env.NCU_PORTAL_CLIENT_SECRET,
-    authorization: { url: "https://portal.ncu.edu.tw/oauth2/authorization", params: { scope: "identifier student-id" } },
+    authorization: { url: "https://portal.ncu.edu.tw/oauth2/authorization", params: { scope: "identifier student-id email" } },
     token: "https://portal.ncu.edu.tw/oauth2/token",
     userinfo: "https://portal.ncu.edu.tw/apis/oauth/v1/info",
     client: { token_endpoint_auth_method: "client_secret_basic" },
     checks: ["state"],
     allowDangerousEmailAccountLinking: false,
-    profile(raw) { const identity = portalIdentity(raw); return { id: identity.id, name: identity.name, studentId: identity.studentId, email: identity.email, globalRole: "USER" }; },
+    profile(raw) { const identity = portalIdentity(raw); return { id: identity.id, name: identity.name, studentId: identity.studentId, portalEmail: identity.portalEmail, email: identity.email, globalRole: "USER" }; },
     // Do not retain Portal access/refresh tokens: the app only needs initial identity.
     account() { return {}; },
     [customFetch](input, init) {

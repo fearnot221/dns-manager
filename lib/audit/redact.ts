@@ -1,4 +1,4 @@
-const sensitive = /password|passwd|secret|token|authorization|cookie|api.?key|encrypted.?key|database.?url/i;
+const sensitive = /password|passwd|passcode|secret|token|authorization|cookie|api.?key|encrypted.?key|database.?url/i;
 export function redactAudit(value: unknown): unknown {
   if (value === undefined || value === null) return value;
   if (value instanceof Date) return value.toISOString();

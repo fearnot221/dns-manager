@@ -17,6 +17,8 @@ export function RequestCard({ item, admin, onReview }: { item: DnsRequest; admin
     </summary>
     <div className="request-detail">
       <dl>
+        <div><dt>申請類別</dt><dd>{item.sourceRecordId ? "變更既有 DNS" : "新增 DNS"}{item.unitId ? " · 單位共享" : ""}</dd></div>
+        {item.sourceRecordId && <div><dt>原解析內容</dt><dd><code>{item.originalContent}</code></dd></div>}
         <div><dt>完整名稱</dt><dd><code>{item.recordName}</code></dd></div>
         <div><dt>內容</dt><dd><code>{item.content}</code></dd></div>
         <div><dt>TTL</dt><dd>{item.ttl} 秒</dd></div>

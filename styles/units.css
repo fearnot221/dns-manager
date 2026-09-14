@@ -1,0 +1,28 @@
+.unit-toolbar, .unit-heading, .unit-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.unit-toolbar { margin-bottom: 20px; }
+.unit-toolbar > p { color: var(--muted); max-width: 580px; }
+.unit-actions { justify-content: flex-start; }
+.unit-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 20px; align-items: start; }
+.unit-selector { padding: 8px; display: grid; gap: 4px; }
+.unit-selector button { display: flex; text-align: left; align-items: center; gap: 10px; border: 0; border-radius: 8px; padding: 14px 12px; background: transparent; color: var(--ink); }
+.unit-selector button[aria-current] { background: var(--accent-soft); color: var(--accent); }
+.unit-selector button:hover { background: var(--accent-soft); }
+.unit-selector span { min-width: 0; overflow-wrap: anywhere; }
+.unit-selector small, .unit-members small, .unit-table small { display: block; margin-top: 4px; color: var(--muted); font-size: .8125rem; }
+.unit-detail { display: grid; gap: 20px; min-width: 0; }
+.unit-panel { padding: 24px; min-width: 0; }
+.unit-heading { margin-bottom: 16px; }
+.unit-heading h2 { display: flex; gap: 8px; align-items: center; font-size: 1.125rem; overflow-wrap: anywhere; }
+.unit-heading p { margin-top: 6px; color: var(--muted); }
+.unit-search { display: grid; gap: 8px; margin-bottom: 20px; font-size: .875rem; }
+.unit-search input { padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--panel); color: var(--ink); font-size: 1rem; min-height: 44px; }
+.unit-table { min-width: 620px; width: 100%; }
+.unit-table td { max-width: 300px; white-space: normal; overflow-wrap: anywhere; }
+.unit-members { list-style: none; padding: 0; }
+.unit-members li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+.unit-members li > span { min-width: 0; overflow-wrap: anywhere; }
+.unit-passcode { display: grid; gap: 16px; }
+.unit-passcode code { padding: 16px; background: var(--accent-soft); color: var(--ink); border-radius: 8px; overflow-wrap: anywhere; user-select: all; }
+.unit-wrap { overflow-wrap: anywhere; }
+@media (max-width: 1100px) { .unit-layout { grid-template-columns: minmax(0, 1fr); } .unit-selector { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } }
+@media (max-width: 600px) { .unit-panel { padding: 16px; } .unit-actions .button { min-height: 44px; } }

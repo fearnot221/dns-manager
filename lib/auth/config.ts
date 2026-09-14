@@ -92,7 +92,7 @@ const config: NextAuthConfig = {
           const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "ncu-portal", providerAccountId: identity.id } }, include: { user: true } });
           if (linked) {
             if (linked.user.disabled) return false;
-            await db.user.update({ where: { id: linked.user.id }, data: { studentId: identity.studentId, ...(identity.owner ? { globalRole: "SUPER_ADMIN" } : {}) } });
+            await db.user.update({ where: { id: linked.user.id }, data: { studentId: identity.studentId, portalEmail: identity.portalEmail, name: identity.name, ...(identity.owner ? { globalRole: "SUPER_ADMIN" } : {}) } });
             return true;
           }
           const existing = await db.user.findUnique({ where: { email: identity.email } });
@@ -100,6 +100,7 @@ const config: NextAuthConfig = {
           if (!identity.owner) return !existing; // Never silently merge existing accounts by email.
           if (!existing || existing.globalRole !== "SUPER_ADMIN") return false; // Trusted seed required first.
           await db.account.create({ data: { userId: existing.id, type: "oauth", provider: "ncu-portal", providerAccountId: identity.id } });
+          await db.user.update({ where: { id: existing.id }, data: { portalEmail: identity.portalEmail, studentId: identity.studentId, name: identity.name } });
           return true;
         } catch { return false; }
       }

@@ -70,6 +70,15 @@ it("accepts a new verified Portal user without pre-registration", async () => {
   expect(await signIn({ user: {}, account: { type: "oauth", provider: "ncu-portal", providerAccountId: "student" }, profile: { identifier: "student", email: "student@example.com", emailVerified: true } })).toBe(true);
   expect(mocks.accountCreate).not.toHaveBeenCalled();
 });
+it("refreshes Portal display email and account name without changing the login email or roles", async () => {
+  const config = await configuration();
+  mocks.accountFind.mockResolvedValue({ user: { id: "linked", disabled: false, globalRole: "USER" } });
+  const signIn = config.callbacks!.signIn!;
+  expect(await signIn({ user: {}, account: { type: "oauth", provider: "ncu-portal", providerAccountId: "account" }, profile: { identifier: "account", studentId: "student", email: "display@example.com" } })).toBe(true);
+  expect(mocks.update).toHaveBeenCalledWith({ where: { id: "linked" }, data: { studentId: "student", portalEmail: "display@example.com", name: "account" } });
+  expect(await signIn({ user: {}, account: { type: "oauth", provider: "ncu-portal", providerAccountId: "account" }, profile: { identifier: "account" } })).toBe(true);
+  expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { studentId: null, portalEmail: null, name: "account" } });
+});
 it("does not merge an existing administrator account just by matching email", async () => {
   const config = await configuration();
   mocks.accountFind.mockResolvedValue(null);

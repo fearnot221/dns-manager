@@ -29,6 +29,16 @@ beforeEach(() => {
 });
 const current = async () => (await describeRecords(actor, identity.zoneName, zone.rrsets))[0].ownership;
 describe("DNS ownership and inspection", () => {
+  it("only fetches forward zones for inventory, leaving reverse zones out of the results", async () => {
+    vi.mocked(powerdns.listZones).mockResolvedValue([zone, { ...zone, name: "2.0.192.in-addr.arpa." }, { ...zone, name: "8.B.D.0.1.0.0.2.IP6.ARPA." }]);
+    const response = await GET();
+    expect(response.status).toBe(200);
+    expect(powerdns.getZone).toHaveBeenCalledExactlyOnceWith("example.com.");
+  });
+  it("rejects reverse-zone inspections even when submitted directly", async () => {
+    await expect(saveInventory(actor, { ...input, zoneName: "2.0.192.in-addr.arpa.", mode: "inspect" })).rejects.toMatchObject({ status: 400 });
+    expect(powerdns.getZone).not.toHaveBeenCalled();
+  });
   it("stores metadata without changing DNS and keeps blank edits authoritative", async () => {
     await saveInventory(actor, input); const first = await current();
     expect(first.applicantUnit).toBe("測試單位"); expect(first.inspections).toEqual([]);

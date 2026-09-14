@@ -4,10 +4,19 @@ import { isSameOrigin } from '@/lib/api/origin';
 const profile = { identifier: 'student-test', chineseName: '測試', email: 'test@example.com', emailVerified: true };
 afterEach(() => vi.unstubAllEnvs());
 describe('NCU Portal identity', () => {
-  it('uses studentId for display but never for owner authorization', () => {
-    expect(portalIdentity({ identifier: 'someone', studentId: '115502532' })).toMatchObject({ owner: false, name: '115502532' });
+  it('uses the login identifier for display and never a studentId for owner authorization', () => {
+    expect(portalIdentity({ identifier: 'someone', studentId: '115502532' })).toMatchObject({ owner: false, name: 'someone' });
     expect(portalIdentity({ identifier: '115502532' })).toMatchObject({ owner: true });
     expect(portalIdentity({ identifier: 'someone', email: null }).email).toMatch(/@accounts.invalid$/);
+  });
+  it('keeps contact email separate from stable login identity and requests optional email scope', () => {
+    const first = portalIdentity({ identifier: 'someone', email: 'first@example.com' });
+    const second = portalIdentity({ identifier: 'someone', email: 'second@example.com' });
+    expect(first.email).toBe(second.email);
+    expect(first.portalEmail).toBe('first@example.com');
+    expect(second.portalEmail).toBe('second@example.com');
+    expect(portalIdentity({ identifier: 'someone' }).portalEmail).toBeNull();
+    expect(ncuPortalProvider().authorization).toMatchObject({ params: { scope: 'identifier student-id email' } });
   });
   it('always provisions ordinary users regardless of claimed administrator roles', async () => {
     const provider = ncuPortalProvider();

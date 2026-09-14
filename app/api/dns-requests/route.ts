@@ -27,8 +27,8 @@ export async function GET() {
     const where = isSuperAdmin
       ? {}
       : managedZones.length
-        ? { OR: [{ userId: actor.id }, { zoneName: { in: managedZones } }] }
-        : { userId: actor.id };
+        ? { OR: [{ userId: actor.id }, { zoneName: { in: managedZones } }, { unit: { members: { some: { userId: actor.id } } } }] }
+        : { OR: [{ userId: actor.id }, { unit: { members: { some: { userId: actor.id } } } }] };
     const requests = await db.dnsRecordRequest.findMany({
       where,
       include: {
@@ -39,10 +39,10 @@ export async function GET() {
     });
     return Response.json({
       scope: isSuperAdmin || managedZones.length ? "ADMIN" : "USER",
-      requests: requests.map((item) => ({
-        ...item,
-        canReview: item.status === "PENDING" && (isSuperAdmin || managedZones.includes(item.zoneName)),
-      })),
+      requests: requests.map(({ expectedRRSet: _snapshot, connectionScope: _scope, ...item }) => {
+        void _snapshot; void _scope;
+        return { ...item, canReview: item.status === "PENDING" && (isSuperAdmin || (!item.unitId && managedZones.includes(item.zoneName))) };
+      }),
     });
   } catch (error) {
     return apiError(error);

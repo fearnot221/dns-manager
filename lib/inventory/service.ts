@@ -9,6 +9,7 @@ import { canManageZone } from "@/lib/auth/permissions";
 import { ApiError } from "@/lib/api/respond";
 import type { Actor, RRSet } from "@/lib/dns/types";
 import type { InventoryRecord, Ownership } from "./types";
+import { zoneCategory } from "@/lib/dns/zone-category";
 
 type Identity = Pick<InventoryRecord, "zoneName" | "recordName" | "recordType" | "content">;
 type Stored = Identity & Ownership;
@@ -35,7 +36,7 @@ export async function describeRecords(actor: Actor, zoneName: string, rrsets: RR
   });
 }
 export async function listInventory(actor: Actor) {
-  const zones = (await powerdns.listZones()).filter((zone) => canManageZone(actor, zone.name));
+  const zones = (await powerdns.listZones()).filter((zone) => zoneCategory(zone.name) === "forward" && canManageZone(actor, zone.name));
   const result: InventoryRecord[] = [];
   for (let index = 0; index < zones.length; index += 4) {
     const batch = await Promise.all(zones.slice(index, index + 4).map(async (zone) => describeRecords(actor, zone.name, (await powerdns.getZone(zone.name)).rrsets)));
@@ -54,6 +55,7 @@ export async function captureApprovedRequest(actor: Actor, request: Identity & {
 }
 
 export async function saveInventory(actor: Actor, input: Identity & { id: string; expectedUpdatedAt: string | null; mode: "metadata" | "inspect"; applicantName: string; applicantEmail: string; applicantUnit: string; applicantExtension: string; purpose: string; note: string }) {
+  if (input.mode === "inspect" && zoneCategory(input.zoneName) !== "forward") throw new ApiError("DNS 定期清查僅適用於一般網域。", 400);
   if (!canManageZone(actor, input.zoneName)) throw new ApiError("找不到可管理的 DNS 紀錄。", 404);
   if (input.id !== recordId(await connectionScope(), input)) throw new ApiError("DNS 連線已變更，請重新載入。", 409);
   const zone = await powerdns.getZone(input.zoneName);

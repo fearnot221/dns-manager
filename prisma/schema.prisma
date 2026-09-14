@@ -30,6 +30,7 @@ model User {
   id               String           @id @default(cuid())
   name             String?
   studentId        String?
+  portalEmail      String?
   note             String           @default("")
   email            String           @unique
   passwordHash     String?
@@ -47,6 +48,7 @@ model User {
   auditLogs        AuditLog[]
   recordRequests   DnsRecordRequest[] @relation("RecordRequestOwner")
   reviewedRequests DnsRecordRequest[] @relation("RecordRequestReviewer")
+  unitMemberships UnitMember[]
 }
 
 model Account {
@@ -184,6 +186,12 @@ model DnsRecordRequest {
   id          String           @id @default(cuid())
   userId      String
   applicationId String?
+  unitId      String?
+  unit        DnsUnit? @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  sourceRecordId String?
+  originalContent String? @db.Text
+  expectedRRSet Json?
+  connectionScope String?
   applicantName String?
   applicantUnit String?
   applicantExtension String?
@@ -204,6 +212,7 @@ model DnsRecordRequest {
 
   @@index([userId, createdAt])
   @@index([applicationId])
+  @@index([unitId, status])
   @@index([zoneName, status, createdAt])
   @@index([status, createdAt])
 }
@@ -214,6 +223,8 @@ model DnsRecordMetadata {
   recordName         String
   recordType         String
   content            String   @db.Text
+  unitId             String?
+  unit               DnsUnit? @relation(fields: [unitId], references: [id], onDelete: Restrict)
   applicantName      String   @default("")
   applicantEmail     String   @default("")
   applicantUnit      String   @default("")
@@ -223,6 +234,35 @@ model DnsRecordMetadata {
   updatedAt          DateTime @updatedAt
   inspections        DnsInspection[]
   @@index([zoneName])
+  @@index([unitId])
+}
+
+enum UnitRole {
+  VIEWER
+  EDITOR
+  ADMIN
+}
+
+model DnsUnit {
+  id String @id @default(cuid())
+  name String @unique
+  passcodeHash String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members UnitMember[]
+  records DnsRecordMetadata[]
+  requests DnsRecordRequest[]
+}
+
+model UnitMember {
+  unitId String
+  userId String
+  role UnitRole @default(VIEWER)
+  joinedAt DateTime @default(now())
+  unit DnsUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([unitId, userId])
+  @@index([userId])
 }
 
 model DnsInspection {

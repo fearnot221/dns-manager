@@ -12,4 +12,4 @@ export async function proxy(request:NextRequest){
   if(!token || !loginProviderAllowed(token.loginProvider)){if(request.nextUrl.pathname.startsWith("/api/"))return Response.json({error:"Authentication required"},{status:401});const url=new URL("/login",applicationOrigin(request));url.searchParams.set("callbackUrl",request.nextUrl.pathname);return NextResponse.redirect(url);}
   return NextResponse.next();
 }
-export const config={matcher:["/dashboard/:path*","/requests/:path*","/zones/:path*","/activity/:path*","/admin/:path*","/inventory/:path*","/api/:path*"]};
+export const config={matcher:["/dashboard/:path*","/requests/:path*","/units/:path*","/zones/:path*","/activity/:path*","/admin/:path*","/inventory/:path*","/api/:path*"]};

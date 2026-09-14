@@ -9,6 +9,7 @@ export const permissionSchema=z.object({userId:z.string().min(1).optional(),user
 export const userRoleSchema=z.object({globalRole:z.enum(["USER","SUPER_ADMIN"])}).strict();
 export const dnsRequestSchema=z.object({zoneName:z.string().min(1).max(253),name:z.string().min(1).max(253),type:z.enum(["A","AAAA","CNAME","MX","TXT","SRV","CAA"]),ttl:z.number().int().min(30).max(2147483647),content:z.string().min(1).max(65535),purpose:z.string().trim().max(1000).optional()}).strict();
 export const dnsApplicationSchema = z.object({
+  unitId: z.string().min(1).max(100).optional(),
   applicantName: z.string().trim().min(1, "請填寫申請人姓名").max(100),
   applicantUnit: z.string().trim().min(1, "請填寫申請單位").max(200),
   applicantExtension: z.string().trim().regex(/^[0-9]{1,10}$/, "單位分機請填入 1–10 位數字"),

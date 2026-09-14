@@ -10,6 +10,7 @@ import { apiError, ApiError, notFoundUnless } from "@/lib/api/respond";
 import { dnsRequestDecisionSchema } from "@/lib/validation/api";
 import { logAuditEvent } from "@/lib/audit/service";
 import { findDevRequest, isDevRequestStore, reviewDevRequest } from "@/lib/requests/dev-store";
+import { reviewUnitRequest } from "@/lib/units/review";
 
 async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns-requests/[id]">) {
   let actor;
@@ -19,6 +20,10 @@ async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns
     const { id } = await params;
     const decision = dnsRequestDecisionSchema.parse(await request.json());
     recordRequest = isDevRequestStore() ? findDevRequest(id) : await db.dnsRecordRequest.findUnique({ where: { id }, include: { user: { select: { email: true, name: true } } } });
+    if (recordRequest && "unitId" in recordRequest && recordRequest.unitId) {
+      const reviewed = await reviewUnitRequest(actor, id, decision.decision, decision.reviewNote);
+      return Response.json({ request: { id: reviewed.id, status: reviewed.status } });
+    }
     notFoundUnless(Boolean(recordRequest) && canManageZone(actor, recordRequest!.zoneName));
     if (recordRequest!.status !== "PENDING") throw new ApiError("This request has already been reviewed", 409);
 

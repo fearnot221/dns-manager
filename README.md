@@ -6,11 +6,11 @@ A production-oriented PowerDNS Authoritative management platform built with Next
 
 ### Portal 帳號呈現與最高權限
 
-測試期間保留帳密與 Portal 登入；`AUTH_PASSWORD_LOGIN_ENABLED=true`（預設）允許已有密碼的測試帳號登入，測試完成可設為 `false` 關閉。local demo 仍保留測試登入。請於 Portal 應用設定授權 `identifier student-id`，學號欄位為 `studentId`；未提供學號時顯示 Portal identifier，不猜測電子郵件。使用者管理與側欄不再顯示帳號暱稱、電子郵件，管理頁可編輯最多 1000 字備註，備註不影響權限。
+測試期間保留帳密與 Portal 登入；`AUTH_PASSWORD_LOGIN_ENABLED=true`（預設）允許已有密碼的測試帳號登入，測試完成可設為 `false` 關閉。local demo 仍保留測試登入。請於 Portal 應用設定授權 `identifier student-id email`。使用者管理以電子郵件為主，顯示名稱採 Portal identifier（帳密使用者採登入帳號），不使用暱稱或學號取代帳號。Portal 信箱另存 User.portalEmail，僅供顯示、不參與帳號連結或權限判斷；未授權時標示未提供，既有使用者重新登入後更新。管理頁可編輯最多 1000 字備註，備註不影響權限。
 
 受保護的最高權限綁定 Portal identifier `115502532`，不是 studentId 顯示值或電子郵件。`NCU_OWNER_IDENTIFIER` 請同步設為 `115502532`。原受信任初始化帳號的內部電子郵件與帳號 ID 保留，用於首次連結及既有資料關聯；不能透過修改備註、學號或 email 取得最高權限。新帳號透過 Portal 登入建立，不再提供後台手動建立帳密功能。
 
-部署須先執行 Prisma migration（Docker 部署的 migrate 服務會執行），新增 User.studentId 與 User.note。既有 Portal 帳號下次登入會更新學號，無需刪除或重建帳號；歷史稽核原始資料不會被改寫。
+部署須先執行 Prisma migration（Docker 部署的 migrate 服務會執行），新增 User.studentId、User.note 與 User.portalEmail。既有 Portal 帳號下次登入會更新學號，無需刪除或重建帳號；歷史稽核原始資料不會被改寫。
 
 ### 網域申請開放設定
 
@@ -210,6 +210,24 @@ NCU Portal is enabled only when DATABASE_URL, NCU_PORTAL_CLIENT_ID, NCU_PORTAL_C
 Back up PostgreSQL, the settings encryption key, and the PowerDNS backend. PostgreSQL preserves authorization, ownership, inspection and audit data, not authoritative zones. Test restores. Audit and inspection rows are append-only at the application layer; database operators can still modify storage, so add database retention or write-once exports to meet compliance needs.
 
 ## Verification
+
+### Units and shared DNS
+
+- `/units` lets authenticated users create a unit or join using its private passcode. The creator becomes a unit administrator; joining always defaults to VIEWER. Global system administrators can oversee all units.
+- VIEWER can read shared DNS and application history. EDITOR can submit additions and content-change requests. Unit ADMIN also manages member roles and rotates invitations. **Unit roles never grant zone permissions or DNS publication/review authority.** Only global system administrators can approve unit requests.
+- Passcodes are cryptographically random (192 bits), stored only as SHA-256 digests, displayed once at creation/rotation, and never included in unit lists or audit snapshots. Removing a member invalidates the previous passcode; a unit administrator must generate and distribute a new one. At least one active unit administrator is retained during membership changes.
+- Select an explicit shared unit in the DNS application form. A free-text applicant-unit name does not grant access. Historical personal DNS is not automatically shared. Unit changes target one existing record value; name, type, TTL, neighboring values and disabled flags are preserved. New names/types require a new application.
+- Shared DNS lists contain only explicitly linked, currently present records from the configured PowerDNS connection. Review rechecks membership, connection scope and the original RRset; conflicts must be rejected and resubmitted. Pending changes do not modify DNS.
+- Deploy migration `20260914050000_dns_units` before starting the new web image (`npm run db:migrate`, or the existing Compose migrate service). This migration adds tables/nullable columns; existing records are preserved and remain unshared. Unit features require PostgreSQL and do not enable or start local demo.
+- PostgreSQL and PowerDNS cannot commit atomically. Content-change retries recognize an exact already-applied result; ambiguous conflicts fail closed for operator review. Writes made directly in PowerDNS or other tools are not locked by this application—avoid simultaneous external writes to the same RRset.
+
+Opt-in integration tests use a **disposable localhost database named `dns_units_test`**, with fake in-process PowerDNS (no live DNS writes). Apply migrations to that database, then run:
+
+```bash
+UNIT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test' npx vitest run tests/units.integration.test.ts
+```
+
+The normal test command skips these database integration tests when the variable is absent.
 
 ```bash
 npm run lint
