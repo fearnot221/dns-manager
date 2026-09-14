@@ -28,7 +28,7 @@ sudo install -d -m 0700 -o dnsdeploy -g dnsdeploy /var/lib/dns-manager-webhook
 - `AUTH_SECRET`：另一個 `openssl rand -hex 32`；部署間必須固定，否則所有 session 失效。
 - `SETTINGS_ENCRYPTION_KEY`：再產生一個 `openssl rand -hex 32`；備份此值，不能隨意更換。
 - `AUTH_URL=https://你的正式網域`，無其他路徑。
-- `AUTH_LOGTO_ID`、`AUTH_LOGTO_SECRET`、`LOGTO_OWNER_SUB`。
+- `AUTH_LOGTO_ID`、`AUTH_LOGTO_SECRET`。最高學號來自已驗證的 UserInfo `profile.name`，不是 env。
 - `PDNS_MOCK=false`；只在 env 設定 `PDNS_API_URL`、`PDNS_API_KEY`、`PDNS_SERVER_ID`，網址以 `/api/v1` 結尾。網頁設定入口已移除，舊資料庫連線設定不再生效。沒有連線時 DNS 頁會顯示錯誤，不會切換到假資料。
 - Portal 不需白名單；驗證成功會自動建立一般使用者。管理員僅由最高使用者手動指派，停用帳號仍禁止使用。帳密登入保留以供測試，可設 `AUTH_PASSWORD_LOGIN_ENABLED=false` 關閉。測試帳號建立命令見 QUICKSTART。
 - `OWNER_INITIAL_PASSWORD`：初次建立最高帳號用，16 字元以上，與 demo 密碼不同。
@@ -57,7 +57,7 @@ PowerDNS 如果在 host 上，容器中的 `127.0.0.1` 不會連到 host；使�
 - 登出後重定向 URI：`https://dnsmgr.ce.ncu.edu.tw/login`
 - Scopes：`openid profile custom_data`
 
-既有帳號由維運人工核對 Logto User ID 後綁定，不自動依 Email 合併；最高帳號須設定已核對的 `LOGTO_OWNER_SUB`。正式 SSO 流程需另行驗收。
+既有帳號由維運人工核對 Logto User ID 後綁定，不自動依 Email 合併；最高帳號登入時須回傳 NCU 同步的 `profile.name=115502532` 且已有 SUPER_ADMIN 角色。正式 SSO 流程需另行驗收。
 
 ## 4. 安裝 webhook 接收程式
 

@@ -30,6 +30,7 @@ model User {
   id               String           @id @default(cuid())
   name             String?
   studentId        String?
+  logtoName        String?
   portalEmail      String?
   note             String           @default("")
   email            String           @unique

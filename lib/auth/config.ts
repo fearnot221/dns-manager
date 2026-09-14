@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { verifyPassword } from "@/lib/auth/password";
 import { demoUsers } from "@/lib/users/demo";
-import { resolvedGlobalRole } from "@/lib/auth/owner";
+import { OWNER_IDENTIFIER, resolvedGlobalRole } from "@/lib/auth/owner";
 import { logtoProvider, logtoConfigured, logtoIdentity } from "./logto";
 import { passwordLoginEnabled, loginProviderAllowed } from "./policy";
 import { logAuditEvent } from "@/lib/audit/service";
@@ -91,17 +91,17 @@ const config: NextAuthConfig = {
         try {
           const identity = logtoIdentity(profile);
           if (identity.id !== account.providerAccountId) return denyLogtoLogin("subject_mismatch");
-          const ownerSub = process.env.LOGTO_OWNER_SUB;
-          if (!ownerSub) return denyLogtoLogin("owner_not_configured");
           failureStage = "account_lookup_failed";
           const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "logto", providerAccountId: identity.id } }, include: { user: { include: { accounts: true } } } });
           if (linked) {
             if (linked.user.disabled || linked.user.removedAt) return denyLogtoLogin("account_inactive");
             const ownerTarget = linked.user.globalRole === "SUPER_ADMIN";
-            if (ownerTarget && identity.id !== ownerSub) return denyLogtoLogin("owner_binding_mismatch");
+            if (ownerTarget && identity.logtoName !== OWNER_IDENTIFIER) return denyLogtoLogin("owner_binding_mismatch");
+            if (linked.user.globalRole !== "USER" && !identity.logtoName) return denyLogtoLogin("account_name_missing");
+            if (linked.user.logtoName && linked.user.logtoName !== identity.logtoName) return denyLogtoLogin("account_name_mismatch");
             const displayName = identity.hasName ? identity.name : linked.user.name || identity.name;
             failureStage = "profile_update_failed";
-            await db.user.update({ where: { id: linked.user.id }, data: { portalEmail: identity.portalEmail, name: displayName, ...(identity.studentId ? { studentId: identity.studentId } : {}) } });
+            await db.user.update({ where: { id: linked.user.id }, data: { portalEmail: identity.portalEmail, name: displayName, logtoName: identity.logtoName, ...(identity.studentId ? { studentId: identity.studentId } : {}) } });
             user.name = displayName;
             return true;
           }

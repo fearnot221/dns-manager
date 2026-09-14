@@ -1,9 +1,9 @@
 import type { Actor, GlobalRole } from "@/lib/dns/types";
 
 export const OWNER_IDENTIFIER = "115502532";
-export function accountOwnerIdentifier(accounts: { provider?: string; providerAccountId: string }[] = [], role?: GlobalRole) {
+export function accountOwnerIdentifier(accounts: { provider?: string; providerAccountId: string }[] = [], role?: GlobalRole, logtoName?: string | null) {
   const logto = accounts.find((account) => account.provider === "logto");
-  if (role === "SUPER_ADMIN" && logto && process.env.LOGTO_OWNER_SUB && logto.providerAccountId === process.env.LOGTO_OWNER_SUB) return OWNER_IDENTIFIER;
+  if (role === "SUPER_ADMIN" && logto && logtoName === OWNER_IDENTIFIER) return OWNER_IDENTIFIER;
   const legacy = accounts.find((account) => !account.provider || account.provider === "ncu-portal")?.providerAccountId;
   // Historical student IDs are display data, not current proof of owner identity.
   return legacy && legacy !== OWNER_IDENTIFIER ? legacy : null;

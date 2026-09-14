@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { OWNER_IDENTIFIER } from "../lib/auth/owner";
 import { unlinkLogtoAccount } from "../lib/auth/unlink-logto";
 
 // Operator-only migration; never run automatically on deployment.
@@ -21,7 +22,7 @@ async function main() {
       const user = await tx.user.findUnique({ where: { id: userId }, include: { accounts: true } });
       if (!user || user.disabled || user.removedAt) throw new Error("Target must be an existing active account");
       const owner = user.globalRole === "SUPER_ADMIN";
-      if (owner !== (!!process.env.LOGTO_OWNER_SUB && subject === process.env.LOGTO_OWNER_SUB)) throw new Error("Owner binding does not match verified LOGTO_OWNER_SUB");
+      if (owner && user.logtoName && user.logtoName !== OWNER_IDENTIFIER) throw new Error("Stored owner account name does not match the configured student identity");
       if (args.includes("--unlink")) {
         const result = await unlinkLogtoAccount(tx, userId, subject, args.includes("--apply"));
         console.log(result.applied ? "Logto unlinked and all target sessions revoked. User, roles, DNS and unit data preserved." : result.linked ? "Dry run passed. Exact binding found; no changes made." : "No matching Logto binding exists; no changes made.");

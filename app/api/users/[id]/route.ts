@@ -28,7 +28,7 @@ async function PATCHHandler(request: Request, { params }: { params: Promise<{ id
     const user = isLocalDemo() ? await demoUsers((users) => { const user = users.find((u) => u.id === id); if (!user) throw new ApiError("找不到使用者。", 404); check({ ...user, portalIdentifier: user.id === "dev-owner" ? "115502532" : user.portalIdentifier }); Object.assign(user, input); return { ...user, portalIdentifier: user.id === "dev-owner" ? OWNER_IDENTIFIER : user.portalIdentifier }; }, true) : await db.$transaction(async (tx) => {
       const user = await tx.user.findUnique({ where: { id }, include: { accounts: { where: { provider: { in: ["ncu-portal", "logto"] } }, select: { provider: true, providerAccountId: true } }, zonePermissions: true, groupMemberships: { include: { group: { include: { zonePermissions: true } } } } } });
       if (!user) throw new ApiError("找不到使用者。", 404);
-      check({ ...user, portalIdentifier: accountOwnerIdentifier(user.accounts, user.globalRole), zoneAdmin: [...user.zonePermissions, ...user.groupMemberships.flatMap((m) => m.group.zonePermissions)].some((p) => p.role === "ADMIN") });
+      check({ ...user, portalIdentifier: accountOwnerIdentifier(user.accounts, user.globalRole, user.logtoName), zoneAdmin: [...user.zonePermissions, ...user.groupMemberships.flatMap((m) => m.group.zonePermissions)].some((p) => p.role === "ADMIN") });
       return tx.user.update({ where: { id }, data: input, include: { accounts: { where: { provider: { in: ["ncu-portal", "logto"] } }, select: { provider: true, providerAccountId: true } } } });
     }, { isolationLevel: "Serializable" });
     await logAuditEvent({ actor, zone: "", action: "UPDATE_USER", before, after: accountPresentation(user), success: true, request });

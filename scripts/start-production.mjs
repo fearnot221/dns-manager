@@ -5,7 +5,6 @@ export function validateProductionEnvironment(env) {
   if (origin.protocol !== "https:" || origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) throw new Error("AUTH_URL must be a public HTTPS origin");
   if (!env.AUTH_SECRET || env.AUTH_SECRET.length < 32 || /replace|change.me/i.test(env.AUTH_SECRET)) throw new Error("AUTH_SECRET must be a persistent random secret of at least 32 characters");
   if (!/^[a-f0-9]{64}$/i.test(env.SETTINGS_ENCRYPTION_KEY || "")) throw new Error("SETTINGS_ENCRYPTION_KEY must be 64 hex characters");
-  if (env.AUTH_LOGTO_SECRET && !env.LOGTO_OWNER_SUB) throw new Error("LOGTO_OWNER_SUB must be verified in Logto Console before enabling Portal login");
   if (env.AUTH_PASSWORD_LOGIN_ENABLED === "false" && !env.AUTH_LOGTO_SECRET) throw new Error("Configure Logto before disabling password login");
   if (!['true', 'false'].includes(env.PDNS_MOCK || 'false')) throw new Error("PDNS_MOCK must be true or false");
 }

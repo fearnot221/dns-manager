@@ -14,7 +14,6 @@ x-app-environment: &app-environment
   PDNS_SERVER_ID: ${PDNS_SERVER_ID:-localhost}
   AUTH_LOGTO_ID: ${AUTH_LOGTO_ID:-dtvpigx50sgdvy4aeadee}
   AUTH_LOGTO_SECRET: ${AUTH_LOGTO_SECRET:-}
-  LOGTO_OWNER_SUB: ${LOGTO_OWNER_SUB:-}
 
 services:
   postgres:

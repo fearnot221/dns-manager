@@ -113,7 +113,7 @@ curl -f https://dnsmgr.ce.ncu.edu.tw/healthz
 
 ## 4. 最高帳號、Portal 與 PowerDNS
 
-全新安裝的 bootstrap 登入地址為 `owner-bootstrap@accounts.invalid`，只用於初始帳密登入，地址本身沒有授權效果。既有帳號不改 email；最高權限須將經核對的 `LOGTO_OWNER_SUB` 綁到資料庫 `SUPER_ADMIN` 帳號（見 [Logto 設定](LOGTO.md)）。初始密碼是獨立隨機值，不是 demo 密碼：
+全新安裝的 bootstrap 登入地址為 `owner-bootstrap@accounts.invalid`，只用於初始帳密登入，地址本身沒有授權效果。既有帳號不改 email；最高權限須將經核對的 `profile.name=115502532` 綁到資料庫 `SUPER_ADMIN` 帳號（見 [Logto 設定](LOGTO.md)）。初始密碼是獨立隨機值，不是 demo 密碼：
 
 ```bash
 sudo cat /etc/dns-manager/initial-owner-password
@@ -122,7 +122,7 @@ sudoedit /etc/dns-manager/app.env
 
 將密碼保存至安全的密碼管理器後，刪除這一個交付檔即可（勿刪 app.env）。seed 成功後 env 裡的 `OWNER_INITIAL_PASSWORD` 會清空，不再傳給後續容器。
 
-安裝程式**無法代填 Logto Secret**。請依 [Logto 切換指南](LOGTO.md) 填入 `AUTH_LOGTO_ID`、`AUTH_LOGTO_SECRET`、已核對的 `LOGTO_OWNER_SUB`，並綁定既有帳號：
+安裝程式**無法代填 Logto Secret**。請依 [Logto 切換指南](LOGTO.md) 填入 `AUTH_LOGTO_ID`、`AUTH_LOGTO_SECRET` 並綁定既有帳號。`profile.name` 必須由 Logto UserInfo 回傳，不是 env 設定：
 
 - 重定向 URI：`https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/logto`
 - 登出後重定向 URI：`https://dnsmgr.ce.ncu.edu.tw/login`

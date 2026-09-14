@@ -19,21 +19,22 @@
 AUTH_URL=https://dnsmgr.ce.ncu.edu.tw
 AUTH_LOGTO_ID=dtvpigx50sgdvy4aeadee
 AUTH_LOGTO_SECRET=由你在伺服器填入
-LOGTO_OWNER_SUB=LogtoConsole中核對的最高帳號UserID
 AUTH_PASSWORD_LOGIN_ENABLED=true
 ```
 
-最高帳號的 User ID 從 **Logto Console → Users → 帳號详情 → User ID** 複製，不能猜測是 `115502532`。舊 NCU Portal identifier／學號和 Logto sub 是不同的命名空間。未填 owner sub 時，帶有 Logto secret 的 production 啟動會拒絕，以免切換後管理權限遺失。Portal 登入按鈕固定保留；Secret 尚未設定時停用按鈕並顯示原因，帳密測試登入保持可用。
+本專案已確認 Logto 的頂層 `name` 是 NCU Portal 同步、使用者不能修改的學號。最高權限要求經驗證的 `profile.name` 為 `115502532`，且帳號已有資料庫 `SUPER_ADMIN` 角色。`LOGTO_OWNER_SUB` 已停用，可從 env 移除；`sub` 僅保留作 OIDC 登入綁定，不指定最高權限。一般管理員仍需人工指派角色，學號本身不會自動授予角色。
+
+部署須先執行新增 `User.logtoName` 的 migration。新欄位不從歷史顯示姓名、學號或備註回填，只在成功驗證 Logto UserInfo 後寫入。既有最高管理員請重新登入一次；之前的 session 不會憑歷史欄位取得最高權限。帳密測試登入保持可用。
 
 舊 `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、`NCU_OWNER_IDENTIFIER` 不再用於登入；新版本 Docker Compose 已傳遞 Logto 變數。保留 `AUTH_SECRET`、資料庫、既有內部 email 與原使用者 ID，不重建資料庫或重新 seed 覆寫帳號。
 
-請在 Logto 的上游 NCU Portal connector 取得 `chinese-name` scope 的中文姓名，並映射到 Logto 標準 `name`；也支援 UserInfo 頂層 `chinese-name` 或 `chineseName`。解析順序為 `chinese-name` → `chineseName` → `name`，不把 username 當姓名。每次登入更新共用 `User.name`，全站姓名欄位使用它；未回傳姓名時保留既有姓名，不猜測中文姓名。學號可由頂層 `student-id`／`studentId` 同步，僅作輔助顯示。電子郵件映射到 `email`，只有可信且已驗證的電子郵件才標為 `email_verified=true`。
+畫面姓名依序使用 `custom_data.username` → `chinese-name` → `chineseName`，不再將標準 `name` 的學號當成人名。`custom_data.username` 只接受去除頭尾空白後不超過 300 字的非空字串。每次登入同步 `User.name`；缺少顯示姓名時保留既有姓名。頂層 `name` 另存 `User.logtoName` 作驗證識別，並作為學號輔助顯示。`student-id`、`studentId`、email 和 custom_data 不參與授權。
 
-本站要求 Logto 的 `openid profile custom_data`，不再要求 `email` scope，因此不保證回傳電子郵件。這次 scope 調整不自動將 `custom_data` 內的欄位當作姓名或權限，欄位映射需另行確認。NCU scope 並不是可直接追加的 Logto scope。若姓名只存在上游 connector 原始資料、尚未映射至 UserInfo，網站無法取得，需先在 Logto 配置。參考 [Logto 使用者資料](https://docs.logto.io/user-management/user-data)。不讀取 Logto roles、姓名、email 或學號當作系統管理權；最高權限只以 `LOGTO_OWNER_SUB` 綁定加資料庫 `SUPER_ADMIN` 判斷。保留既有資料庫 email 及歷史稽核值，不執行資料清洗或改寫歷史。
+Scope 保持 `openid profile custom_data`，不保證回傳 email。姓名和學號的可信來源以此專案的 NCU connector 設定為前提：若日後允許使用者修改標準 `name`，必須先停用此授權對應。保留資料庫內部 ID、既有登入 email 與歷史稽核，不因顯示／驗證識別調整而搬移 DNS 或自動合併帳號。
 
 ## 既有帳號綁定
 
-任何新的 Logto subject 都可以首次登入建立獨立的一般帳號，即使 verified email 與舊使用者相同。使用相同 subject 再次登入會回到同一帳號；停用／移除帳號仍拒絕登入。不依相同 email 自動合併、繼承 DNS 或權限。若要沿用既有資料，必須人工核對身分後綁定。`LOGTO_OWNER_SUB` 本身不授予最高角色；未綁定的最高 subject 也只會建立一般帳號，最高權限需既有資料庫角色與身分對應同時符合。
+新 subject 首次登入仍建立獨立 USER，不因 email 或學號相同自動取得既有資料或角色。登入綁定繼續使用 OIDC sub；管理權驗證改用受控的 `profile.name` 與儲存角色。既有帳號記錄過 `logtoName` 後，回傳名稱若不符即拒絕登入，不靜默更換授權識別。要更換登入綁定仍需維運核對，不能僅輸入姓名就合併帳號。
 
 新版 tools image 建好後，在 VM 的 Bash 使用下列共用指令（不依賴 `/opt/dns-manager/.git`）：
 
@@ -62,7 +63,7 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
   --apply --confirm-subject VERIFIED_LOGTO_USER_ID
 ```
 
-工具只新增 Logto Account 綁定並記錄稽核，不改角色、姓名、密碼或 DNS／單位關聯；拒絕停用帳號、重複綁定與 owner sub 不符。舊 Portal Account 保留作為歷史對照。若已誤建重複 Logto 使用者，不自動刪除或合併，需另行核對資料。
+工具只新增 Logto Account 綁定並記錄稽核，不改角色、姓名、密碼或 DNS／單位關聯；拒絕停用帳號、重複綁定與已儲存的最高帳號學號不符。工具不猜測 UserInfo 學號，實際登入仍須通過 `profile.name` 檢查。舊 Portal Account 保留作為歷史對照，不自動刪除或合併帳號。
 
 ### 暫時解除綁定以測試一般登入
 
@@ -84,9 +85,10 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
 查看 `docker logs --since 10m --tail 150 dns-manager-web-1` 中的 `logto-signin-denied`：
 
 - `account_link_required`：同一 subject 的內部合成 email 已存在，但缺少 Account 綁定，需核對並人工處理；一般真實 email 相同不阻擋登入。
-- `owner_binding_mismatch`：最高帳號身分與既有綁定不一致，核對 Logto User ID、`LOGTO_OWNER_SUB` 與目標使用者。
+- `owner_binding_mismatch`：最高角色帳號回傳的 `profile.name` 不是 `115502532`。
 - `account_inactive`：帳號停用或已移除，不得繞過狀態檢查。
-- `owner_not_configured`：執行中的容器未取得 `LOGTO_OWNER_SUB`，檢查 env／Compose 並重新建立容器。
+- `account_name_missing`：管理員登入未回傳頂層 `name` 學號。
+- `account_name_mismatch`：已綁定帳號回傳的學號與先前驗證值不符，需維運核對。
 - `subject_mismatch`／`invalid_profile`：身分回傳不符，檢查 Logto connector claims 設定。
 - `account_lookup_failed`／`profile_update_failed`：檢查資料庫連線、migration 與可用性；不透過放寬登入規則修復。
 
