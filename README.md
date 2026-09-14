@@ -207,6 +207,8 @@ NCU Portal is enabled only when DATABASE_URL, NCU_PORTAL_CLIENT_ID, NCU_PORTAL_C
 
 ## Backup and recovery
 
+System administrators can use **匯出全部 DNS CSV** in the Zone management header. The download includes every record value from the configured PowerDNS server (forward and reverse zones, enabled and disabled records), plus ownership, inspection history and RRset comments. It ignores UI filters. Any fetch/audit failure aborts the download rather than producing a partial file. Exports are logged and never cached. UTF-8 BOM and CSV quoting support spreadsheet import; formula-like cell values receive a leading apostrophe for safety. This is a human-readable record export, not a restorable database/PowerDNS backup or an atomic cross-zone snapshot. Treat downloaded contact/ownership data as sensitive.
+
 Back up PostgreSQL, the settings encryption key, and the PowerDNS backend. PostgreSQL preserves authorization, ownership, inspection and audit data, not authoritative zones. Test restores. Audit and inspection rows are append-only at the application layer; database operators can still modify storage, so add database retention or write-once exports to meet compliance needs.
 
 ## Verification

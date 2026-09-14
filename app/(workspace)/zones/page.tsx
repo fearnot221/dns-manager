@@ -3,6 +3,8 @@ import { ZonesTable } from "@/components/zones/zones-table";
 import { canAccessZoneManagement } from "@/lib/auth/permissions";
 import { requireActor } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
+import { isGlobalAdmin } from "@/lib/auth/owner";
+import { DnsExportButton } from "@/components/admin/dns-export-button";
 
 export const metadata = { title: "Zone 管理" };
 
@@ -12,7 +14,7 @@ export default async function ZonesPage() {
 
   return (
     <div className="content">
-      <PageHeader title="Zone 管理" description="查看與管理授權範圍內的網域。" />
+      <PageHeader title="Zone 管理" description="查看與管理授權範圍內的網域。" actions={isGlobalAdmin(actor) && <DnsExportButton />} />
       <ZonesTable />
     </div>
   );
