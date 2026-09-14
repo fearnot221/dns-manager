@@ -1,18 +1,67 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useResource } from "@/lib/client/use-resource";
 import { apiRequest, jsonRequest } from "@/lib/client/api";
 import { ResourceError } from "@/components/ui/resource-error";
 import { Dialog } from "@/components/ui/dialog";
+import { ActionFeedback, type Feedback } from "@/components/ui/action-feedback";
+import { Badge, EmptyState } from "@/components/ui";
 import type { InventoryRecord } from "@/lib/inventory/types";
+
 type Task = { id: string; userId: string; status: string; snapshot: { zoneName: string; recordName: string; recordType: string; content: string; purpose: string; applicantUnit: string }; response: string | null; createdAt: string; respondedAt: string | null; user: { email: string | null; name: string | null } };
 const labels: Record<string, string> = { PENDING: "待確認", CONFIRMED: "確認仍在使用", ISSUE: "已回報問題", CANCELLED: "已撤回" };
+
+function InspectionResponseForm({ pending, onSubmit }: { pending: boolean; onSubmit: (form: HTMLFormElement) => void }) {
+  const [result, setResult] = useState("CONFIRMED");
+  return <form className="form-surface message-reply" onSubmit={(event) => { event.preventDefault(); onSubmit(event.currentTarget); }}>
+    <fieldset className="form-fields inspection-response" disabled={pending}>
+      <label>確認結果<select name="status" value={result} onChange={(event) => setResult(event.target.value)}><option value="CONFIRMED">確認仍在使用</option><option value="ISSUE">回報問題</option></select></label>
+      <label>{result === "ISSUE" ? "問題說明（必填）" : "補充說明（選填）"}<textarea name="response" required={result === "ISSUE"} maxLength={2000} rows={3} placeholder={result === "ISSUE" ? "請說明不再使用、資料有誤或其他需要協助的事項" : "如有需要，可補充使用情況"} /></label>
+      <div className="form-actions"><button className="button primary" aria-busy={pending}>{pending ? "送出中…" : "送出確認"}</button></div>
+    </fieldset>
+  </form>;
+}
+
 export function InspectionsWorkbench({ admin, actorId }: { admin: boolean; actorId: string }) {
- const { data, loading, error, reload } = useResource<{ tasks: Task[] }>("/api/inspection-tasks");
- const [pending, setPending] = useState(false); const [message, setMessage] = useState(""); const [status, setStatus] = useState("PENDING");
- async function save(id: string, form?: HTMLFormElement) { if (pending) return; const values = form && new FormData(form); setPending(true); setMessage(""); try { await apiRequest("/api/inspection-tasks", jsonRequest(form ? "PATCH" : "DELETE", form ? { id, status: values!.get("status"), response: values!.get("response") } : { id })); setMessage("清查狀態已更新。"); await reload(); } catch (e) { setMessage(e instanceof Error ? e.message : "更新失敗"); } finally { setPending(false); } }
- const tasks = data?.tasks.filter((task) => status === "ALL" || task.status === status) || [];
- return <><div className="admin-toolbar"><label>顯示<select value={status} onChange={(e) => setStatus(e.target.value)}><option value="ALL">全部</option>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className="button" disabled={loading || pending} onClick={() => void reload()}>重新整理</button></div><p role="status">{message}</p>{error ? <ResourceError message={error} retry={reload} /> : loading ? <p role="status">載入中…</p> : !tasks.length ? <p>目前沒有符合條件的清查通知。</p> : tasks.map((task) => <article className="card modal-body" key={task.id}><h2>{task.snapshot.recordName}</h2><code style={{ overflowWrap: "anywhere" }}>{task.snapshot.recordType} · {task.snapshot.content}</code><p>{task.snapshot.applicantUnit || "未填單位"} · {task.snapshot.purpose || "未填用途"}</p><small>{task.user.email} · {task.user.name} · {new Date(task.createdAt).toLocaleString("zh-TW")}</small><strong>{labels[task.status] || task.status}</strong>{task.response && <p style={{ whiteSpace: "pre-wrap" }}>{task.response}</p>}{task.respondedAt && <small>處理時間：{new Date(task.respondedAt).toLocaleString("zh-TW")}</small>}{task.status === "PENDING" && task.userId === actorId && <form onSubmit={(e) => { e.preventDefault(); void save(task.id, e.currentTarget); }}><fieldset className="dialog-fields" disabled={pending}><label>確認結果<select name="status"><option value="CONFIRMED">確認仍在使用</option><option value="ISSUE">回報問題</option></select></label><label>說明（回報問題必填）<textarea name="response" maxLength={2000} rows={3} /></label><button className="button primary">送出確認</button></fieldset></form>}{admin && task.status === "PENDING" && <button className="button" disabled={pending} onClick={() => { if (window.confirm("撤回此清查通知？使用者將無法繼續回覆。")) void save(task.id); }}>撤回通知</button>}</article>)}</>;
+  const { data, loading, error, reload } = useResource<{ tasks: Task[] }>("/api/inspection-tasks");
+  const [pending, setPending] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+  const [status, setStatus] = useState("PENDING");
+  const saving = useRef(false);
+  async function save(id: string, form?: HTMLFormElement) {
+    if (saving.current) return;
+    const values = form && new FormData(form);
+    saving.current = true;
+    setPending(true);
+    setFeedback(null);
+    try {
+      await apiRequest("/api/inspection-tasks", jsonRequest(form ? "PATCH" : "DELETE", form
+        ? { id, status: values!.get("status"), response: values!.get("response") } : { id }));
+      setFeedback({ kind: "success", message: form ? "清查回覆已送出，可切換篩選條件查看。" : "清查通知已撤回。" });
+      await reload();
+    } catch (error) {
+      setFeedback({ kind: "error", message: error instanceof Error ? error.message : "更新失敗" });
+    } finally {
+      saving.current = false;
+      setPending(false);
+    }
+  }
+  const tasks = data?.tasks.filter((task) => status === "ALL" || task.status === status) || [];
+  return <div className="workflow-page">
+    <div className="admin-toolbar"><label>通知狀態<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">全部</option>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className="button" disabled={loading || pending} onClick={() => void reload()}>重新整理</button></div>
+    <ActionFeedback feedback={feedback} />
+    {error ? <ResourceError message={error} retry={reload} /> : loading ? <p className="workflow-loading" role="status">載入清查通知中…</p>
+      : !tasks.length ? <div className="card"><EmptyState title="目前沒有符合條件的清查通知" description={status === "ALL" ? "新的清查通知會顯示在這裡。" : "可以切換為「全部」，查看其他狀態的通知。"} /></div>
+      : <div className="workflow-list">{tasks.map((task) => <article className="card message-card inspection-card" key={task.id}>
+        <div className="message-heading"><h3>{task.snapshot.recordName}</h3><Badge tone={task.status === "CONFIRMED" ? "green" : task.status === "ISSUE" ? "red" : task.status === "PENDING" ? "orange" : "neutral"}>{labels[task.status] || task.status}</Badge></div>
+        <p className="workflow-meta"><span>{task.user.email || task.user.name}</span><time dateTime={task.createdAt}>{new Date(task.createdAt).toLocaleString("zh-TW")}</time></p>
+        <dl className="inspection-details"><div><dt>類型</dt><dd><code>{task.snapshot.recordType}</code></dd></div><div><dt>內容</dt><dd><code>{task.snapshot.content}</code></dd></div><div><dt>單位</dt><dd>{task.snapshot.applicantUnit || "未填單位"}</dd></div><div><dt>用途</dt><dd>{task.snapshot.purpose || "未填用途"}</dd></div></dl>
+        {task.response && <div className="message-reply"><strong>清查回覆</strong><p className="message-body">{task.response}</p></div>}
+        {task.respondedAt && <p className="workflow-meta">處理時間：<time dateTime={task.respondedAt}>{new Date(task.respondedAt).toLocaleString("zh-TW")}</time></p>}
+        {task.status === "PENDING" && task.userId === actorId && <InspectionResponseForm pending={pending} onSubmit={(form) => void save(task.id, form)} />}
+        {admin && task.status === "PENDING" && <div className="form-actions"><button className="button danger" disabled={pending} onClick={() => { if (window.confirm("撤回此清查通知？使用者將無法繼續回覆。")) void save(task.id); }}>撤回通知</button></div>}
+      </article>)}</div>}
+  </div>;
 }
 export function AssignInspectionDialog({ record, onClose }: { record: InventoryRecord; onClose: () => void }) {
  const users = useResource<{ users: { id: string; name: string; email: string | null; disabled: boolean }[] }>("/api/users");

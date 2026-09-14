@@ -1,13 +1,16 @@
 "use client";
 
-import { ClipboardCheck, Users, FileCheck2, FilePlus2, Globe2, LogOut, Menu, Monitor, Moon, Sun, X, History, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ClipboardCheck, Users, FileCheck2, FilePlus2, Globe2, LogOut, Menu, Monitor, Moon, Sun, X, History, ChevronDown, PanelLeftClose, PanelLeftOpen, MessageSquare, Bell, SlidersHorizontal } from "lucide-react";
 import { Brand } from "@/components/brand";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
+import { workspaceNavigation, isNavActive, type NavIcon } from "@/lib/client/navigation";
 import { IdleSession } from "@/components/auth/idle-session";
+
+const navIcons: Record<NavIcon, typeof Users> = { apply: FilePlus2, requests: FileCheck2, units: Users, zones: Globe2, inventory: ClipboardCheck, contact: MessageSquare, inspections: Bell, users: Users, settings: SlidersHorizontal, activity: History };
 
 export function AppShell({ children, identity, admin, systemAdmin, demo }: {
   children: React.ReactNode;
@@ -23,8 +26,8 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
   const sidebar = useRef<HTMLElement>(null);
   const menu = useRef<HTMLButtonElement>(null);
   const zones = pathname.startsWith("/zones");
-  const applying = pathname === "/requests/new";
-  const sectionLabel = pathname === "/contact" ? "聯絡管理員" : pathname === "/inspections" ? "清查通知" : pathname === "/admin/application-policy" ? "申請設定" : pathname === "/units" ? "單位與共享 DNS" : pathname === "/activity" ? "操作紀錄" : pathname === "/inventory" ? "DNS 定期清查" : pathname === "/admin/users" ? "使用者管理" : zones ? "Zone 管理" : applying ? "申請 DNS" : admin ? "DNS 申請審核" : "我的 DNS";
+  const groups = workspaceNavigation(admin, systemAdmin);
+  const sectionLabel = groups.flatMap((group) => group.items).find((item) => isNavActive(pathname, item))?.label || "工作區";
   const zone = zones && pathname.split("/")[2] ? decodeURIComponent(pathname.split("/")[2]) : null;
 
   useEffect(() => {
@@ -61,17 +64,14 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
       <div className="brand"><Brand /><button className="icon-button mobile-close" onClick={() => setMobile(false)} aria-label="關閉導覽選單"><X size={20} /></button></div>
       <p className="nav-label">{admin ? "管理員工作區" : "個人工作區"}</p>
       <nav className="nav" aria-label="工作區導覽">
-        <details className="nav-group" open><summary>{admin ? "DNS 管理" : "DNS 服務"}<ChevronDown size={15} /></summary><div>
-        <Link className={applying ? "active" : ""} aria-current={applying ? "page" : undefined} href="/requests/new" onClick={() => setMobile(false)}><FilePlus2 size={18} /><span>申請 DNS</span></Link>
-        <Link className={pathname === "/units" ? "active" : ""} aria-current={pathname === "/units" ? "page" : undefined} href="/units" onClick={() => setMobile(false)}><Users size={18} /><span>單位與共享 DNS</span></Link>
-        <Link className={pathname === "/requests" ? "active" : ""} aria-current={pathname === "/requests" ? "page" : undefined} href="/requests" onClick={() => setMobile(false)}><FileCheck2 size={18} /><span>{admin ? "DNS 申請審核" : "我的 DNS"}</span></Link>
-        <Link href="/contact" className={pathname === "/contact" ? "active" : ""} onClick={() => setMobile(false)}><FileCheck2 size={18} /><span>聯絡管理員</span></Link><Link href="/inspections" className={pathname === "/inspections" ? "active" : ""} onClick={() => setMobile(false)}><ClipboardCheck size={18} /><span>清查通知</span></Link>{admin && <Link className={zones ? "active" : ""} aria-current={zones ? "page" : undefined} href="/zones" onClick={() => setMobile(false)}><Globe2 size={18} /><span>Zone 管理</span></Link>}
-        {admin && <Link href="/inventory" className={pathname === "/inventory" ? "active" : ""} aria-current={pathname === "/inventory" ? "page" : undefined} onClick={() => setMobile(false)}><ClipboardCheck size={18} /><span>DNS 定期清查</span></Link>}
-        </div></details>
-        {systemAdmin && <details className="nav-group" open><summary>系統管理<ChevronDown size={15} /></summary><div>
-        {systemAdmin && <Link href="/admin/users" className={pathname === "/admin/users" ? "active" : ""} aria-current={pathname === "/admin/users" ? "page" : undefined} onClick={() => setMobile(false)}><Users size={18} /><span>使用者管理</span></Link>}
-        <Link href="/admin/application-policy" className={pathname === "/admin/application-policy" ? "active" : ""} onClick={() => setMobile(false)}><FileCheck2 size={18} /><span>申請設定</span></Link><Link href="/activity" className={pathname === "/activity" ? "active" : ""} aria-current={pathname === "/activity" ? "page" : undefined} onClick={() => setMobile(false)}><History size={18} /><span>操作紀錄</span></Link>
-        </div></details>}
+        {groups.map((group) => <details className="nav-group" key={group.id} open>
+          <summary>{group.label}<ChevronDown size={15} aria-hidden="true" /></summary>
+          <div>{group.items.map((item) => {
+            const active = isNavActive(pathname, item);
+            const Icon = navIcons[item.icon];
+            return <Link key={item.href} href={item.href} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={() => setMobile(false)}><Icon size={18} aria-hidden="true" /><span>{item.label}</span></Link>;
+          })}</div>
+        </details>)}
       </nav>
       <div className="sidebar-bottom">
         {demo && <div className="demo-label"><Monitor size={15} /><span>Local demo</span></div>}

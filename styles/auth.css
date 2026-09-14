@@ -1,6 +1,6 @@
-.login-page { display: grid; place-items: center; min-height: 100dvh; padding: 48px 24px; background: radial-gradient(ellipse at 20% 0%, color-mix(in srgb,var(--accent) 9%,var(--bg)),transparent 65%),var(--bg); }
+.login-page { display: grid; place-items: center; min-height: 100dvh; padding: 48px 24px; background: var(--bg); }
 .login-card { width: min(464px,100%); background: var(--panel); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 20px 60px #22334b0c, 0 2px 6px #22334b04; overflow: hidden; }
-.login-identity { padding: 30px 36px; border-bottom: 1px solid var(--border); background: color-mix(in srgb,var(--accent-soft) 45%,var(--panel)); }
+.login-identity { padding: 30px 36px; border-bottom: 1px solid var(--border); border-top: 4px solid var(--accent); background: var(--surface-soft); }
 .login-brand { display: flex; align-items: center; gap: 16px; }
 .login-brand .brandmark { width: 62px; height: 62px; }
 .login-brand .brand-name strong { font-size: 1.0625rem; letter-spacing: -.015em; }

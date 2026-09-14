@@ -1,0 +1,45 @@
+.workflow-page, .workflow-list { display: grid; gap: 20px; }
+.action-feedback:not(:has(p)) { display: none; }
+.action-feedback p { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 14px 16px; border-radius: 8px; font-size: .875rem; overflow-wrap: anywhere; }
+.action-feedback svg { flex-shrink: 0; margin-top: 2px; }
+.form-success { color: var(--green); background: color-mix(in srgb, var(--green) 8%, var(--panel)); border: 1px solid color-mix(in srgb, var(--green) 25%, var(--border)); }
+.workflow-layout { display: grid; grid-template-columns: minmax(280px, .85fr) minmax(0, 1.4fr); align-items: start; gap: 24px; }
+.workflow-history, .workflow-compose { min-width: 0; }
+.workflow-panel-head { display: flex; gap: 12px; padding: 24px; border-bottom: 1px solid var(--border); }
+.workflow-panel-head > svg { flex-shrink: 0; color: var(--accent); margin-top: 2px; }
+.workflow-panel-head h2, .workflow-list-head h2 { font-size: 1rem; margin: 0; }
+.workflow-panel-head p { color: var(--muted); font-size: .875rem; margin: 8px 0 0; line-height: 1.7; }
+.workflow-list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.workflow-loading { padding: 32px; color: var(--muted); text-align: center; }
+.message-card { padding: 24px; min-width: 0; }
+.message-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.message-heading h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.workflow-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: .8125rem; margin: 10px 0 20px; overflow-wrap: anywhere; }
+.message-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; font-size: .9375rem; }
+.message-reply { margin-top: 20px; padding: 16px; border-left: 3px solid var(--accent); background: var(--surface-soft); border-radius: 0 8px 8px 0; }
+.message-reply strong { font-size: .875rem; }
+.form-surface label { display: grid; gap: 8px; font-size: .875rem; font-weight: 550; min-width: 0; }
+.form-surface input:not([type="checkbox"]):not([type="radio"]), .form-surface select, .form-surface textarea { width: 100%; min-width: 0; border: 1px solid var(--border-strong); border-radius: 8px; padding: 10px 12px; background: var(--panel); color: var(--ink); font: inherit; font-weight: 400; }
+.form-surface textarea { resize: vertical; min-height: 96px; }
+.form-fields { display: grid; gap: 20px; min-width: 0; border: 0; padding: 24px; margin: 0; }
+.form-surface :is(input, select, textarea):disabled { opacity: .65; background: var(--surface-soft); }
+.form-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+.field-help { color: var(--muted); font-size: .8125rem; line-height: 1.7; margin: 0; }
+.policy-types { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.form-surface .type-option { display: flex; align-items: center; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.type-option:has(:checked) { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.type-option input { accent-color: var(--accent); width: 18px; height: 18px; }
+.policy-type-section { border: 0; padding: 0; margin: 0; min-width: 0; }
+.policy-type-section legend { margin-bottom: 12px; font-weight: 600; }
+.inspection-response { padding: 0; }
+.inspection-details { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 16px; margin: 0; padding: 16px; background: var(--surface-soft); border-radius: 8px; }
+.inspection-details > div { min-width: 0; }
+.inspection-details dt { color: var(--muted); font-size: .75rem; margin-bottom: 4px; }
+.inspection-details dd { margin: 0; overflow-wrap: anywhere; font-size: .875rem; }
+.message-body + .field-help { margin-top: 16px; }
+@media (max-width: 1100px) { .workflow-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .message-card, .workflow-panel-head, .form-fields { padding: 20px; }
+  .policy-types { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .form-surface :is(input, select, textarea) { font-size: 16px; }
+}
