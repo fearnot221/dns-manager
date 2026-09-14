@@ -16,7 +16,7 @@ vi.mock("next/server", () => ({ after: mocks.after }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/client", () => ({ db: { user: { findUnique: mocks.findUnique, findFirst: mocks.findFirst, update: mocks.update }, account: { findUnique: mocks.accountFind, create: mocks.accountCreate } } }));
 beforeEach(() => { vi.resetModules(); vi.clearAllMocks(); mocks.findFirst.mockReset(); });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 async function configuration(production = true, configured = true) {
   vi.stubEnv("NODE_ENV", production ? "production" : "development");
   vi.stubEnv("DATABASE_URL", production ? "postgresql://test/db" : "");
@@ -116,4 +116,27 @@ it("keeps disabled-user checks synchronous and defers only last-login bookkeepin
   mocks.update.mockResolvedValue({});
   await mocks.after.mock.calls[0][0]();
   expect(mocks.update).toHaveBeenCalledWith({ where: { id: "test-user" }, data: { lastLoginAt: expect.any(Date) } });
+});
+
+it("reports safe denial reasons without leaking identity or database errors", async () => {
+  const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const config = await configuration();
+  const signIn = config.callbacks!.signIn!;
+  const attempt = (sub = "owner-test") => signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: sub }, profile: { sub, email: "private@example.com", email_verified: true } });
+  mocks.accountFind.mockResolvedValue(null);
+  expect(await attempt()).toBe(false);
+  expect(log).toHaveBeenLastCalledWith(expect.stringContaining('"reason":"owner_link_required"'));
+  mocks.findFirst.mockResolvedValue({ id: "existing" });
+  expect(await attempt("ordinary")).toBe(false);
+  expect(log).toHaveBeenLastCalledWith(expect.stringContaining('"reason":"account_link_required"'));
+  mocks.accountFind.mockRejectedValueOnce(new Error("private database password"));
+  expect(await attempt()).toBe(false);
+  expect(log).toHaveBeenLastCalledWith(expect.stringContaining('"reason":"account_lookup_failed"'));
+  expect(await attempt("")).toBe(false);
+  expect(log).toHaveBeenLastCalledWith(expect.stringContaining('"reason":"invalid_profile"'));
+  vi.stubEnv("LOGTO_OWNER_SUB", "");
+  expect(await attempt()).toBe(false);
+  expect(log).toHaveBeenLastCalledWith(expect.stringContaining('"reason":"owner_not_configured"'));
+  expect(JSON.stringify(log.mock.calls)).not.toMatch(/private|owner-test|ordinary/);
+  expect(mocks.accountCreate).not.toHaveBeenCalled();
 });

@@ -11,6 +11,7 @@ import { logtoProvider, logtoConfigured, logtoIdentity } from "./logto";
 import { passwordLoginEnabled, loginProviderAllowed } from "./policy";
 import { logAuditEvent } from "@/lib/audit/service";
 import { createIdleSession, readIdleSession, revokeIdleSession } from "./idle-session";
+import { denyLogtoLogin } from "./timing";
 
 const credentialsSchema = z.object({ email: z.email(), password: z.string().min(1).max(256) });
 
@@ -86,25 +87,29 @@ const config: NextAuthConfig = {
       if (!loginProviderAllowed(account?.provider)) return false;
       if (account?.provider === "credentials") return Boolean(user.email);
       if (account?.provider === "logto") {
+        let failureStage: "invalid_profile" | "account_lookup_failed" | "profile_update_failed" = "invalid_profile";
         try {
           const identity = logtoIdentity(profile);
-          if (identity.id !== account.providerAccountId) return false;
+          if (identity.id !== account.providerAccountId) return denyLogtoLogin("subject_mismatch");
           const ownerSub = process.env.LOGTO_OWNER_SUB;
+          if (!ownerSub) return denyLogtoLogin("owner_not_configured");
+          failureStage = "account_lookup_failed";
           const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "logto", providerAccountId: identity.id } }, include: { user: { include: { accounts: true } } } });
           if (linked) {
-            if (linked.user.disabled || linked.user.removedAt) return false;
+            if (linked.user.disabled || linked.user.removedAt) return denyLogtoLogin("account_inactive");
             const ownerTarget = accountOwnerIdentifier(linked.user.accounts.filter((a) => a.provider !== "logto")) === OWNER_IDENTIFIER || (linked.user.globalRole === "SUPER_ADMIN" && linked.user.email === OWNER_EMAIL);
-            if ((identity.id === ownerSub) !== ownerTarget) return false;
+            if ((identity.id === ownerSub) !== ownerTarget) return denyLogtoLogin("owner_binding_mismatch");
             const displayName = identity.hasName ? identity.name : linked.user.name || identity.name;
+            failureStage = "profile_update_failed";
             await db.user.update({ where: { id: linked.user.id }, data: { portalEmail: identity.portalEmail, name: displayName } });
             user.name = displayName;
             return true;
           }
           // Existing accounts are linked by an operator, never by an email claim.
-          if (identity.id === ownerSub) return false;
+          if (identity.id === ownerSub) return denyLogtoLogin("owner_link_required");
           const existing = await db.user.findFirst({ where: { OR: [{ email: identity.email }, ...(identity.portalEmail ? [{ email: identity.portalEmail }, { portalEmail: identity.portalEmail }] : [])] } });
-          return !existing;
-        } catch { return false; }
+          return existing ? denyLogtoLogin("account_link_required") : true;
+        } catch { return denyLogtoLogin(failureStage); }
       }
       return false;
     },

@@ -64,6 +64,20 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
 
 ## 登出與驗收
 
+### 登入遭拒的排查
+
+查看 `docker logs --since 10m --tail 150 dns-manager-web-1` 中的 `logto-signin-denied`：
+
+- `owner_link_required`：env 指定的最高帳號尚未綁定，依上方「既有帳號綁定」先列出帳號、dry run，核對後才 apply。
+- `account_link_required`：既有帳號的 email 有衝突，需核對並人工綁定；不自動合併。
+- `owner_binding_mismatch`：最高帳號身分與既有綁定不一致，核對 Logto User ID、`LOGTO_OWNER_SUB` 與目標使用者。
+- `account_inactive`：帳號停用或已移除，不得繞過狀態檢查。
+- `owner_not_configured`：執行中的容器未取得 `LOGTO_OWNER_SUB`，檢查 env／Compose 並重新建立容器。
+- `subject_mismatch`／`invalid_profile`：身分回傳不符，檢查 Logto connector claims 設定。
+- `account_lookup_failed`／`profile_update_failed`：檢查資料庫連線、migration 與可用性；不透過放寬登入規則修復。
+
+日誌只記錄固定原因及 callback requestId，不記錄 token、code、state、姓名、email 或原始資料庫錯誤。拒絕登入仍回到登入頁，不應因計時 headers 造成 500。不要重播舊 callback URL；每次測試請從登入頁重新開始。
+
 - 手動登出：先撤銷本站 session，再使用本次登入的 ID token hint 送至 Logto end-session；ID token 不出現在 `/api/auth/session`，不保存 access／refresh token。
 - 15 分鐘閒置：只撤銷本站 session；下一次登入帶 `prompt=login`。不宣稱會清除上游 NCU Portal 或其他應用程式的 session。
 - 舊 `ncu-portal` session 不再接受；帳密測試登入保留，正式驗收完成後才考慮設 `AUTH_PASSWORD_LOGIN_ENABLED=false`。

@@ -32,3 +32,26 @@ it("records failures without leaking upstream error details", async () => {
   expect(log).toHaveBeenCalledWith(expect.stringContaining('"completed":false'));
   expect(JSON.stringify(log.mock.calls)).not.toContain("secret-token");
 });
+
+it.each(["AccessDenied", "Configuration"])("preserves immutable %s redirects instead of returning 500", async (error) => {
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  const original = Response.redirect(`https://example.invalid/login?error=${error}`, 302);
+  const response = await measurePortalCallback(async () => original);
+  expect(response.status).toBe(302);
+  expect(response.headers.get("location")).toBe(original.headers.get("location"));
+  expect(response.headers.get("server-timing")).toMatch(/portal_callback;dur=/);
+  expect(original.headers.has("server-timing")).toBe(false);
+  expect(JSON.parse(log.mock.calls[0][0]).status).toBe(302);
+});
+
+it("preserves separate cookies, existing timing, status text and response body", async () => {
+  vi.spyOn(console, "info").mockImplementation(() => {});
+  const cookies = ["session.0=private; HttpOnly; Secure", "session.1=private; Expires=Wed, 21 Oct 2037 07:28:00 GMT; HttpOnly"];
+  const headers = new Headers({ "Server-Timing": "upstream;dur=5" });
+  cookies.forEach((cookie) => headers.append("Set-Cookie", cookie));
+  const response = await measurePortalCallback(async () => new Response("preserved body", { status: 200, statusText: "OK", headers }));
+  expect(response.headers.getSetCookie()).toEqual(cookies);
+  expect(response.headers.get("server-timing")).toMatch(/^upstream;dur=5, portal_callback;dur=/);
+  expect(response.statusText).toBe("OK");
+  expect(await response.text()).toBe("preserved body");
+});
