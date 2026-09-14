@@ -20,7 +20,9 @@ it("uses stable issuer-scoped subjects, verified emails only, and no claim-based
 it("never guesses the Logto owner subject from a student ID", () => {
   vi.stubEnv("LOGTO_OWNER_SUB", "verified-logto-id");
   expect(accountOwnerIdentifier([{ provider: "logto", providerAccountId: "115502532" }])).toBeNull();
-  expect(accountOwnerIdentifier([{ provider: "logto", providerAccountId: "verified-logto-id" }])).toBe("115502532");
+  expect(accountOwnerIdentifier([{ provider: "logto", providerAccountId: "verified-logto-id" }], "SUPER_ADMIN")).toBe("115502532");
+  expect(accountOwnerIdentifier([{ provider: "logto", providerAccountId: "verified-logto-id" }], "USER")).toBeNull();
+  expect(accountOwnerIdentifier([{ provider: "logto", providerAccountId: "verified-logto-id" }], "ADMIN")).toBeNull();
 });
 it("keeps logout destination fixed to Logto with the configured application return URI", () => {
   const url = new URL(logtoLogoutUrl("test-id-token", "https://dnsmgr.ce.ncu.edu.tw"));

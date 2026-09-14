@@ -21,7 +21,7 @@ export async function requireActor():Promise<Actor>{
   for(const permission of [...user.zonePermissions,...user.groupMemberships.flatMap((m)=>m.group.zonePermissions)]){
     const current=zoneRoles[permission.zoneName]; const rank={VIEWER:1,EDITOR:2,ADMIN:3}; if(!current||rank[permission.role]>rank[current])zoneRoles[permission.zoneName]=permission.role;
   }
-  return {id:user.id,email:user.email,name:user.name,portalIdentifier:accountOwnerIdentifier(user.accounts),studentId:user.studentId,globalRole:resolvedGlobalRole(user.email,user.globalRole,accountOwnerIdentifier(user.accounts)),zoneRoles};
+  return {id:user.id,email:user.email,name:user.name,portalIdentifier:accountOwnerIdentifier(user.accounts, user.globalRole),studentId:user.studentId,globalRole:resolvedGlobalRole(user.email,user.globalRole,accountOwnerIdentifier(user.accounts, user.globalRole)),zoneRoles};
 }
 
 export class AuthError extends Error { readonly status=401; constructor(){super("Authentication required");this.name="AuthError";} }

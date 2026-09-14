@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { OWNER_EMAIL, OWNER_IDENTIFIER } from "../lib/auth/owner";
+import { unlinkLogtoAccount } from "../lib/auth/unlink-logto";
 
 // Operator-only migration; never run automatically on deployment.
 async function main() {
@@ -11,7 +12,7 @@ async function main() {
     return;
   }
   const value = (key: string) => args[args.indexOf(key) + 1];
-  if (!args.includes("--user-id") || !args.includes("--subject")) throw new Error("Usage: --user-id EXISTING_DATABASE_USER_ID --subject VERIFIED_LOGTO_USER_ID [--apply --confirm-subject VERIFIED_LOGTO_USER_ID]");
+  if (!args.includes("--user-id") || !args.includes("--subject")) throw new Error("Usage: --user-id EXISTING_DATABASE_USER_ID --subject VERIFIED_LOGTO_USER_ID [--unlink] [--apply --confirm-subject VERIFIED_LOGTO_USER_ID]");
   const userId = value("--user-id"), subject = value("--subject");
   if (!userId || !subject || userId.startsWith("--") || subject.startsWith("--") || subject.length > 200) throw new Error("Invalid account identifiers");
   if (args.includes("--apply") && (!args.includes("--confirm-subject") || value("--confirm-subject") !== subject)) throw new Error("Confirm the exact Logto User ID before applying");
@@ -22,6 +23,11 @@ async function main() {
       if (!user || user.disabled || user.removedAt) throw new Error("Target must be an existing active account");
       const owner = user.accounts.some((a) => a.provider === "ncu-portal" && a.providerAccountId === OWNER_IDENTIFIER) || (user.globalRole === "SUPER_ADMIN" && user.email === OWNER_EMAIL);
       if (owner !== (!!process.env.LOGTO_OWNER_SUB && subject === process.env.LOGTO_OWNER_SUB)) throw new Error("Owner binding does not match verified LOGTO_OWNER_SUB");
+      if (args.includes("--unlink")) {
+        const result = await unlinkLogtoAccount(tx, userId, subject, args.includes("--apply"));
+        console.log(result.applied ? "Logto unlinked and all target sessions revoked. User, roles, DNS and unit data preserved." : result.linked ? "Dry run passed. Exact binding found; no changes made." : "No matching Logto binding exists; no changes made.");
+        return;
+      }
       if (user.accounts.some((a) => a.provider === "logto")) throw new Error("Target already has a Logto binding; nothing overwritten");
       if (await tx.account.findUnique({ where: { provider_providerAccountId: { provider: "logto", providerAccountId: subject } } })) throw new Error("Logto subject already belongs to an account; nothing overwritten");
       console.log(`Target: ${user.name || "No name"} (${user.id}); current role: ${user.globalRole}`);

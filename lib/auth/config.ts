@@ -98,16 +98,17 @@ const config: NextAuthConfig = {
           if (linked) {
             if (linked.user.disabled || linked.user.removedAt) return denyLogtoLogin("account_inactive");
             const ownerTarget = accountOwnerIdentifier(linked.user.accounts.filter((a) => a.provider !== "logto")) === OWNER_IDENTIFIER || (linked.user.globalRole === "SUPER_ADMIN" && linked.user.email === OWNER_EMAIL);
-            if ((identity.id === ownerSub) !== ownerTarget) return denyLogtoLogin("owner_binding_mismatch");
+            if (ownerTarget && identity.id !== ownerSub) return denyLogtoLogin("owner_binding_mismatch");
             const displayName = identity.hasName ? identity.name : linked.user.name || identity.name;
             failureStage = "profile_update_failed";
             await db.user.update({ where: { id: linked.user.id }, data: { portalEmail: identity.portalEmail, name: displayName } });
             user.name = displayName;
             return true;
           }
-          // Existing accounts are linked by an operator, never by an email claim.
-          if (identity.id === ownerSub) return denyLogtoLogin("owner_link_required");
-          const existing = await db.user.findFirst({ where: { OR: [{ email: identity.email }, ...(identity.portalEmail ? [{ email: identity.portalEmail }, { portalEmail: identity.portalEmail }] : [])] } });
+          // A new subject gets an independent USER account, even if its verified email
+          // matches an existing user. Never inherit roles or data through email claims.
+          // Keep synthetic-email collisions fail-closed (e.g. an unlinked old identity).
+          const existing = await db.user.findFirst({ where: { email: identity.email } });
           return existing ? denyLogtoLogin("account_link_required") : true;
         } catch { return denyLogtoLogin(failureStage); }
       }

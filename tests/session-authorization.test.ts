@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Session } from "next-auth";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/config", () => ({ auth: vi.fn() }));
-vi.mock("@/lib/db/client", () => ({ db: {} }));
+vi.mock("@/lib/db/client", () => ({ db: { user: { findUnique: vi.fn() } } }));
+import { db } from "@/lib/db/client";
 vi.mock("@/lib/users/demo", () => ({ demoUsers: vi.fn() }));
 import { auth } from "@/lib/auth/config";
 import { demoUsers, type DemoUser } from "@/lib/users/demo";
@@ -25,4 +26,13 @@ it("rejects legacy/password sessions in production before querying permissions",
   vi.stubEnv("NODE_ENV", "production");
   vi.stubEnv("AUTH_PASSWORD_LOGIN_ENABLED", "false");
   await expect(requireActor()).rejects.toMatchObject({ status: 401 });
+});
+
+it("never promotes a new USER merely because its Logto subject matches the owner env", async () => {
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("DATABASE_URL", "postgresql://test/db");
+  vi.stubEnv("LOGTO_OWNER_SUB", "owner-subject");
+  vi.mocked(auth as () => Promise<Session | null>).mockResolvedValue({ loginProvider: "logto", user: { id: "independent-user", email: "synthetic@accounts.invalid", globalRole: "SUPER_ADMIN" }, expires: "2099-01-01" });
+  vi.mocked(db.user.findUnique).mockResolvedValue({ id: "independent-user", email: "synthetic@accounts.invalid", globalRole: "USER", accounts: [{ provider: "logto", providerAccountId: "owner-subject" }], zonePermissions: [], groupMemberships: [] } as never);
+  expect(await requireActor()).toMatchObject({ globalRole: "USER", portalIdentifier: null, zoneRoles: {} });
 });

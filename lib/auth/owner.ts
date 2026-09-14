@@ -2,9 +2,9 @@ import type { Actor, GlobalRole } from "@/lib/dns/types";
 
 export const OWNER_EMAIL = "fearnot@ce.ncu.edu.tw";
 export const OWNER_IDENTIFIER = "115502532";
-export function accountOwnerIdentifier(accounts: { provider?: string; providerAccountId: string }[] = []) {
+export function accountOwnerIdentifier(accounts: { provider?: string; providerAccountId: string }[] = [], role?: GlobalRole) {
   const logto = accounts.find((account) => account.provider === "logto");
-  if (logto && process.env.LOGTO_OWNER_SUB && logto.providerAccountId === process.env.LOGTO_OWNER_SUB) return OWNER_IDENTIFIER;
+  if (role === "SUPER_ADMIN" && logto && process.env.LOGTO_OWNER_SUB && logto.providerAccountId === process.env.LOGTO_OWNER_SUB) return OWNER_IDENTIFIER;
   return accounts.find((account) => !account.provider || account.provider === "ncu-portal")?.providerAccountId ?? null;
 }
 export const isOwnerEmail = (email: string) => email.trim().toLowerCase() === OWNER_EMAIL;

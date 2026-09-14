@@ -31,7 +31,7 @@ AUTH_PASSWORD_LOGIN_ENABLED=true
 
 ## 既有帳號綁定
 
-新使用者可以首次登入建立一般帳號；舊帳號必須人工核對身分後綁定，不依相同 email 自動合併。最高帳號必須綁定既有 owner 使用者，不能由登入 claims 自動建立最高管理員。
+任何新的 Logto subject 都可以首次登入建立獨立的一般帳號，即使 verified email 與舊使用者相同。使用相同 subject 再次登入會回到同一帳號；停用／移除帳號仍拒絕登入。不依相同 email 自動合併、繼承 DNS 或權限。若要沿用既有資料，必須人工核對身分後綁定。`LOGTO_OWNER_SUB` 本身不授予最高角色；未綁定的最高 subject 也只會建立一般帳號，最高權限需既有資料庫角色與身分對應同時符合。
 
 新版 tools image 建好後，在 VM 的 Bash 使用下列共用指令（不依賴 `/opt/dns-manager/.git`）：
 
@@ -62,14 +62,26 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
 
 工具只新增 Logto Account 綁定並記錄稽核，不改角色、姓名、密碼或 DNS／單位關聯；拒絕停用帳號、重複綁定與 owner sub 不符。舊 Portal Account 保留作為歷史對照。若已誤建重複 Logto 使用者，不自動刪除或合併，需另行核對資料。
 
+### 暫時解除綁定以測試一般登入
+
+部署含 `scripts/unlink-logto-user.ts` 的新版 tools image 後，使用與上方相同的 Compose 參數，將腳本改成 `scripts/unlink-logto-user.ts`：
+
+```bash
+# 先 dry run；使用同一組經核對的既有 user ID 和 Logto subject。
+./node_modules/.bin/tsx scripts/unlink-logto-user.ts --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID
+# 確認後套用。
+./node_modules/.bin/tsx scripts/unlink-logto-user.ts --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID --apply --confirm-subject VERIFIED_LOGTO_USER_ID
+```
+
+工具僅刪除指定 user ID／subject 的 Logto Account 並撤銷該使用者所有登入 session，記錄稽核；保留使用者、角色、密碼、舊 Portal 綁定及 DNS／單位資料。先確認仍能用另一個管理員或既有帳密進入管理功能；工具不建立或重設密碼。若本來未綁定則不變更資料。之後該 subject 會建立獨立 USER 帳號，不取得原管理權限。測試完成後不能直接將已被測試帳號使用的 subject 綁回最高帳號，需核對測試帳號資料再另行處理；不得自動合併或刪除。
+
 ## 登出與驗收
 
 ### 登入遭拒的排查
 
 查看 `docker logs --since 10m --tail 150 dns-manager-web-1` 中的 `logto-signin-denied`：
 
-- `owner_link_required`：env 指定的最高帳號尚未綁定，依上方「既有帳號綁定」先列出帳號、dry run，核對後才 apply。
-- `account_link_required`：既有帳號的 email 有衝突，需核對並人工綁定；不自動合併。
+- `account_link_required`：同一 subject 的內部合成 email 已存在，但缺少 Account 綁定，需核對並人工處理；一般真實 email 相同不阻擋登入。
 - `owner_binding_mismatch`：最高帳號身分與既有綁定不一致，核對 Logto User ID、`LOGTO_OWNER_SUB` 與目標使用者。
 - `account_inactive`：帳號停用或已移除，不得繞過狀態檢查。
 - `owner_not_configured`：執行中的容器未取得 `LOGTO_OWNER_SUB`，檢查 env／Compose 並重新建立容器。

@@ -63,18 +63,19 @@ it("rejects old JWTs and preserves Portal provenance on new JWTs", async () => {
   }
   expect(await jwt({ token: {}, user: { id: "owner", globalRole: "SUPER_ADMIN" }, account: { type: "oauth", providerAccountId: "owner-test", provider: "logto" }, profile: { sub: "owner-test" } })).toMatchObject({ loginProvider: "logto", userId: "owner", globalRole: "SUPER_ADMIN" });
 });
-it("requires explicit owner linking and rejects subject mismatches", async () => {
+it("allows the owner subject as an independent USER but preserves explicit owner linking", async () => {
   const config = await configuration();
   const signIn = config.callbacks!.signIn!;
   mocks.accountFind.mockResolvedValue(null);
-  expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "owner-test" }, profile: { sub: "owner-test", email: "fearnot@ce.ncu.edu.tw", email_verified: true } })).toBe(false);
+  expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "owner-test" }, profile: { sub: "owner-test", email: "fearnot@ce.ncu.edu.tw", email_verified: true } })).toBe(true);
   expect(mocks.accountCreate).not.toHaveBeenCalled();
   expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "one" }, profile: { sub: "another" } })).toBe(false);
   mocks.accountFind.mockResolvedValue({ user: { id: "ordinary", email: "u@example.com", accounts: [], globalRole: "USER", disabled: false } });
-  expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "owner-test" }, profile: { sub: "owner-test" } })).toBe(false);
+  expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "owner-test" }, profile: { sub: "owner-test" } })).toBe(true);
   mocks.accountFind.mockResolvedValue({ user: { id: "owner", email: "fearnot@ce.ncu.edu.tw", accounts: [{ provider: "ncu-portal", providerAccountId: "115502532" }], globalRole: "SUPER_ADMIN", disabled: false } });
   expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "owner-test" }, profile: { sub: "owner-test", name: "管理者姓名" } })).toBe(true);
   expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "owner" }, data: { name: "管理者姓名", portalEmail: null } });
+  expect(await signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "wrong-sub" }, profile: { sub: "wrong-sub" } })).toBe(false);
 });
 it("keeps the Logto ID token out of the public session", async () => {
   const config = await configuration();
@@ -99,12 +100,15 @@ it("refreshes Portal display email and account name without changing the login e
   expect(await signIn({ user: {}, account: { type: "oauth", provider: "logto", providerAccountId: "account" }, profile: { sub: "account" } })).toBe(true);
   expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { portalEmail: null, name: "未提供姓名" } });
 });
-it("does not merge an existing administrator account just by matching email", async () => {
+it("ignores matching real email and only rejects a synthetic identity collision", async () => {
   const config = await configuration();
   mocks.accountFind.mockResolvedValue(null);
   mocks.findFirst.mockResolvedValue({ id: "admin", globalRole: "ADMIN", disabled: false });
   expect(await config.callbacks!.signIn!({ user: {}, account: { type: "oauth", provider: "logto", providerAccountId: "someone" }, profile: { sub: "someone", email: "admin@example.com", email_verified: true } })).toBe(false);
   expect(mocks.accountCreate).not.toHaveBeenCalled();
+  expect(mocks.findFirst).toHaveBeenCalledWith({ where: { email: expect.stringMatching(/^logto-[a-f0-9]+@accounts.invalid$/) } });
+  mocks.findFirst.mockResolvedValue(null);
+  expect(await config.callbacks!.signIn!({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "someone" }, profile: { sub: "someone", email: "admin@example.com", email_verified: true } })).toBe(true);
 });
 it("keeps disabled-user checks synchronous and defers only last-login bookkeeping", async () => {
   const config = await configuration();
@@ -124,8 +128,7 @@ it("reports safe denial reasons without leaking identity or database errors", as
   const signIn = config.callbacks!.signIn!;
   const attempt = (sub = "owner-test") => signIn({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: sub }, profile: { sub, email: "private@example.com", email_verified: true } });
   mocks.accountFind.mockResolvedValue(null);
-  expect(await attempt()).toBe(false);
-  expect(log).toHaveBeenLastCalledWith(expect.stringContaining('"reason":"owner_link_required"'));
+  expect(await attempt()).toBe(true);
   mocks.findFirst.mockResolvedValue({ id: "existing" });
   expect(await attempt("ordinary")).toBe(false);
   expect(log).toHaveBeenLastCalledWith(expect.stringContaining('"reason":"account_link_required"'));
