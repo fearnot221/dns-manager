@@ -23,7 +23,7 @@ LOGTO_OWNER_SUB=LogtoConsole中核對的最高帳號UserID
 AUTH_PASSWORD_LOGIN_ENABLED=true
 ```
 
-最高帳號的 User ID 從 **Logto Console → Users → 帳號详情 → User ID** 複製，不能猜測是 `115502532`。舊 NCU Portal identifier／學號和 Logto sub 是不同的命名空間。未填 owner sub 時，帶有 Logto secret 的 production 啟動會拒絕，以免切換後管理權限遺失。Secret 尚未設定時不顯示 Portal 登入按鈕；帳密測試登入保持可用。
+最高帳號的 User ID 從 **Logto Console → Users → 帳號详情 → User ID** 複製，不能猜測是 `115502532`。舊 NCU Portal identifier／學號和 Logto sub 是不同的命名空間。未填 owner sub 時，帶有 Logto secret 的 production 啟動會拒絕，以免切換後管理權限遺失。Portal 登入按鈕固定保留；Secret 尚未設定時停用按鈕並顯示原因，帳密測試登入保持可用。
 
 舊 `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、`NCU_OWNER_IDENTIFIER` 不再用於登入；新版本 Docker Compose 已傳遞 Logto 變數。保留 `AUTH_SECRET`、資料庫、既有內部 email 與原使用者 ID，不重建資料庫或重新 seed 覆寫帳號。
 
