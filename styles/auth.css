@@ -10,7 +10,13 @@
 .login-copy h1 { font-size: 1.625rem; line-height: 1.4; }
 .login-copy > p:last-child { margin-top: 8px; color: var(--muted); font-size: .9375rem; }
 .credentials-form { display: grid; gap: 20px; }
-.credentials-form > label { display: grid; gap: 8px; font-size: .875rem; font-weight: 550; }
+.portal-sign-in { display: grid; gap: 12px; }
+.portal-sign-in > .button { width: 100%; min-height: 48px; white-space: normal; }
+.credentials-form > label, .login-field { display: grid; gap: 8px; font-size: .875rem; font-weight: 550; }
+.password-visibility { display: grid; place-items: center; flex: 0 0 44px; height: 44px; margin-right: -12px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); }
+.password-visibility:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.password-visibility:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.login-input > svg, .login-error > svg { flex-shrink: 0; }
 .login-input { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--panel); color: var(--muted); transition: border-color .15s,box-shadow .15s; }
 .login-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb,var(--accent) 10%,transparent); }
 .login-input input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 1rem; }
