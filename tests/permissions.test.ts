@@ -1,8 +1,16 @@
 import { describe,expect,it } from "vitest";
-import { canDeleteRecord, canEditRecordType, canManagePermissions, canViewZone } from "@/lib/auth/permissions";
+import { canDeleteRecord, canEditRecordType, canManagePermissions, canViewZone, canReviewDnsRequest } from "@/lib/auth/permissions";
 import type { Actor } from "@/lib/dns/types";
 const actor=(role:"VIEWER"|"EDITOR"|"ADMIN"):Actor=>({id:"u",email:"user@example.com",globalRole:"USER",zoneRoles:{"example.com.":role}});
 describe("permission engine",()=>{
+  it("keeps unit review system-admin-only and personal review zone-scoped", () => {
+    const request = { zoneName: "example.com." };
+    expect(canReviewDnsRequest(actor("ADMIN"), request)).toBe(true);
+    expect(canReviewDnsRequest(actor("ADMIN"), { ...request, unitId: "unit" })).toBe(false);
+    expect(canReviewDnsRequest(actor("ADMIN"), { zoneName: "other.test." })).toBe(false);
+    expect(canReviewDnsRequest(actor("EDITOR"), request)).toBe(false);
+    expect(canReviewDnsRequest({ ...actor("VIEWER"), globalRole: "ADMIN" }, { ...request, unitId: "unit" })).toBe(true);
+  });
   it("isolates unassigned zones",()=>{expect(canViewZone(actor("ADMIN"),"secret.example.")).toBe(false);expect(canViewZone(actor("VIEWER"),"example.com.")).toBe(true);});
   it("keeps viewers read-only",()=>expect(canEditRecordType(actor("VIEWER"),"example.com.","A")).toBe(false));
   it("allows editors to edit normal types",()=>expect(canEditRecordType(actor("EDITOR"),"example.com.","A")).toBe(true));

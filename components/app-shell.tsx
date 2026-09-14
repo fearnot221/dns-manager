@@ -4,7 +4,7 @@ import { ClipboardCheck, Users, FileCheck2, FilePlus2, Globe2, LogOut, Menu, Mon
 import { Brand } from "@/components/brand";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { logoutAction } from "@/lib/auth/logout-action";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { workspaceNavigation, isNavActive, type NavIcon } from "@/lib/client/navigation";
@@ -62,7 +62,7 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
     {mobile && <button type="button" className="navigation-backdrop" tabIndex={-1} aria-label="關閉導覽選單" onClick={() => setMobile(false)} />}
     <aside ref={sidebar} id="workspace-navigation" className={`sidebar ${mobile ? "mobile-open" : ""}`}>
       <div className="brand"><Brand /><button className="icon-button mobile-close" onClick={() => setMobile(false)} aria-label="關閉導覽選單"><X size={20} /></button></div>
-      <p className="nav-label">{admin ? "管理員工作區" : "個人工作區"}</p>
+      <p className="nav-label">{systemAdmin ? "系統管理工作區" : admin ? "網域管理工作區" : "個人工作區"}</p>
       <nav className="nav" aria-label="工作區導覽">
         {groups.map((group) => <details className="nav-group" key={group.id} open>
           <summary>{group.label}<ChevronDown size={15} aria-hidden="true" /></summary>
@@ -77,8 +77,8 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
         {demo && <div className="demo-label"><Monitor size={15} /><span>Local demo</span></div>}
         <div className="account-panel">
           <div className="avatar">{identity.name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</div>
-          <div><strong title={identity.name}>{identity.name}</strong><span title={identity.email}>{identity.email}</span><small>{admin ? "管理員" : "使用者"}</small></div>
-          <button className="icon-button" data-leave-workspace onClick={() => signOut({ callbackUrl: "/login" })} aria-label="登出" title="登出"><LogOut size={17} /></button>
+          <div><strong title={identity.name}>{identity.name}</strong><span title={identity.email}>{identity.email}</span><small>{systemAdmin ? "系統管理員" : admin ? "網域管理員" : "使用者"}</small></div>
+          <form action={logoutAction}><button type="submit" className="icon-button" data-leave-workspace aria-label="登出" title="登出"><LogOut size={17} /></button></form>
         </div>
       </div>
     </aside>

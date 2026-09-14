@@ -55,8 +55,8 @@
 .dns-fields { display: grid; grid-template-columns: 1.2fr 1fr .65fr; gap: 16px; }
 .dns-fields .content-field { grid-column: span 2; }
 .dns-fields .purpose-field { grid-column: 1/-1; }
-.dns-application input, .dns-application select { min-height: 44px; background: var(--panel); font-size: 1rem; border-radius: 7px; padding: 8px 10px; scroll-margin-block: 90px 130px; }
-.dns-application input:focus, .dns-application select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dns-application input { min-height: 44px; background: var(--panel); font-size: 1rem; border-radius: 7px; padding: 8px 10px; scroll-margin-block: 90px 130px; }
+.dns-application input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .dns-application label { font-weight: 450; align-content: start; }
 .dns-application label small { font-size: .8125rem; }
 .dns-application input:disabled { opacity: .65; }

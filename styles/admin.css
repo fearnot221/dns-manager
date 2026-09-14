@@ -1,7 +1,6 @@
 .admin-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding: 16px; margin-bottom: 18px; }
 .admin-toolbar .filter-input { flex: 1 1 260px; }
 .admin-toolbar label { display: grid; gap: 5px; color: var(--muted); font-size: .875rem; }
-.admin-toolbar select { background: var(--panel); border: 1px solid var(--border-strong); border-radius: 8px; padding: 9px 12px; min-height: 42px; color: var(--ink); }
 .admin-toolbar + .request-notice { margin-bottom: 20px; }
 .users-toolbar { align-items: center; padding-inline: 0; }
 .users-toolbar-hint { flex-basis: 100%; font-size: .8125rem; }

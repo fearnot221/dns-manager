@@ -47,11 +47,14 @@ describe("unit API boundaries", () => {
     expect((await POST(req({ action: "create", name: "Lab" }))).headers.get("Cache-Control")).toBe("no-store");
   });
   it("omits RRset snapshots and server connection details from shared request responses", async () => {
-    vi.mocked(db.dnsRecordRequest.findMany).mockResolvedValue([{ id: "r", userId: "user", unitId: "unit-1", status: "PENDING", zoneName: "example.com.", expectedRRSet: { content: "unrelated-private-record" }, connectionScope: "internal-server" }] as never);
+    vi.mocked(db.dnsRecordRequest.findMany).mockResolvedValue([{ id: "r", userId: "user", user: { id: "user", name: "王小明", email: "opaque@accounts.invalid", portalEmail: "student@example.com" }, unitId: "unit-1", status: "PENDING", zoneName: "example.com.", expectedRRSet: { content: "unrelated-private-record" }, connectionScope: "internal-server" }] as never);
     const response = await requests();
     const text = await response.text();
     expect(text).not.toContain("unrelated-private-record"); expect(text).not.toContain("internal-server");
     expect(JSON.parse(text).requests[0].canReview).toBe(false);
+    expect(JSON.parse(text).requests[0].user).toEqual({ id: "user", name: "王小明", email: "student@example.com" });
+    expect(text).not.toContain("@accounts.invalid");
+    expect(text).not.toContain("portalEmail");
     expect(vi.mocked(db.dnsRecordRequest.findMany).mock.calls[0][0]?.where).toMatchObject({ OR: [{ userId: "user" }, { unit: { members: { some: { userId: "user" } } } }] });
     vi.mocked(requireActor).mockResolvedValue({ id: "scoped-admin", email: "scoped@example.com", globalRole: "USER", zoneRoles: { "example.com.": "ADMIN" } });
     expect((await (await requests()).json()).requests[0].canReview).toBe(false);

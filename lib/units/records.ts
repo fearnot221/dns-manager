@@ -14,7 +14,7 @@ import { assertApplicationPolicy } from "@/lib/requests/policy";
 export async function unitDetail(actor: Actor, unitId: string) {
   requireUnitDatabase();
   const role = await unitAccess(actor, unitId, "view");
-  const unit = await db.dnsUnit.findUnique({ where: { id: unitId }, select: { id: true, name: true, members: { select: { userId: true, role: true, user: { select: { studentId: true, disabled: true, accounts: { where: { provider: "ncu-portal" }, select: { providerAccountId: true } } } } } } } });
+  const unit = await db.dnsUnit.findUnique({ where: { id: unitId }, select: { id: true, name: true, members: { select: { userId: true, role: true, user: { select: { name: true, studentId: true, disabled: true } } } } } });
   if (!unit) throw new ApiError("找不到單位。", 404);
   const saved = await db.dnsRecordMetadata.findMany({ where: { unitId } });
   const scope = await connectionScope();
@@ -31,7 +31,7 @@ export async function unitDetail(actor: Actor, unitId: string) {
     return live && rrset ? [{ id: record.id, zoneName: record.zoneName, recordName: record.recordName, recordType: record.recordType, content: record.content, ttl: rrset.ttl, disabled: live.disabled, purpose: record.purpose, expectedHash: rrsetHash(rrset) }] : [];
   });
   // Do not return emails, private applicant contact fields, or other units' RRset values.
-  return { unit: { id: unit.id, name: unit.name }, role, members: unit.members.map((m) => ({ userId: m.userId, role: m.role, label: m.user.studentId || m.user.accounts[0]?.providerAccountId || `未綁定 Portal（${m.userId}）`, disabled: m.user.disabled })), records, recordsError: unavailable.length ? `有 ${unavailable.length} 個網域暫時無法取得 DNS，清單可能不完整；成員管理不受影響。` : "" };
+  return { unit: { id: unit.id, name: unit.name }, role, members: unit.members.map((m) => ({ userId: m.userId, role: m.role, label: m.user.name || m.user.studentId || "未提供姓名", studentId: m.user.studentId, disabled: m.user.disabled })), records, recordsError: unavailable.length ? `有 ${unavailable.length} 個網域暫時無法取得 DNS，清單可能不完整；成員管理不受影響。` : "" };
 }
 
 export async function requestUnitChange(actor: Actor, unitId: string, input: { recordId: string; content: string; purpose: string; expectedHash: string }) {

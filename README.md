@@ -8,7 +8,7 @@ A production-oriented PowerDNS Authoritative management platform built with Next
 
 測試期間保留帳密與 Portal 登入；`AUTH_PASSWORD_LOGIN_ENABLED=true`（預設）允許已有密碼的測試帳號登入，測試完成可設為 `false` 關閉。local demo 仍保留測試登入。請於 Portal 應用設定授權 `identifier student-id email`。使用者管理以電子郵件為主，顯示名稱採 Portal identifier（帳密使用者採登入帳號），不使用暱稱或學號取代帳號。Portal 信箱另存 User.portalEmail，僅供顯示、不參與帳號連結或權限判斷；未授權時標示未提供，既有使用者重新登入後更新。管理頁可編輯最多 1000 字備註，備註不影響權限。
 
-受保護的最高權限綁定 Portal identifier `115502532`，不是 studentId 顯示值或電子郵件。`NCU_OWNER_IDENTIFIER` 請同步設為 `115502532`。原受信任初始化帳號的內部電子郵件與帳號 ID 保留，用於首次連結及既有資料關聯；不能透過修改備註、學號或 email 取得最高權限。新帳號透過 Portal 登入建立，不再提供後台手動建立帳密功能。
+登入已改接 Logto，前端仍顯示 NCU Portal。最高帳號須先核對 Logto User ID（sub），設定 `LOGTO_OWNER_SUB` 並綁定既有 owner 帳號；不得猜測 sub 等於學號 `115502532`。不能透過姓名、備註、學號或 email 提權。詳見 [Logto 切換指南](deploy/LOGTO.md)。
 
 部署須先執行 Prisma migration（Docker 部署的 migrate 服務會執行），新增 User.studentId、User.note 與 User.portalEmail。既有 Portal 帳號下次登入會更新學號，無需刪除或重建帳號；歷史稽核原始資料不會被改寫。
 
@@ -119,7 +119,7 @@ Open `http://localhost:3000`. Configure the database, seed the protected owner a
 | `DATABASE_URL` | Production | PostgreSQL connection string |
 | `AUTH_SECRET` / `NEXTAUTH_SECRET` | Yes | The same random 32+ byte signing secret |
 | `NEXTAUTH_URL` | Yes | Public app origin |
-| `NCU_PORTAL_CLIENT_ID`, `NCU_PORTAL_CLIENT_SECRET`, `NCU_OWNER_IDENTIFIER` | Live login | Portal application credentials and verified owner Portal username |
+| `AUTH_LOGTO_ID`, `AUTH_LOGTO_SECRET`, `LOGTO_OWNER_SUB` | Live login | Logto application credentials and operator-verified owner User ID |
 | `OWNER_INITIAL_PASSWORD` | One-time seed | Unique 16+ character password for the protected owner |
 | `PDNS_API_URL`, `PDNS_API_KEY` | Live mode | Server-side PowerDNS credentials |
 | `PDNS_SERVER_ID` | No | Defaults to `localhost` |
@@ -144,10 +144,10 @@ Sessions have a server-enforced 15-minute inactivity deadline, stored per login 
 Anyone with a valid NCU Portal identity and verified contact email can sign in; no allowlist or advance user creation is needed. Register the callback:
 
 ```text
-https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/ncu-portal
+https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/logto
 ```
 
-Configure all three NCU variables and `AUTH_URL`, then recreate the web container. Password login remains available for testing; set `AUTH_PASSWORD_LOGIN_ENABLED=false` to disable it. Google is not supported. New Portal accounts always default to `USER`, never to administrator based on email/domain or Portal role claims. Only the protected owner can manually grant ADMIN through user management; existing roles and suspended-account checks remain enforced. The owner is bound by the operator-verified Portal identifier. Existing accounts are not silently merged by email; sign in through Portal first, then assign the role to the resulting account. The former allowlist page/API are retired. Old membership data and historical audit events are preserved, but have no effect on login.
+Configure all three NCU variables and `AUTH_URL`, then recreate the web container. Password login remains available for testing; set `AUTH_PASSWORD_LOGIN_ENABLED=false` to disable it. Google is not supported. New Portal accounts always default to `USER`, never to administrator based on email/domain or Portal role claims. Only the protected owner can manually grant ADMIN through user management; existing roles and suspended-account checks remain enforced. The owner is bound through the operator-verified Logto User ID and an explicitly linked existing owner account. Existing accounts require explicit operator linking before signing in through Logto; they are never silently merged by email. New accounts start as USER. The former allowlist page/API are retired. Old membership data and historical audit events are preserved, but have no effect on login.
 
 PowerDNS reads only `PDNS_API_URL` (ending in `/api/v1`), `PDNS_API_KEY` and `PDNS_SERVER_ID`. Move previously web-entered settings to the server environment before upgrading. Existing encrypted database settings are retained but ignored. Inventory metadata remains scoped to the API URL/server ID; keep those unchanged to retain its associations. Unscoped legacy applications are not used to infer ownership on live servers.
 
@@ -192,7 +192,7 @@ docker compose --env-file /etc/dns-manager/app.env --profile maintenance run --r
 
 The standalone image runs non-root with a read-only filesystem and writable temporary/cache paths. PostgreSQL stays on an internal Docker network. Web binds only to host loopback; terminate TLS at a trusted reverse proxy. PowerDNS is external and must be routed over a firewall-restricted private path. Compose does not provision a PowerDNS server. Startup requires HTTPS AUTH_URL, persistent session/encryption secrets and a database. Production never uses demo account credentials.
 
-NCU Portal is enabled only when DATABASE_URL, NCU_PORTAL_CLIENT_ID, NCU_PORTAL_CLIENT_SECRET and an operator-verified NCU_OWNER_IDENTIFIER are configured. It uses OAuth authorization code, Basic client authentication and state checks; delegated login is rejected. Existing accounts are not silently merged by email. Client secrets and Portal access tokens are never delivered to application pages. Local demo keeps Portal disabled.
+The NCU Portal button now uses Logto OIDC (ES384, PKCE, state and nonce). Configure AUTH_LOGTO_SECRET and a verified LOGTO_OWNER_SUB before production activation; AUTH_LOGTO_ID defaults to the registered application ID. Existing accounts require operator-verified binding, never automatic email merging. See [Logto deployment and migration](deploy/LOGTO.md). Local demo remains disabled; credentials remain available for testing.
 
 ## Security notes
 

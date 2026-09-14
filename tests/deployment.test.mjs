@@ -52,7 +52,7 @@ describe('production startup guard', () => {
     for (const bad of [{ DATABASE_URL: '' }, { AUTH_URL: 'http://dns.example.edu.tw' }, { AUTH_SECRET: 'change-me' }, { SETTINGS_ENCRYPTION_KEY: 'short' }, { AUTH_URL: 'https://dns.example.edu.tw/login' }]) expect(() => validateProductionEnvironment({ ...env, ...bad })).toThrow();
   });
   it('requires a complete Portal configuration', () => {
-    expect(() => validateProductionEnvironment({ ...env, NCU_PORTAL_CLIENT_ID: 'test' })).toThrow();
-    expect(() => validateProductionEnvironment({ ...env, NCU_PORTAL_CLIENT_ID: 'test', NCU_PORTAL_CLIENT_SECRET: 'test' })).toThrow();
+    expect(() => validateProductionEnvironment({ ...env, AUTH_LOGTO_SECRET: 'test' })).toThrow();
+    expect(() => validateProductionEnvironment({ ...env, AUTH_PASSWORD_LOGIN_ENABLED: 'false' })).toThrow();
   });
 });

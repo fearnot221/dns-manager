@@ -3,6 +3,7 @@ import { applicationZoneNames } from "@/lib/requests/zone-access";
 import { powerdns } from "@/lib/powerdns/client";
 import { ApplicationInputError, prepareApplication } from "@/lib/requests/application";
 import { saveApplication } from "@/lib/requests/save-application";
+import { canReviewDnsRequest } from "@/lib/auth/permissions";
 import { requireActor } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { apiError, ApiError } from "@/lib/api/respond";
@@ -20,7 +21,7 @@ export async function GET() {
         scope: isSuperAdmin || managedZones.length ? "ADMIN" : "USER",
         requests: requests.map((item) => ({
           ...item,
-          canReview: item.status === "PENDING" && (isSuperAdmin || managedZones.includes(item.zoneName)),
+          canReview: item.status === "PENDING" && canReviewDnsRequest(actor, item),
         })),
       });
     }
@@ -32,7 +33,7 @@ export async function GET() {
     const requests = await db.dnsRecordRequest.findMany({
       where,
       include: {
-        user: { select: { id: true, studentId: true, accounts: { where: { provider: "ncu-portal" }, select: { providerAccountId: true } } } },
+        user: { select: { id: true, name: true, email: true, portalEmail: true } },
         reviewer: { select: { name: true, email: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -41,7 +42,8 @@ export async function GET() {
       scope: isSuperAdmin || managedZones.length ? "ADMIN" : "USER",
       requests: requests.map(({ expectedRRSet: _snapshot, connectionScope: _scope, ...item }) => {
         void _snapshot; void _scope;
-        return { ...item, canReview: item.status === "PENDING" && (isSuperAdmin || (!item.unitId && managedZones.includes(item.zoneName))) };
+        const { portalEmail, ...user } = item.user;
+        return { ...item, user: { ...user, email: portalEmail || (user.email.endsWith("@accounts.invalid") ? null : user.email) }, canReview: item.status === "PENDING" && canReviewDnsRequest(actor, item) };
       }),
     });
   } catch (error) {

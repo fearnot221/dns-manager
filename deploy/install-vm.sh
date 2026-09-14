@@ -207,6 +207,6 @@ echo '3. Owner: fearnot@ce.ncu.edu.tw; Portal users sign up automatically as USE
 echo '   Password login is temporarily enabled; set AUTH_PASSWORD_LOGIN_ENABLED=false after testing.'
 echo '4. Set Portal/PowerDNS credentials in /etc/dns-manager/app.env; then run:'
 echo '   sudo /opt/dns-manager-deploy/update-now.sh'
-echo 'Portal callback: https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/ncu-portal'
+echo 'Portal callback: https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/logto'
 echo 'Deployment log: sudo journalctl -u dns-manager-webhook -f'
 echo 'A main push triggers fetch/build -> compose down (no -v) -> compose up -> healthcheck.'

@@ -5,7 +5,7 @@ export function demoLoginEnabled(env: NodeJS.ProcessEnv = process.env) {
 
 export function loginProviderAllowed(provider: unknown, env: NodeJS.ProcessEnv = process.env) {
   if (provider === "credentials") return passwordLoginEnabled(env);
-  return !demoLoginEnabled(env) && provider === "ncu-portal";
+  return !demoLoginEnabled(env) && provider === "logto";
 }
 
 export function passwordLoginEnabled(env: NodeJS.ProcessEnv = process.env) {

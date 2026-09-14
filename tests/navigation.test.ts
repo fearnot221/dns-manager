@@ -25,4 +25,10 @@ describe("workspace navigation", () => {
     expect(new Set(groups.map((group) => group.id)).size).toBe(groups.length);
     expect(new Set(routes).size).toBe(routes.length);
   });
+  it("uses management inbox labels only for system admins", () => {
+    expect(items(false, false).find((item) => item.href === "/contact")?.label).toBe("聯絡管理員");
+    expect(items(true, false).find((item) => item.href === "/contact")?.label).toBe("聯絡管理員");
+    expect(items(true, true).find((item) => item.href === "/contact")?.label).toBe("使用者訊息");
+    expect(items(true, true).find((item) => item.href === "/inspections")?.label).toBe("清查回覆管理");
+  });
 });

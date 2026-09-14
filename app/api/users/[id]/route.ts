@@ -2,7 +2,7 @@ import { auditMutation } from "@/lib/audit/mutation";
 import { accountPresentation } from "@/lib/users/presentation";
 import { z } from "zod";
 import { requireActor } from "@/lib/auth/session";
-import { isGlobalAdmin, isOwner, mayManageUser, OWNER_IDENTIFIER } from "@/lib/auth/owner";
+import { accountOwnerIdentifier, isGlobalAdmin, isOwner, mayManageUser, OWNER_IDENTIFIER } from "@/lib/auth/owner";
 import { db } from "@/lib/db/client";
 import { demoUsers } from "@/lib/users/demo";
 import { isLocalDemo } from "@/lib/db/local-store";
@@ -26,10 +26,10 @@ async function PATCHHandler(request: Request, { params }: { params: Promise<{ id
       before = { account: user.portalIdentifier || "未綁定 Portal", note: user.note || "", disabled: user.disabled, globalRole: user.globalRole };
     };
     const user = isLocalDemo() ? await demoUsers((users) => { const user = users.find((u) => u.id === id); if (!user) throw new ApiError("找不到使用者。", 404); check({ ...user, portalIdentifier: user.id === "dev-owner" ? "115502532" : user.portalIdentifier }); Object.assign(user, input); return { ...user, portalIdentifier: user.id === "dev-owner" ? OWNER_IDENTIFIER : user.portalIdentifier }; }, true) : await db.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({ where: { id }, include: { accounts: { where: { provider: "ncu-portal" }, select: { providerAccountId: true } }, zonePermissions: true, groupMemberships: { include: { group: { include: { zonePermissions: true } } } } } });
+      const user = await tx.user.findUnique({ where: { id }, include: { accounts: { where: { provider: { in: ["ncu-portal", "logto"] } }, select: { provider: true, providerAccountId: true } }, zonePermissions: true, groupMemberships: { include: { group: { include: { zonePermissions: true } } } } } });
       if (!user) throw new ApiError("找不到使用者。", 404);
-      check({ ...user, portalIdentifier: user.accounts[0]?.providerAccountId, zoneAdmin: [...user.zonePermissions, ...user.groupMemberships.flatMap((m) => m.group.zonePermissions)].some((p) => p.role === "ADMIN") });
-      return tx.user.update({ where: { id }, data: input, include: { accounts: { where: { provider: "ncu-portal" }, select: { providerAccountId: true } } } });
+      check({ ...user, portalIdentifier: accountOwnerIdentifier(user.accounts), zoneAdmin: [...user.zonePermissions, ...user.groupMemberships.flatMap((m) => m.group.zonePermissions)].some((p) => p.role === "ADMIN") });
+      return tx.user.update({ where: { id }, data: input, include: { accounts: { where: { provider: { in: ["ncu-portal", "logto"] } }, select: { provider: true, providerAccountId: true } } } });
     }, { isolationLevel: "Serializable" });
     await logAuditEvent({ actor, zone: "", action: "UPDATE_USER", before, after: accountPresentation(user), success: true, request });
     return Response.json({ user: accountPresentation(user) });

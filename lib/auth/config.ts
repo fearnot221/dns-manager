@@ -6,8 +6,8 @@ import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { verifyPassword } from "@/lib/auth/password";
 import { demoUsers } from "@/lib/users/demo";
-import { resolvedGlobalRole } from "@/lib/auth/owner";
-import { ncuPortalProvider, portalConfigured, portalIdentity } from "./ncu-portal";
+import { accountOwnerIdentifier, OWNER_IDENTIFIER, OWNER_EMAIL, resolvedGlobalRole } from "@/lib/auth/owner";
+import { logtoProvider, logtoConfigured, logtoIdentity } from "./logto";
 import { passwordLoginEnabled, loginProviderAllowed } from "./policy";
 import { logAuditEvent } from "@/lib/audit/service";
 import { createIdleSession, readIdleSession, revokeIdleSession } from "./idle-session";
@@ -46,13 +46,13 @@ const config: NextAuthConfig = {
   session: { strategy: "jwt", maxAge: 8 * 60 * 60, updateAge: 60 * 60 },
   providers: [
     ...(passwordLoginEnabled() ? [credentialsProvider] : []),
-    ...(portalConfigured() ? [ncuPortalProvider()] : []),
+    ...(logtoConfigured() ? [logtoProvider()] : []),
   ],
   pages: { signIn: "/login", error: "/login" },
   callbacks: {
     async jwt({ token, user, account, profile }) {
       if (account) token.loginProvider = account.provider;
-      if (account?.provider === "ncu-portal") token.portalEmail = portalIdentity(profile).email;
+      if (account?.provider === "logto") { token.portalEmail = logtoIdentity(profile).portalEmail || undefined; token.logtoIdToken = account.id_token; }
       // Roles come from the database, never Portal claims or an email domain.
       if (!loginProviderAllowed(token.loginProvider)) return null;
       if (user) {
@@ -85,23 +85,25 @@ const config: NextAuthConfig = {
     async signIn({ user, account, profile }) {
       if (!loginProviderAllowed(account?.provider)) return false;
       if (account?.provider === "credentials") return Boolean(user.email);
-      if (account?.provider === "ncu-portal") {
+      if (account?.provider === "logto") {
         try {
-          const identity = portalIdentity(profile);
+          const identity = logtoIdentity(profile);
           if (identity.id !== account.providerAccountId) return false;
-          const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "ncu-portal", providerAccountId: identity.id } }, include: { user: true } });
+          const ownerSub = process.env.LOGTO_OWNER_SUB;
+          const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "logto", providerAccountId: identity.id } }, include: { user: { include: { accounts: true } } } });
           if (linked) {
             if (linked.user.disabled || linked.user.removedAt) return false;
-            await db.user.update({ where: { id: linked.user.id }, data: { studentId: identity.studentId, portalEmail: identity.portalEmail, name: identity.name, ...(identity.owner ? { globalRole: "SUPER_ADMIN" } : {}) } });
+            const ownerTarget = accountOwnerIdentifier(linked.user.accounts.filter((a) => a.provider !== "logto")) === OWNER_IDENTIFIER || (linked.user.globalRole === "SUPER_ADMIN" && linked.user.email === OWNER_EMAIL);
+            if ((identity.id === ownerSub) !== ownerTarget) return false;
+            const displayName = identity.hasName ? identity.name : linked.user.name || identity.name;
+            await db.user.update({ where: { id: linked.user.id }, data: { portalEmail: identity.portalEmail, name: displayName } });
+            user.name = displayName;
             return true;
           }
-          const existing = await db.user.findUnique({ where: { email: identity.email } });
-          if (existing?.disabled || existing?.removedAt) return false;
-          if (!identity.owner) return !existing; // Never silently merge existing accounts by email.
-          if (!existing || existing.globalRole !== "SUPER_ADMIN") return false; // Trusted seed required first.
-          await db.account.create({ data: { userId: existing.id, type: "oauth", provider: "ncu-portal", providerAccountId: identity.id } });
-          await db.user.update({ where: { id: existing.id }, data: { portalEmail: identity.portalEmail, studentId: identity.studentId, name: identity.name } });
-          return true;
+          // Existing accounts are linked by an operator, never by an email claim.
+          if (identity.id === ownerSub) return false;
+          const existing = await db.user.findFirst({ where: { OR: [{ email: identity.email }, ...(identity.portalEmail ? [{ email: identity.portalEmail }, { portalEmail: identity.portalEmail }] : [])] } });
+          return !existing;
         } catch { return false; }
       }
       return false;
@@ -116,7 +118,7 @@ const config: NextAuthConfig = {
       // Informational bookkeeping must not delay the OAuth redirect.
       // Identity checks and account linking above remain synchronous.
       after(async () => {
-        await logAuditEvent({ actor: { id, email, globalRole: user.globalRole ?? "USER", zoneRoles: {} }, zone: "", action: "SIGN_IN", after: { provider: account?.provider ?? "credentials" }, success: true }).catch(() => console.error("[audit] SIGN_IN persistence failed"));
+        await logAuditEvent({ actor: { id, email, name: user.name, globalRole: user.globalRole ?? "USER", zoneRoles: {} }, zone: "", action: "SIGN_IN", after: { provider: account?.provider ?? "credentials" }, success: true }).catch(() => console.error("[audit] SIGN_IN persistence failed"));
         if (process.env.DATABASE_URL && !id.startsWith("dev-")) await db.user.update({ where: { id }, data: { lastLoginAt } })
           .catch(() => console.warn("[auth] lastLoginAt update failed"));
       });
@@ -125,7 +127,7 @@ const config: NextAuthConfig = {
       const token = "token" in message ? message.token : null;
       if (token?.idleSessionId) await revokeIdleSession(token.idleSessionId);
       if (!token?.userId || !token.email) return;
-      const actor = { id: token.userId, email: token.email, globalRole: token.globalRole ?? "USER" as const, zoneRoles: {} };
+      const actor = { id: token.userId, email: token.email, name: token.name, globalRole: token.globalRole ?? "USER" as const, zoneRoles: {} };
       after(async () => { await logAuditEvent({ actor, zone: "", action: "SIGN_OUT", success: true }).catch(() => console.error("[audit] SIGN_OUT persistence failed")); });
     },
   },

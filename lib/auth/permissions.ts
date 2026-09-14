@@ -16,6 +16,9 @@ export function canManagePermissions(actor:Actor, zone:string):boolean { return 
 export function canCreateZone(actor:Actor):boolean { return actor.globalRole === "SUPER_ADMIN"; }
 export function canDeleteZone(actor:Actor):boolean { return actor.globalRole === "SUPER_ADMIN"; }
 export function canAccessZoneManagement(actor:Actor):boolean { return isGlobalAdmin(actor) || Object.values(actor.zoneRoles).includes("ADMIN"); }
+export function canReviewDnsRequest(actor: Actor, request: { zoneName: string; unitId?: string | null }): boolean {
+  return canManageZone(actor, request.zoneName) && (!request.unitId || isGlobalAdmin(actor));
+}
 export function canEditRecordType(actor:Actor, zone:string, type:RecordType):boolean {
   const role=effectiveZoneRole(actor,zone);
   if (role === "SUPER_ADMIN" || role === "ADMIN") return true;

@@ -9,8 +9,8 @@ export function workspaceNavigation(admin: boolean, systemAdmin: boolean): NavGr
     { href: "/requests", label: admin ? "DNS 申請審核" : "我的 DNS", icon: "requests" },
     { href: "/units", label: "單位與共享 DNS", icon: "units" },
   ] }, { id: "collaboration", label: "通知與協作", items: [
-    { href: "/inspections", label: "清查通知", icon: "inspections" },
-    { href: "/contact", label: "聯絡管理員", icon: "contact" },
+    { href: "/inspections", label: systemAdmin ? "清查回覆管理" : "我的清查通知", icon: "inspections" },
+    { href: "/contact", label: systemAdmin ? "使用者訊息" : "聯絡管理員", icon: "contact" },
   ] }];
   if (admin) groups.push({ id: "records", label: "紀錄管理", items: [
     { href: "/zones", label: "Zone 管理", icon: "zones", nested: true },

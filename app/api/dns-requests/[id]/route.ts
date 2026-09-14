@@ -2,7 +2,7 @@ import { auditMutation } from "@/lib/audit/mutation";
 import type { RecordType, RRSet } from "@/lib/dns/types";
 import { captureApprovedRequest } from "@/lib/inventory/service";
 import { requireActor } from "@/lib/auth/session";
-import { canManageZone } from "@/lib/auth/permissions";
+import { canReviewDnsRequest } from "@/lib/auth/permissions";
 import { db } from "@/lib/db/client";
 import { addRecord } from "@/lib/dns/rrset";
 import { powerdns } from "@/lib/powerdns/client";
@@ -24,7 +24,7 @@ async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns
       const reviewed = await reviewUnitRequest(actor, id, decision.decision, decision.reviewNote);
       return Response.json({ request: { id: reviewed.id, status: reviewed.status } });
     }
-    notFoundUnless(Boolean(recordRequest) && canManageZone(actor, recordRequest!.zoneName));
+    notFoundUnless(Boolean(recordRequest) && canReviewDnsRequest(actor, recordRequest!));
     if (recordRequest!.status !== "PENDING") throw new ApiError("This request has already been reviewed", 409);
 
     if (decision.decision === "APPROVE") {

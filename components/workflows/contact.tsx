@@ -40,8 +40,8 @@ export function ContactWorkbench({ admin }: { admin: boolean }) {
 
   return <div className="workflow-page">
     <ActionFeedback feedback={feedback} />
-    <div className="workflow-layout">
-      <section className="card workflow-compose" aria-labelledby="contact-compose-title">
+    <div className={admin ? "workflow-page" : "workflow-layout"}>
+      {!admin && <section className="card workflow-compose" aria-labelledby="contact-compose-title">
         <header className="workflow-panel-head"><MessageSquare size={22} aria-hidden="true" /><div><h2 id="contact-compose-title">傳送訊息</h2><p>申請疑問或紀錄問題，都可以在這裡聯絡管理員。</p></div></header>
         <form className="form-surface" onSubmit={(event) => { event.preventDefault(); void send(event.currentTarget); }}>
           <fieldset className="form-fields" disabled={pending}>
@@ -51,14 +51,14 @@ export function ContactWorkbench({ admin }: { admin: boolean }) {
             <div className="form-actions"><button className="button primary" aria-busy={pending}><Send size={16} aria-hidden="true" />{pending ? "傳送中…" : "傳送訊息"}</button></div>
           </fieldset>
         </form>
-      </section>
+      </section>}
       <section className="workflow-history" aria-labelledby="contact-history-title">
         <header className="workflow-list-head"><h2 id="contact-history-title">{admin ? "使用者訊息" : "我的訊息"}</h2><button type="button" className="button" disabled={loading || pending} onClick={() => void reload()}><RefreshCw size={16} aria-hidden="true" />重新整理</button></header>
         {error ? <ResourceError message={error} retry={reload} /> : loading ? <p className="workflow-loading" role="status">載入訊息中…</p> : !data?.messages.length
-          ? <div className="card"><EmptyState title="尚無訊息" description="傳送訊息後，對話紀錄與回覆會顯示在這裡。" /></div>
+          ? <div className="card"><EmptyState title="尚無訊息" description={admin ? "收到使用者的問題後，可在這裡回覆。" : "傳送訊息後，對話紀錄與回覆會顯示在這裡。"} /></div>
           : <div className="workflow-list">{data.messages.map((message) => <article className="card message-card" key={message.id}>
             <div className="message-heading"><h3>{message.subject}</h3><Badge tone={message.reply ? "green" : "neutral"}>{message.reply ? "已回覆" : "待回覆"}</Badge></div>
-            <p className="workflow-meta"><span>{message.user.name || message.user.email}</span><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("zh-TW")}</time></p>
+            <p className="workflow-meta"><span>{message.user.name || "使用者"}{admin && message.user.email ? ` · ${message.user.email}` : ""}</span><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("zh-TW")}</time></p>
             <p className="message-body">{message.body}</p>
             {message.reply ? <div className="message-reply"><strong>管理員回覆</strong><p className="message-body">{message.reply}</p></div>
               : admin ? <form className="form-surface message-reply" onSubmit={(event) => { event.preventDefault(); void send(event.currentTarget, message.id); }}>

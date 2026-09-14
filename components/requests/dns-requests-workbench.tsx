@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui";
 
-import { filterRequests, statuses, type DnsRequest, type RequestStatus } from "./model";
+import { filterRequests, scopeRequests, type RequestScope, statuses, type DnsRequest, type RequestStatus } from "./model";
 import { RequestCard } from "./request-card";
 import { ReviewDialog } from "./request-dialogs";
 
@@ -14,9 +14,10 @@ import { ResourceError } from "@/components/ui/resource-error";
 
 const emptyRequests: DnsRequest[] = [];
 
-export function DnsRequestsWorkbench({ admin }: { admin: boolean }) {
+export function DnsRequestsWorkbench({ admin, actorId }: { admin: boolean; actorId: string }) {
   const { data, loading, error, reload: load } = useResource<{ requests: DnsRequest[] }>("/api/dns-requests");
-  const requests = data?.requests ?? emptyRequests;
+  const [scope, setScope] = useState<RequestScope>("ALL");
+  const requests = useMemo(() => scopeRequests(data?.requests ?? emptyRequests, scope, actorId), [data, scope, actorId]);
   const [query, setQuery] = useState("");
   const searchInput = useRef<HTMLInputElement>(null);
   const clearSearch = () => { setQuery(""); searchInput.current?.focus(); };
@@ -32,8 +33,9 @@ export function DnsRequestsWorkbench({ admin }: { admin: boolean }) {
   ])), [requests]);
 
   return <>
+    <div className="request-scope-bar"><label>資料範圍<select value={scope} onChange={(event) => { setScope(event.target.value as RequestScope); setStatus("ALL"); }}><option value="ALL">{admin ? "所有可查看的申請" : "我的申請與單位共享"}</option><option value="MINE">我送出的申請</option><option value="SHARED">單位共享申請</option>{admin && <option value="REVIEWABLE">我可審核的申請</option>}</select></label><p className="field-help">{admin ? "僅授權網域可直接管理；單位 DNS 申請須由系統管理員核准。" : "只顯示本人申請與已加入單位的共享申請；共享不代表具備編輯或審核權限。"}</p></div>
     <div className="request-toolbar">
-      <div className="filter-input request-search"><Search size={15} aria-hidden="true" /><input ref={searchInput} type="search" value={query} onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); clearSearch(); } }} onChange={(event) => setQuery(event.target.value)} placeholder={admin ? "搜尋名稱、學號、單位或用途" : "搜尋名稱、網域、內容或用途"} aria-label="搜尋 DNS 申請" />{query && <button type="button" className="search-clear" onClick={clearSearch} aria-label="清除搜尋"><X size={15} /></button>}</div>
+      <div className="filter-input request-search"><Search size={15} aria-hidden="true" /><input ref={searchInput} type="search" value={query} onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); clearSearch(); } }} onChange={(event) => setQuery(event.target.value)} placeholder={admin ? "搜尋名稱、電子郵件、姓名、單位或用途" : "搜尋名稱、網域、內容或用途"} aria-label="搜尋 DNS 申請" />{query && <button type="button" className="search-clear" onClick={clearSearch} aria-label="清除搜尋"><X size={15} /></button>}</div>
       <button type="button" className="button request-refresh" disabled={loading} onClick={() => void load()}><RefreshCw size={15} className={loading ? "spin" : ""} />重新整理</button>
     </div>
       <div className="request-status-filter" role="group" aria-label="審核狀態">

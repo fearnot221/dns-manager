@@ -2,7 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 const project = 'dns-manager-verify-' + randomBytes(4).toString('hex');
-const env = { ...process.env, DEPLOY_TAG: 'verification', POSTGRES_PASSWORD: randomBytes(32).toString('hex'), AUTH_SECRET: randomBytes(32).toString('hex'), SETTINGS_ENCRYPTION_KEY: randomBytes(32).toString('hex'), AUTH_URL: 'https://dns-test.example.invalid', WEB_PORT: '0', PDNS_MOCK: 'true', PDNS_API_URL: '', PDNS_API_KEY: '', NCU_PORTAL_CLIENT_ID: '', NCU_PORTAL_CLIENT_SECRET: '', NCU_OWNER_IDENTIFIER: '', GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '', OWNER_INITIAL_PASSWORD: randomBytes(24).toString('hex') };
+const env = { ...process.env, DEPLOY_TAG: 'verification', POSTGRES_PASSWORD: randomBytes(32).toString('hex'), AUTH_SECRET: randomBytes(32).toString('hex'), SETTINGS_ENCRYPTION_KEY: randomBytes(32).toString('hex'), AUTH_URL: 'https://dns-test.example.invalid', WEB_PORT: '0', PDNS_MOCK: 'true', PDNS_API_URL: '', PDNS_API_KEY: '', AUTH_LOGTO_SECRET: '', LOGTO_OWNER_SUB: '', NCU_PORTAL_CLIENT_ID: '', NCU_PORTAL_CLIENT_SECRET: '', NCU_OWNER_IDENTIFIER: '', GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '', OWNER_INITIAL_PASSWORD: randomBytes(24).toString('hex') };
 const args = ['compose', '--project-name', project, '--env-file', '/dev/null', '-f', 'docker-compose.yml'];
 function compose(command, capture = false) { return execFileSync('docker', [...args, ...command], { env, stdio: capture ? 'pipe' : 'inherit', encoding: 'utf8', timeout: 300_000 }); }
 try {

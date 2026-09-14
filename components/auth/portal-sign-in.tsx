@@ -15,7 +15,7 @@ export function PortalSignIn() {
     setPending(true);
     setError(false);
     try {
-      await signIn("ncu-portal", { redirectTo: "/requests" });
+      await signIn("logto", { redirectTo: "/requests" });
     } catch {
       submitting.current = false;
       setPending(false);
@@ -26,7 +26,7 @@ export function PortalSignIn() {
   return <div className="portal-sign-in">
     <button type="button" className="button primary" disabled={pending} aria-busy={pending} onClick={login}>
       {pending && <Loader2 size={16} className="spin" aria-hidden="true" />}
-      {pending ? "正在前往 NCU Portal…" : "使用 NCU Portal 登入"}
+      {pending ? "正在前往 NCU Portal…" : "連接至 NCU Portal"}
     </button>
     {error && <p className="login-error" role="alert" tabIndex={-1} ref={errorRef}><AlertTriangle size={14} aria-hidden="true" />無法開始登入，請檢查網路連線後重試。若問題持續，請聯絡管理員。</p>}
   </div>;

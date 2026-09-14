@@ -13,7 +13,7 @@ import { ScrollRegion } from "@/components/ui/scroll-region";
 
 type Unit = { id: string; name: string; role: UnitRole; memberCount: number };
 type UnitRecord = { id: string; zoneName: string; recordName: string; recordType: string; content: string; ttl: number; disabled: boolean; purpose: string; expectedHash: string };
-type Member = { userId: string; label: string; role: UnitRole; disabled: boolean };
+type Member = { userId: string; label: string; studentId?: string | null; role: UnitRole; disabled: boolean };
 type Detail = { unit: { id: string; name: string }; role: UnitRole; members: Member[]; records: UnitRecord[]; recordsError: string };
 
 export function UnitsWorkbench() {
@@ -61,7 +61,7 @@ function UnitDetail({ id, onMembershipChanged, onPasscode }: { id: string; onMem
     <ScrollRegion label="單位 DNS 紀錄" className="unit-record-scroll"><table className="unit-table"><thead><tr><th scope="col">名稱／類型</th><th scope="col">解析內容</th><th scope="col">用途</th><th scope="col">操作</th></tr></thead><tbody>{records.map((record) => <tr key={record.id}><td><strong>{record.recordName}</strong><small>{record.recordType} · TTL {record.ttl}s{record.disabled ? " · 已停用" : ""}</small></td><td><code>{record.content}</code></td><td>{record.purpose || "—"}</td><td>{canSubmitUnitRequest(data.role) && ["A", "AAAA", "CNAME", "MX", "TXT", "SRV", "CAA", "PTR"].includes(record.recordType) ? <button className="button" onClick={() => setChange(record)}>申請變更</button> : "僅供查看"}</td></tr>)}</tbody></table></ScrollRegion>
     {data.recordsError && <p className="form-error" role="alert">{data.recordsError}</p>}
     {!records.length && !data.recordsError && <EmptyState title={query ? "沒有符合條件的 DNS" : "尚無單位 DNS"} description={query ? "請調整搜尋條件。" : "申請時選擇共享單位，經系統管理員核准後會出現在此處。舊的文字單位欄位不會自動授予共享權限。"} />}</div>
-    <div className="card unit-panel"><div className="unit-heading"><h2><Users size={18} />單位成員</h2>{data.role === "ADMIN" && <button className="button" onClick={() => setManage("rotate")}>重設 passcode</button>}</div><p className="description">查看：讀取 DNS。編輯：送出申請。單位管理：另可管理成員；不具備 DNS 審核權。</p><ul className="unit-members">{data.members.map((member) => <li key={member.userId}><span><strong>{member.label}</strong><small>{unitRoleLabels[member.role]}{member.disabled ? " · 帳號已停用" : ""}</small></span>{data.role === "ADMIN" && <button className="button" onClick={() => setManage(member)}>管理</button>}</li>)}</ul></div>
+    <div className="card unit-panel"><div className="unit-heading"><h2><Users size={18} />單位成員</h2>{data.role === "ADMIN" && <button className="button" onClick={() => setManage("rotate")}>重設 passcode</button>}</div><p className="description">查看：讀取 DNS。編輯：送出申請。單位管理：另可管理成員；不具備 DNS 審核權。</p><ul className="unit-members">{data.members.map((member) => <li key={member.userId}><span><strong>{member.label}</strong><small>{member.studentId && member.studentId !== member.label ? `${member.studentId} · ` : ""}{unitRoleLabels[member.role]}{member.disabled ? " · 帳號已停用" : ""}</small></span>{data.role === "ADMIN" && <button className="button" onClick={() => setManage(member)}>管理</button>}</li>)}</ul></div>
     {change && <ChangeDialog unitId={id} record={change} onClose={() => setChange(null)} onSaved={async () => { setChange(null); toast.success("變更申請已送出，核准前不會修改 DNS"); await reload(); }} />}
     {manage && <ManageDialog unitId={id} target={manage} onClose={() => setManage(null)} onSaved={async (code) => { setManage(null); if (code) onPasscode(code); else toast.success("成員設定已更新"); await onMembershipChanged(); await reload(); }} />}
   </section>;

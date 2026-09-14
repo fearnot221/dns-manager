@@ -15,14 +15,14 @@ export async function GET(request: Request) {
     const { q, action, status, page } = schema.parse(Object.fromEntries(new URL(request.url).searchParams));
     const skip = (page - 1) * 50;
     if (!process.env.DATABASE_URL) {
-      const events = (await localAuditEvents()).filter((event) => (!action || event.action === action) && (status === "all" || event.success === (status === "success")) && (!q || [event.userEmail, event.zone, event.recordName, event.action, event.requestId].some((value) => value?.toLowerCase().includes(q.toLowerCase())))).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+      const events = (await localAuditEvents()).filter((event) => (!action || event.action === action) && (status === "all" || event.success === (status === "success")) && (!q || [event.userName, event.userEmail, event.zone, event.recordName, event.action, event.requestId].some((value) => value?.toLowerCase().includes(q.toLowerCase())))).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
       return Response.json({ events: redactAudit(events.slice(skip, skip + 50)), total: events.length, page });
     }
     const where: Prisma.AuditLogWhereInput = {
       ...(action ? { action } : {}), ...(status === "all" ? {} : { success: status === "success" }),
-      ...(q ? { OR: ["userEmail", "zone", "recordName", "action", "requestId"].map((field) => ({ [field]: { contains: q, mode: "insensitive" } })) } : {}),
+      ...(q ? { OR: [{ user: { name: { contains: q, mode: "insensitive" } } }, ...["userEmail", "zone", "recordName", "action", "requestId"].map((field) => ({ [field]: { contains: q, mode: "insensitive" } }))] } : {}),
     };
-    const [events, total] = await db.$transaction([db.auditLog.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip, take: 50 }), db.auditLog.count({ where })]);
-    return Response.json({ events: redactAudit(events), total, page });
+    const [events, total] = await db.$transaction([db.auditLog.findMany({ where, include: { user: { select: { name: true, portalEmail: true } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip, take: 50 }), db.auditLog.count({ where })]);
+    return Response.json({ events: redactAudit(events.map(({ user, ...event }) => ({ ...event, userName: user?.name, userDisplayEmail: user?.portalEmail }))), total, page });
   } catch (error) { return apiError(error); }
 }

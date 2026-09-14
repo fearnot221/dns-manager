@@ -122,11 +122,11 @@ sudoedit /etc/dns-manager/app.env
 
 將密碼保存至安全的密碼管理器後，刪除這一個交付檔即可（勿刪 app.env）。seed 成功後 env 裡的 `OWNER_INITIAL_PASSWORD` 會清空，不再傳給後續容器。
 
-安裝程式**無法代填學校核發的秘密**。在 app.env 填 `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、人工核對最高帳號的 `NCU_OWNER_IDENTIFIER`；三者須一起設定。Portal：
+安裝程式**無法代填 Logto Secret**。請依 [Logto 切換指南](LOGTO.md) 填入 `AUTH_LOGTO_ID`、`AUTH_LOGTO_SECRET`、已核對的 `LOGTO_OWNER_SUB`，並綁定既有帳號：
 
-- Single Sign On URL：`https://dnsmgr.ce.ncu.edu.tw/login`
-- Return To Address：`https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/ncu-portal`
-- Scopes：`identifier chinese-name email`；關閉可代理登入。
+- 重定向 URI：`https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/logto`
+- 登出後重定向 URI：`https://dnsmgr.ce.ncu.edu.tw/login`
+- Scopes：`openid profile email`；User ID 不可直接猜測為學號。
 
 PowerDNS 僅從 `/etc/dns-manager/app.env` 的 `PDNS_API_URL`、`PDNS_API_KEY`、`PDNS_SERVER_ID` 讀取，網址須以 `/api/v1` 結尾。後台連線表單已移除，資料庫中的舊設定不再使用。升級前請將連線設定填入 env；修改後重新建立 web 容器（單純 restart 不會載入新 env）。API 不要對外暴露。
 

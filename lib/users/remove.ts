@@ -10,9 +10,9 @@ export async function removeUser(actor: Actor, id: string) {
   if (!process.env.DATABASE_URL) throw new ApiError("移除使用者需使用資料庫環境。", 503);
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${id} FOR UPDATE`;
-    const user = await tx.user.findUnique({ where: { id }, include: { accounts: { where: { provider: "ncu-portal" } }, unitMemberships: { orderBy: { unitId: "asc" } } } });
+    const user = await tx.user.findUnique({ where: { id }, include: { accounts: { where: { provider: { in: ["ncu-portal", "logto"] } } }, unitMemberships: { orderBy: { unitId: "asc" } } } });
     if (!user) throw new ApiError("找不到使用者。", 404);
-    if (id === actor.id || user.accounts.some((a) => a.providerAccountId === OWNER_IDENTIFIER)) throw new ApiError("此帳號不能移除。", 403);
+    if (id === actor.id || user.accounts.some((a) => (a.provider === "ncu-portal" && a.providerAccountId === OWNER_IDENTIFIER) || (a.provider === "logto" && !!process.env.LOGTO_OWNER_SUB && a.providerAccountId === process.env.LOGTO_OWNER_SUB))) throw new ApiError("此帳號不能移除。", 403);
     if (user.removedAt) throw new ApiError("此帳號已移除。", 409);
     for (const membership of user.unitMemberships) {
       await lockUnit(tx, membership.unitId);

@@ -24,6 +24,9 @@ export async function describeRecords(actor: Actor, zoneName: string, rrsets: RR
   const records = rrsets.flatMap((rrset) => rrset.records.map((record) => ({ zoneName, recordName: rrset.name, recordType: rrset.type, content: record.content, ttl: rrset.ttl, disabled: record.disabled })));
   const ids = records.map((record) => recordId(scope, record));
   const saved = isLocalDemo() ? await localDocument<Store, Stored[]>("inventory", async () => ({ records: {} }), (data) => ids.flatMap((id) => data.records[id] ? [data.records[id]] : [])) : await db.dnsRecordMetadata.findMany({ where: { id: { in: ids } }, include: { inspections: { orderBy: { inspectedAt: "desc" } } } });
+  const updaterEmails = [...new Set(saved.map((item) => item.updatedBy).filter(Boolean))];
+  const updaters = !isLocalDemo() && updaterEmails.length ? await db.user.findMany({ where: { email: { in: updaterEmails } }, select: { email: true, name: true } }) : [{ email: actor.email, name: actor.name }];
+  const updaterNames = new Map(updaters.map((user) => [user.email, user.name]));
   const savedById = new Map(saved.map((item) => [item.id, item]));
   // Legacy applications have no connection ID; never infer ownership after switching a live server.
   const legacyAllowed = scope === "local-mock";
@@ -31,7 +34,7 @@ export async function describeRecords(actor: Actor, zoneName: string, rrsets: RR
   const applications = new Map(approved.map((r) => [identityKey(r), r]));
   return records.map((record) => {
     const id = recordId(scope, record); const saved = savedById.get(id); const application = applications.get(identityKey(record));
-    const ownership: Ownership = saved ? { id, applicantName: saved.applicantName, applicantEmail: saved.applicantEmail, applicantUnit: saved.applicantUnit, applicantExtension: saved.applicantExtension, purpose: saved.purpose, updatedBy: saved.updatedBy, updatedAt: new Date(saved.updatedAt!).toISOString(), inspections: saved.inspections.map((review) => ({ ...review, inspectedAt: new Date(review.inspectedAt).toISOString() })) } : { ...emptyOwnership(id), applicantName: application?.applicantName || application?.user.name || "", applicantEmail: application?.user.email || "", applicantUnit: application?.applicantUnit || "", applicantExtension: application?.applicantExtension || "", purpose: application?.purpose || "" };
+    const ownership: Ownership = saved ? { id, applicantName: saved.applicantName, applicantEmail: saved.applicantEmail, applicantUnit: saved.applicantUnit, applicantExtension: saved.applicantExtension, purpose: saved.purpose, updatedBy: saved.updatedBy, updatedByName: updaterNames.get(saved.updatedBy), updatedAt: new Date(saved.updatedAt!).toISOString(), inspections: saved.inspections.map((review) => ({ ...review, inspectedAt: new Date(review.inspectedAt).toISOString() })) } : { ...emptyOwnership(id), applicantName: application?.applicantName || application?.user.name || "", applicantEmail: application?.user.email || "", applicantUnit: application?.applicantUnit || "", applicantExtension: application?.applicantExtension || "", purpose: application?.purpose || "" };
     return { ...record, ownership };
   });
 }

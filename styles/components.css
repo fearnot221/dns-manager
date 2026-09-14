@@ -1,4 +1,7 @@
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+.person-name { display: inline-grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.person-name strong { font-weight: 550; }
+.person-name small { font-size: .8125rem; color: var(--muted); font-weight: 400; }
 .zone-category-tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
 .zone-category-tabs > button { display: flex; align-items: center; gap: 18px; flex-shrink: 0; padding: 12px 16px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--muted); text-align: left; }
 .zone-category-tabs strong { display: block; font-size: .875rem; font-weight: 600; }
@@ -70,7 +73,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface-soft) 45%, var(--p
 .dialog-fields { min-width: 0; padding: 0; margin: 0; border: 0; }
 :is(.modal, .dns-application) label { display: grid; gap: 8px; color: var(--ink); font-size: .875rem; font-weight: 550; min-width: 0; }
 :is(.modal, .dns-application) label small { font-size: .75rem; color: var(--muted); font-weight: 400; }
-:is(.modal, .dns-application) input, :is(.modal, .dns-application) textarea, :is(.modal, .dns-application) select, .record-toolbar > select { width: 100%; min-width: 0; border: 1px solid var(--border-strong); border-radius: 5px; padding: 10px 12px; background: var(--bg); color: var(--ink); font-size: .875rem; }
+:is(.modal, .dns-application) input, :is(.modal, .dns-application) textarea { width: 100%; min-width: 0; border: 1px solid var(--border-strong); border-radius: 5px; padding: 10px 12px; background: var(--bg); color: var(--ink); font-size: .875rem; }
 :is(.modal, .dns-application) textarea { resize: vertical; min-height: 90px; }
 :is(.modal, .dns-application) input:disabled { opacity: .7; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 18px 24px; background: var(--bg); border-top: 1px solid var(--border); }
@@ -101,7 +104,6 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface-soft) 45%, var(--p
   .resource-error { flex-direction: column; text-align: center; }
 }
 .zone-access-hint { color: var(--muted); font-size: 13px; margin: 0 0 18px; line-height: 1.7; }
-.zone-access-filter { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); padding: 9px 12px; }
 .zone-access-switch { display: inline-flex; align-items: center; gap: 9px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; padding: 8px 2px; border-radius: 6px; }
 .zone-access-switch[aria-checked="true"] { color: var(--accent); }
 .zone-access-switch:disabled { opacity: .6; cursor: wait; }
