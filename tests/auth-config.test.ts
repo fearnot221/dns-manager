@@ -17,7 +17,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/client", () => ({ db: { user: { findUnique: mocks.findUnique, findFirst: mocks.findFirst, update: mocks.update }, account: { findUnique: mocks.accountFind, create: mocks.accountCreate } } }));
 beforeEach(() => { vi.resetModules(); vi.clearAllMocks(); mocks.findFirst.mockReset(); });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
-const identities = (identifier?: string, username?: string, name = "Portal profile name") => ({ ncu: { userId: "portal-user", details: { name, rawData: { username, identifier } } } });
+const identities = (identifier?: string, username?: string, name = "Portal profile name", email?: string) => ({ ncu: { userId: "portal-user", details: { name, rawData: { username, identifier, email } } } });
 async function configuration(production = true, configured = true) {
   vi.stubEnv("NODE_ENV", production ? "production" : "development");
   vi.stubEnv("DATABASE_URL", production ? "postgresql://test/db" : "");
@@ -101,12 +101,12 @@ it("accepts a new verified Portal user without pre-registration", async () => {
   expect(await signIn({ user: {}, account: { type: "oauth", provider: "logto", providerAccountId: "student" }, profile: { sub: "student", email: "student@example.com", email_verified: true } })).toBe(true);
   expect(mocks.accountCreate).not.toHaveBeenCalled();
 });
-it("refreshes Portal identity details without trusting unrequested top-level email", async () => {
+it("refreshes Portal identity details and stores only the identity email", async () => {
   const config = await configuration();
   mocks.accountFind.mockResolvedValue({ user: { id: "linked", disabled: false, globalRole: "USER", accounts: [] } });
   const signIn = config.callbacks!.signIn!;
-  expect(await signIn({ user: {}, account: { type: "oauth", provider: "logto", providerAccountId: "account" }, profile: { sub: "account", identities: identities("111504515", "王小明"), email: "display@example.com", email_verified: true } })).toBe(true);
-  expect(mocks.update).toHaveBeenCalledWith({ where: { id: "linked" }, data: { logtoName: "111504515", portalEmail: null, name: "王小明", studentId: "111504515" } });
+  expect(await signIn({ user: {}, account: { type: "oauth", provider: "logto", providerAccountId: "account" }, profile: { sub: "account", identities: identities("111504515", "王小明", "Portal profile name", "student@example.com"), email: "untrusted@example.com", email_verified: true } })).toBe(true);
+  expect(mocks.update).toHaveBeenCalledWith({ where: { id: "linked" }, data: { logtoName: "111504515", portalEmail: "student@example.com", name: "王小明", studentId: "111504515" } });
   expect(await signIn({ user: {}, account: { type: "oauth", provider: "logto", providerAccountId: "account" }, profile: { sub: "account" } })).toBe(true);
   expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { logtoName: null, portalEmail: null, name: "未提供姓名", studentId: null } });
 });

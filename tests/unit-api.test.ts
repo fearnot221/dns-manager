@@ -52,7 +52,7 @@ describe("unit API boundaries", () => {
     const text = await response.text();
     expect(text).not.toContain("unrelated-private-record"); expect(text).not.toContain("internal-server");
     expect(JSON.parse(text).requests[0].canReview).toBe(false);
-    expect(JSON.parse(text).requests[0].user).toEqual({ id: "user", name: "王小明", email: "student@example.com" });
+    expect(JSON.parse(text).requests[0].user).toEqual({ id: "user", name: "王小明", email: null });
     expect(text).not.toContain("@accounts.invalid");
     expect(text).not.toContain("portalEmail");
     expect(vi.mocked(db.dnsRecordRequest.findMany).mock.calls[0][0]?.where).toMatchObject({ OR: [{ userId: "user" }, { unit: { members: { some: { userId: "user" } } } }] });

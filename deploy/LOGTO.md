@@ -28,7 +28,7 @@ AUTH_PASSWORD_LOGIN_ENABLED=true
 
 舊 `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、`NCU_OWNER_IDENTIFIER` 不再用於登入；新版本 Docker Compose 已傳遞 Logto 變數。保留 `AUTH_SECRET`、資料庫、既有內部 email 與原使用者 ID，不重建資料庫或重新 seed 覆寫帳號。
 
-每個 identity 的格式為 `{ userId, details }`。授權與帳號管理識別取自 `details.identifier`，並以 `details.rawData.identifier` 為 fallback；畫面姓名依序使用 `details.username`、`details.rawData.username`、`chinese-name`、`chineseName`、`name`。姓名下方顯示同一 identifier。每次登入分別同步 `User.name`、`User.studentId`，並將已驗證 identifier 保存於既有 `User.logtoName` 欄位。若多個 linked identities 回傳互相衝突的 identifier，系統不採用任何一筆 identity 資料作授權或顯示，但仍允許該帳號以一般使用者登入。
+每個 identity 的格式為 `{ userId, details }`。授權與帳號管理識別取自 `details.identifier`，並以 `details.rawData.identifier` 為 fallback；畫面姓名依序使用 `details.username`、`details.rawData.username`、`chinese-name`、`chineseName`、`name`。姓名下方顯示同一 identifier。聯絡信箱只從同一筆 identity 的 `details.email` 或 `details.rawData.email` 讀取並存入 `User.portalEmail`，不採用頂層 profile email、不參與登入綁定或權限判斷，也不顯示於網站。每次登入分別同步 `User.name`、`User.studentId`、`User.portalEmail`，並將已驗證 identifier 保存於既有 `User.logtoName` 欄位。若多個 linked identities 回傳互相衝突的 identifier，系統不採用任何一筆 identity 資料作授權或顯示；若同一 identifier 回傳衝突信箱，則不儲存信箱，但仍允許該帳號以一般使用者登入。
 
 從舊版 `details.name` 授權方式升級時，已綁定帳號可能在 `User.logtoName` 留有舊 name。同一 Logto sub 成功驗證後會同步目前的 identifier，不因舊值不同而阻擋登入；缺少 identifier 時也允許以一般使用者進入。管理權限仍只依本次同步的 identifier 與後台角色計算。
 
@@ -81,6 +81,29 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
 ```
 
 工具僅刪除指定 user ID／subject 的 Logto Account 並撤銷該使用者所有登入 session，記錄稽核；保留使用者、角色、密碼、舊 Portal 綁定及 DNS／單位資料。解除綁定不能讓 identifier=115502532 變成一般使用者：該 identifier 重新驗證後仍取得最高權限。測試一般使用者請使用其他 identifier。綁定調整不會自動合併或刪除帳號。
+
+## 重置所有使用者帳號
+
+`scripts/reset-all-users.ts` 是人工維護工具，不會在部署或 migration 自動執行。它會先提供 dry run；正式套用會撤銷全部 session 與 Logto 綁定、移除角色／網域／群組／單位權限、輪替所有單位加入碼，並把所有帳號（包含先前已移除的帳號）封存到 `/admin/users` 不再顯示。待審核 DNS 申請與待回覆清查會取消；已完成的 DNS 申請、站內訊息、清查及稽核歷史仍保留原 User 關聯，不會因直接刪除外鍵而遺失。
+
+使用上方 `deploy_tag` 與 Compose 參數執行新版 tools image：
+
+```bash
+# 先檢查影響筆數，不修改資料
+sudo env DEPLOY_TAG="$deploy_tag" docker compose \
+  --project-name dns-manager --env-file /etc/dns-manager/app.env \
+  -f /opt/dns-manager/docker-compose.yml run --rm --no-deps migrate \
+  ./node_modules/.bin/tsx scripts/reset-all-users.ts
+
+# 先備份資料庫，核對 dry run 後才正式重置
+sudo env DEPLOY_TAG="$deploy_tag" docker compose \
+  --project-name dns-manager --env-file /etc/dns-manager/app.env \
+  -f /opt/dns-manager/docker-compose.yml run --rm --no-deps migrate \
+  ./node_modules/.bin/tsx scripts/reset-all-users.ts \
+  --apply --confirm RESET-ALL-USERS
+```
+
+正式執行後目前瀏覽器 session 會失效。任何人再次透過 NCU Portal 登入時，系統會依當次 Logto `identities` 建立全新帳號；identifier `115502532` 仍依既有規則取得最高權限，其他帳號預設為一般使用者。
 
 ## 登出與驗收
 

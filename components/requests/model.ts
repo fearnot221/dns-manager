@@ -42,7 +42,7 @@ export function filterRequests(requests: DnsRequest[], query: string, status: "A
   const needle = query.trim().toLowerCase();
   return requests.filter((item) => (status === "ALL" || item.status === status) && [
     item.zoneName, item.recordName, item.recordType, item.content,
-    item.user.email, item.user.name,
+    item.user.name, item.user.studentId,
     item.applicantName, item.applicantUnit, item.applicantExtension, item.purpose, item.reviewNote,
   ].filter(Boolean).join(" ").toLowerCase().includes(needle));
 }

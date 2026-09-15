@@ -4,7 +4,7 @@ import type { Actor } from "@/lib/dns/types";
 import { isLocalDemo, localDocument } from "@/lib/db/local-store";
 import { redactAudit } from "./redact";
 
-export type AuditEvent = { id: string; createdAt: string; userId: string | null; userEmail: string; userName?: string | null; userDisplayEmail?: string | null; zone: string; recordName?: string | null; recordType?: string | null; action: string; oldValue?: unknown; newValue?: unknown; ipAddress?: string | null; userAgent?: string | null; requestId: string; success: boolean; errorMessage?: string | null };
+export type AuditEvent = { id: string; createdAt: string; userId: string | null; userEmail: string; userName?: string | null; userDisplayEmail?: string | null; userDisplayStudentId?: string | null; zone: string; recordName?: string | null; recordType?: string | null; action: string; oldValue?: unknown; newValue?: unknown; ipAddress?: string | null; userAgent?: string | null; requestId: string; success: boolean; errorMessage?: string | null };
 export const localAuditEvents = () => localDocument<{ events: AuditEvent[] }, AuditEvent[]>("audit", async () => ({ events: [] }), (data) => data.events);
 
 export interface AuditInput { actor:Actor; zone:string; action:string; recordName?:string; recordType?:string; before?:unknown; after?:unknown; success:boolean; errorMessage?:string; request?:Request }

@@ -7,8 +7,9 @@ import { apiRequest, jsonRequest } from "@/lib/client/api";
 import { ResourceError } from "@/components/ui/resource-error";
 import { ActionFeedback, type Feedback } from "@/components/ui/action-feedback";
 import { Badge, EmptyState } from "@/components/ui";
+import { PersonName } from "@/components/ui/person-name";
 
-type Message = { id: string; subject: string; body: string; reply: string | null; createdAt: string; user: { name: string | null; email: string | null } };
+type Message = { id: string; subject: string; body: string; reply: string | null; createdAt: string; user: { name: string | null; studentId: string | null; email: null } };
 
 export function ContactWorkbench({ admin }: { admin: boolean }) {
   const { data, loading, error, reload } = useResource<{ messages: Message[] }>("/api/contact");
@@ -58,7 +59,7 @@ export function ContactWorkbench({ admin }: { admin: boolean }) {
           ? <div className="card"><EmptyState title="尚無訊息" description={admin ? "收到使用者的問題後，可在這裡回覆。" : "傳送訊息後，對話紀錄與回覆會顯示在這裡。"} /></div>
           : <div className="workflow-list">{data.messages.map((message) => <article className="card message-card" key={message.id}>
             <div className="message-heading"><h3>{message.subject}</h3><Badge tone={message.reply ? "green" : "neutral"}>{message.reply ? "已回覆" : "待回覆"}</Badge></div>
-            <p className="workflow-meta"><span>{message.user.name || "使用者"}{admin && message.user.email ? ` · ${message.user.email}` : ""}</span><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("zh-TW")}</time></p>
+            <p className="workflow-meta"><PersonName name={message.user.name} studentId={message.user.studentId} /><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("zh-TW")}</time></p>
             <p className="message-body">{message.body}</p>
             {message.reply ? <div className="message-reply"><strong>管理員回覆</strong><p className="message-body">{message.reply}</p></div>
               : admin ? <form className="form-surface message-reply" onSubmit={(event) => { event.preventDefault(); void send(event.currentTarget, message.id); }}>

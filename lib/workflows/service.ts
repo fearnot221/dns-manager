@@ -9,9 +9,9 @@ import { powerdns } from "@/lib/powerdns/client";
 import { zoneCategory } from "@/lib/dns/zone-category";
 
 export function requireWorkflowDatabase() { if (!process.env.DATABASE_URL) throw new ApiError("此功能需要資料庫，請於正式資料庫環境使用。", 503); }
-export const publicUserSelect = { id: true, name: true, email: true, portalEmail: true } as const;
-export function publicContact(user: { id: string; name: string | null; email: string; portalEmail: string | null }) {
-  return { id: user.id, name: user.name, email: user.portalEmail || (user.email.endsWith("@accounts.invalid") ? null : user.email) };
+export const publicUserSelect = { id: true, name: true, studentId: true, email: true, portalEmail: true } as const;
+export function publicContact(user: { id: string; name: string | null; studentId: string | null; email: string; portalEmail: string | null }) {
+  return { id: user.id, name: user.name, studentId: user.studentId, email: null };
 }
 export async function sendContact(actor: Actor, input: { subject: string; body: string }) {
   requireWorkflowDatabase();

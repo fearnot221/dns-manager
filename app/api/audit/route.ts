@@ -22,7 +22,7 @@ export async function GET(request: Request) {
       ...(action ? { action } : {}), ...(status === "all" ? {} : { success: status === "success" }),
       ...(q ? { OR: [{ user: { name: { contains: q, mode: "insensitive" } } }, ...["userEmail", "zone", "recordName", "action", "requestId"].map((field) => ({ [field]: { contains: q, mode: "insensitive" } }))] } : {}),
     };
-    const [events, total] = await db.$transaction([db.auditLog.findMany({ where, include: { user: { select: { name: true, portalEmail: true } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip, take: 50 }), db.auditLog.count({ where })]);
-    return Response.json({ events: redactAudit(events.map(({ user, ...event }) => ({ ...event, userName: user?.name, userDisplayEmail: user?.portalEmail }))), total, page });
+    const [events, total] = await db.$transaction([db.auditLog.findMany({ where, include: { user: { select: { name: true, studentId: true } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip, take: 50 }), db.auditLog.count({ where })]);
+    return Response.json({ events: redactAudit(events.map(({ user, ...event }) => ({ ...event, userName: user?.name, userDisplayStudentId: user?.studentId }))), total, page });
   } catch (error) { return apiError(error); }
 }

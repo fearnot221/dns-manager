@@ -33,7 +33,7 @@ export async function GET() {
     const requests = await db.dnsRecordRequest.findMany({
       where,
       include: {
-        user: { select: { id: true, name: true, email: true, portalEmail: true } },
+        user: { select: { id: true, name: true, studentId: true, email: true, portalEmail: true } },
         reviewer: { select: { name: true, email: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -42,8 +42,9 @@ export async function GET() {
       scope: isSuperAdmin || managedZones.length ? "ADMIN" : "USER",
       requests: requests.map(({ expectedRRSet: _snapshot, connectionScope: _scope, ...item }) => {
         void _snapshot; void _scope;
-        const { portalEmail, ...user } = item.user;
-        return { ...item, user: { ...user, email: portalEmail || (user.email.endsWith("@accounts.invalid") ? null : user.email) }, canReview: item.status === "PENDING" && canReviewDnsRequest(actor, item) };
+        const { portalEmail: _portalEmail, email: _email, ...user } = item.user;
+        void _portalEmail; void _email;
+        return { ...item, user: { ...user, email: null }, canReview: item.status === "PENDING" && canReviewDnsRequest(actor, item) };
       }),
     });
   } catch (error) {

@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { logtoIdentity, logtoProvider, logtoLogoutUrl, LOGTO_ISSUER } from "@/lib/auth/logto";
 import { accountOwnerIdentifier } from "@/lib/auth/owner";
 import { personDisplay } from "@/lib/users/display";
-const portalIdentity = (identifier?: string, username?: string, name = "Portal profile name") => ({ ncu: { userId: "portal-user", details: { name, rawData: { username, identifier } } } });
+const portalIdentity = (identifier?: string, username?: string, name = "Portal profile name", email?: string) => ({ ncu: { userId: "portal-user", details: { name, rawData: { username, identifier, email } } } });
 afterEach(() => vi.unstubAllEnvs());
 it("uses OIDC with discovery, issuer checks, PKCE, state, nonce and ES384", () => {
   const provider = logtoProvider();
@@ -11,9 +11,9 @@ it("uses OIDC with discovery, issuer checks, PKCE, state, nonce and ES384", () =
   expect(provider.account!({ access_token: "secret", refresh_token: "secret", id_token: "secret" })).toEqual({});
 });
 it("uses stable issuer-scoped subjects, identity details, and no unrelated claims", () => {
-  const first = logtoIdentity({ sub: "opaque", identities: portalIdentity("115502532", "王小明"), email: "FIRST@example.com", email_verified: true, roles: ["admin"] });
-  const second = logtoIdentity({ sub: "opaque", identities: portalIdentity("115502532", "王小明"), email: "second@example.com", email_verified: false });
-  expect(first).toMatchObject({ name: "王小明", logtoName: "115502532", studentId: "115502532", portalEmail: null });
+  const first = logtoIdentity({ sub: "opaque", identities: portalIdentity("115502532", "王小明", "Portal name", " Contact@Example.COM "), email: "WRONG@example.com", email_verified: true, roles: ["admin"] });
+  const second = logtoIdentity({ sub: "opaque", identities: portalIdentity("115502532", "王小明"), email: "wrong-again@example.com", email_verified: false });
+  expect(first).toMatchObject({ name: "王小明", logtoName: "115502532", studentId: "115502532", portalEmail: "contact@example.com" });
   expect(second.portalEmail).toBeNull(); expect(first.email).toBe(second.email);
   expect(first).not.toHaveProperty("globalRole");
   expect(() => logtoIdentity({ name: "No subject" })).toThrow();
@@ -32,7 +32,7 @@ it("keeps logout destination fixed to Logto with the configured application retu
   expect(() => logtoLogoutUrl("token", "https://example.com/evil")).toThrow();
 });
 it("presents names first, identifiers second, and hides synthetic email addresses", () => {
-  expect(personDisplay({ name: "王小明", email: "student@example.com", studentId: "115500001" })).toEqual({ primary: "王小明", secondary: "115500001 · student@example.com" });
+  expect(personDisplay({ name: "王小明", email: "student@example.com", studentId: "115500001" })).toEqual({ primary: "王小明", secondary: "115500001" });
   expect(personDisplay({ email: "opaque@accounts.invalid", studentId: "115500001" })).toEqual({ primary: "115500001", secondary: "" });
   expect(personDisplay({ email: "opaque@accounts.invalid" }).primary).toBe("未提供姓名");
 });
@@ -67,6 +67,18 @@ it("fails closed for conflicting linked identity identifiers", () => {
     other: { userId: "two", details: { identifier: "111504515", username: "另一人" } },
   };
   expect(logtoIdentity({ sub: "ordinary", identities })).toMatchObject({ name: "未提供姓名", logtoName: null, studentId: null });
+});
+
+it("stores only a single valid email from the matching identity", () => {
+  expect(logtoIdentity({ sub: "ordinary", identities: {
+    ncu: { userId: "one", details: { identifier: "115500001", email: " STUDENT@EXAMPLE.COM ", username: "王小明" } },
+    duplicate: { userId: "two", details: { identifier: "115500001", rawData: { email: "student@example.com" } } },
+  } })).toMatchObject({ portalEmail: "student@example.com" });
+  expect(logtoIdentity({ sub: "ordinary", identities: {
+    ncu: { userId: "one", details: { identifier: "115500001", email: "first@example.com" } },
+    duplicate: { userId: "two", details: { identifier: "115500001", email: "other@example.com" } },
+  } }).portalEmail).toBeNull();
+  expect(logtoIdentity({ sub: "ordinary", identities: { ncu: { userId: "one", details: { identifier: "115500001", email: "not-an-email" } } } })).toMatchObject({ studentId: "115500001", portalEmail: null });
 });
 
 it("uses identifier for authorization and keeps the identity name display-only", () => {

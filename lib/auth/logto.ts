@@ -7,9 +7,11 @@ export const LOGTO_ISSUER = "https://authgate.ce.ncu.edu.tw/oidc";
 export const LOGTO_CLIENT_ID = "dtvpigx50sgdvy4aeadee";
 const displayName = z.string().trim().max(300).nullish();
 const studentId = z.string().trim().max(100).nullish();
+const contactEmail = z.string().trim().toLowerCase().pipe(z.email()).nullish();
 const identityDetailsSchema = z.object({
   name: displayName,
   identifier: studentId,
+  email: z.unknown().optional(),
   username: displayName,
   "chinese-name": displayName,
   chineseName: displayName,
@@ -18,10 +20,14 @@ const identityDetailsSchema = z.object({
 const identitySchema = z.object({ userId: z.string().min(1).max(300), details: z.unknown().optional() });
 const identitiesSchema = z.record(z.string().min(1).max(200), identitySchema);
 const profileSchema = z.object({ sub: z.string().min(1).max(200), identities: z.unknown().optional() });
+const identityEmail = (value: unknown) => {
+  const parsed = contactEmail.safeParse(value);
+  return parsed.success ? parsed.data || null : null;
+};
 
 function identityClaims(raw: unknown) {
   const identities = identitiesSchema.safeParse(raw);
-  if (!identities.success) return { logtoName: null, displayName: null, identifier: null };
+  if (!identities.success) return { logtoName: null, displayName: null, identifier: null, email: null };
 
   const claims = Object.values(identities.data).flatMap(({ details }) => {
     const parsed = identityDetailsSchema.safeParse(details);
@@ -29,6 +35,7 @@ function identityClaims(raw: unknown) {
     const nested = identityDetailsSchema.safeParse(parsed.data.rawData);
     return [{
       identifier: parsed.data.identifier || (nested.success ? nested.data.identifier : null) || null,
+      email: identityEmail(parsed.data.email) || (nested.success ? identityEmail(nested.data.email) : null),
       displayName: parsed.data.username || (nested.success ? nested.data.username : null) ||
         parsed.data["chinese-name"] || parsed.data.chineseName ||
         (nested.success ? nested.data["chinese-name"] || nested.data.chineseName : null) ||
@@ -36,14 +43,16 @@ function identityClaims(raw: unknown) {
     }];
   });
   const identifiers = [...new Set(claims.flatMap(({ identifier }) => identifier ? [identifier] : []))];
-  if (identifiers.length > 1) return { logtoName: null, displayName: null, identifier: null };
+  if (identifiers.length > 1) return { logtoName: null, displayName: null, identifier: null, email: null };
   const relevant = identifiers.length === 1 ? claims.filter((claim) => claim.identifier === identifiers[0]) : claims;
   const displayNames = [...new Set(relevant.flatMap(({ displayName }) => displayName ? [displayName] : []))];
+  const emails = [...new Set(relevant.flatMap(({ email }) => email ? [email] : []))];
   return {
     // logtoName is the legacy database field for the verified Portal identifier.
     logtoName: identifiers[0] || null,
     displayName: displayNames.length === 1 ? displayNames[0] : null,
     identifier: identifiers.length === 1 ? identifiers[0] : null,
+    email: emails.length === 1 ? emails[0] : null,
   };
 }
 
@@ -52,7 +61,7 @@ export function logtoIdentity(raw: unknown) {
   // Only connector-backed identities are trusted for Portal attributes. Conflicting
   // linked identities remain usable as an ordinary account but cannot authorize a role.
   const identity = identityClaims(profile.identities);
-  return { id: profile.sub, logtoName: identity.logtoName, hasName: !!identity.displayName, name: identity.displayName || "未提供姓名", studentId: identity.identifier, portalEmail: null,
+  return { id: profile.sub, logtoName: identity.logtoName, hasName: !!identity.displayName, name: identity.displayName || "未提供姓名", studentId: identity.identifier, portalEmail: identity.email,
     email: `logto-${createHash("sha256").update(`${LOGTO_ISSUER}|${profile.sub}`).digest("hex")}@accounts.invalid` };
 }
 export const logtoConfigured = () => Boolean(process.env.DATABASE_URL && process.env.AUTH_LOGTO_SECRET);
