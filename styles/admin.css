@@ -55,7 +55,7 @@
 .audit-trace { display: flex; margin-top: 8px; }
 .audit-json-scroll { max-height: 360px; overflow: auto; margin-block: 12px; border-radius: 6px; }
 .audit-detail .audit-json-scroll pre { max-height: none; overflow: visible; margin: 0; }
-.audit-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 16px; flex-wrap: wrap; padding-block: 20px; }
+.audit-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 16px; flex-wrap: wrap; padding: 20px 4px; }
 .audit-pagination > span { color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) { .audit-pagination { justify-content: center; gap: 10px; } }
 .audit-time { white-space: nowrap; font-variant-numeric: tabular-nums; }

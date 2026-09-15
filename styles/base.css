@@ -18,6 +18,8 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 a { color: inherit; }
 svg { flex-shrink: 0; }
 h1, h2, h3, p { margin: 0; }
+h1, h2, h3, h4 { text-wrap: balance; }
+p, .description, .field-help { text-wrap: pretty; }
 h1 { font-size: 1.5rem; letter-spacing: -.02em; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
 h2 { font-size: 1.125rem; font-weight: 620; line-height: 1.4; }
 h3 { font-size: 1rem; font-weight: 600; }

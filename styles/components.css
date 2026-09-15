@@ -31,6 +31,8 @@
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .search-clear { display: grid; place-items: center; flex-shrink: 0; min-width: 32px; min-height: 32px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); padding: 3px; }
 .table-card { overflow: visible; }
+.table-card > .record-results { min-height: 46px; margin: 0; padding: 12px 20px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: var(--surface-soft); }
+.table-card > .action-feedback p { padding-inline: 20px; border-inline: 0; border-radius: 0; }
 .table-tools { display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid var(--border); }
 .table-tools .filter-input { flex: 0 1 360px; }
 .tool-spacer { flex: 1; }
@@ -94,6 +96,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface-soft) 45%, var(--p
   .board-edit { width: 36px; height: 36px; }
   :is(.modal, .record-toolbar) input, :is(.modal, .record-toolbar) select, .modal textarea { font-size: 1rem; }
   .table-tools { flex-wrap: wrap; }
+  .table-card > .record-results, .table-card > .action-feedback p { padding-inline: 16px; }
   .table-tools .filter-input { flex: 1 1 100%; }
   .tool-spacer { display: none; }
   .modal { max-height: calc(100dvh - 24px); width: calc(100% - 24px); }
