@@ -14,11 +14,11 @@ export function workspaceNavigation(admin: boolean, systemAdmin: boolean): NavGr
   ] }];
   if (admin) groups.push({ id: "records", label: "紀錄管理", items: [
     { href: "/zones", label: "Zone 管理", icon: "zones", nested: true },
+    { href: "/admin/application-policy", label: "申請設定", icon: "settings" },
     { href: "/inventory", label: "DNS 定期清查", icon: "inventory" },
   ] });
   if (systemAdmin) groups.push({ id: "system", label: "系統管理", items: [
     { href: "/admin/users", label: "使用者管理", icon: "users" },
-    { href: "/admin/application-policy", label: "申請設定", icon: "settings" },
     { href: "/activity", label: "操作紀錄", icon: "activity" },
   ] });
   return groups;

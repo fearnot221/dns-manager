@@ -11,6 +11,9 @@
 .view-switcher button { display: flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid transparent; background: transparent; color: var(--muted); border-radius: 7px; padding: 8px 12px; font-size: .875rem; white-space: nowrap; }
 .view-switcher button.active { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 18%, var(--border)); }
 .view-switcher button:hover { color: var(--ink); background: var(--surface-soft); }
+.inventory-view-toolbar { grid-template-columns: 1fr; margin-bottom: 18px; }
+.inventory-view-toolbar .view-switcher { grid-column: 1; }
+.view-switcher-label { color: var(--muted); font-size: .75rem; font-weight: 600; }
 .record-results { min-height: 42px; display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: .75rem; padding: 8px 2px; }
 .record-results button { border: 0; background: transparent; color: var(--accent); padding: 0; font-size: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .copy-value { display: flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }

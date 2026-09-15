@@ -1,8 +1,6 @@
 "use client";
 
-import {
-  AtSign, Grid3X3, LayoutList, Plus, Rows3, Search, Tags, TextSearch, XCircle,
-} from "lucide-react";
+import { Plus, Search, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge, EmptyState, LoadingRows } from "@/components/ui";
@@ -14,21 +12,13 @@ import { RecordGrid } from "./record-board";
 import type { InventoryRecord } from "@/lib/inventory/types";
 import { OwnershipDialog } from "./ownership-dialog";
 import { RecordDialog } from "./record-dialog";
+import { isRecordView, recordViews } from "./view-options";
 
 import { useResource } from "@/lib/client/use-resource";
 import { ResourceError } from "@/components/ui/resource-error";
 
 const emptyRecords: HashedRRSet[] = [];
 const viewStorageKey = "aegis-record-view";
-const views: Array<{ key: ViewMode; label: string; icon: typeof Rows3 }> = [
-  { key: "table", label: "表格", icon: Rows3 },
-  { key: "list", label: "列表", icon: LayoutList },
-  { key: "grid", label: "IP 棋盤", icon: Grid3X3 },
-  { key: "type", label: "依類型", icon: Tags },
-  { key: "name", label: "依名稱", icon: AtSign },
-  { key: "content", label: "依內容", icon: TextSearch },
-];
-
 export function RecordsWorkbench({ zoneName }: { zoneName: string }) {
   const { data, loading, error, reload: load } = useResource<{ rrsets: HashedRRSet[]; permission: string }>(`/api/zones/${encodeURIComponent(zoneName)}/records`);
   const rrsets = data?.rrsets ?? emptyRecords;
@@ -43,7 +33,7 @@ export function RecordsWorkbench({ zoneName }: { zoneName: string }) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(viewStorageKey);
-      if (views.some((item) => item.key === saved)) setView(saved as ViewMode);
+      if (isRecordView(saved)) setView(saved);
     } catch { /* Browser preferences are optional. */ }
     const focusSearch = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
@@ -106,7 +96,7 @@ export function RecordsWorkbench({ zoneName }: { zoneName: string }) {
           {availableTypes.map((item) => <option key={item}>{item}</option>)}
         </select>
         <div className="view-switcher" role="group" aria-label="檢視模式">
-          {views.map(({ key, label, icon: Icon }) => (
+          {recordViews.map(({ key, label, icon: Icon }) => (
             <button key={key} className={view === key ? "active" : ""} onClick={() => selectView(key)} aria-pressed={view === key} title={label}>
               <Icon size={15} /><span>{label}</span>
             </button>

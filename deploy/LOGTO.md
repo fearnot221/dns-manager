@@ -28,7 +28,7 @@ AUTH_PASSWORD_LOGIN_ENABLED=true
 
 舊 `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、`NCU_OWNER_IDENTIFIER` 不再用於登入；新版本 Docker Compose 已傳遞 Logto 變數。保留 `AUTH_SECRET`、資料庫、既有內部 email 與原使用者 ID，不重建資料庫或重新 seed 覆寫帳號。
 
-每個 identity 的格式為 `{ userId, details }`。授權與帳號管理識別取自 `details.identifier`，並以 `details.rawData.identifier` 為 fallback；畫面姓名依序使用 `details.username`、`details.rawData.username`、`chinese-name`、`chineseName`、`name`。姓名下方顯示同一 identifier。聯絡信箱只從同一筆 identity 的 `details.email` 或 `details.rawData.email` 讀取並存入 `User.portalEmail`，不採用頂層 profile email、不參與登入綁定或權限判斷，也不顯示於網站。每次登入分別同步 `User.name`、`User.studentId`、`User.portalEmail`，並將已驗證 identifier 保存於既有 `User.logtoName` 欄位。若多個 linked identities 回傳互相衝突的 identifier，系統不採用任何一筆 identity 資料作授權或顯示；若同一 identifier 回傳衝突信箱，則不儲存信箱，但仍允許該帳號以一般使用者登入。
+每個 identity 的格式為 `{ userId, details }`。授權與帳號管理識別取自 `details.identifier`，並以 `details.rawData.identifier` 為 fallback；畫面姓名依序使用 `details.username`、`details.rawData.username`、`chinese-name`、`chineseName`、`name`。姓名下方以「帳號」顯示同一 identifier。聯絡信箱只從同一筆 identity 的 `details.email` 或 `details.rawData.email` 讀取並存入 `User.portalEmail`，不採用頂層 profile email，也不參與登入綁定或權限判斷；僅限管理員使用者管理頁顯示，其他使用者介面不顯示。每次登入分別同步 `User.name`、`User.studentId`、`User.portalEmail`，並將已驗證 identifier 保存於既有 `User.logtoName` 欄位。若多個 linked identities 回傳互相衝突的 identifier，系統不採用任何一筆 identity 資料作授權或顯示；若同一 identifier 回傳衝突信箱，則不儲存信箱，但仍允許該帳號以一般使用者登入。
 
 從舊版 `details.name` 授權方式升級時，已綁定帳號可能在 `User.logtoName` 留有舊 name。同一 Logto sub 成功驗證後會同步目前的 identifier，不因舊值不同而阻擋登入；缺少 identifier 時也允許以一般使用者進入。管理權限仍只依本次同步的 identifier 與後台角色計算。
 

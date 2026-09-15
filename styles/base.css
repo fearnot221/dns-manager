@@ -1,4 +1,15 @@
 * { box-sizing: border-box; }
+/* Keep every scroll container operable by wheel, touch, trackpad and keyboard,
+   while removing the platform scrollbar chrome requested by the product UI. */
+html, body, * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+html::-webkit-scrollbar, body::-webkit-scrollbar, *::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-geist), "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; font-size: 1rem; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 button, input, select, textarea { font: inherit; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }

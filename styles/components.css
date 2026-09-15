@@ -54,7 +54,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface-soft) 45%, var(--p
 .resource-error p { font-size: .875rem; color: var(--muted); margin-top: 6px; }
 .modal { position: fixed; inset: 0; margin: auto; padding: 0; width: min(580px, calc(100% - 32px)); max-height: calc(100dvh - 48px); overflow: auto; color: var(--ink); background: var(--panel); border: 1px solid var(--border-strong); border-radius: 16px; box-shadow: 0 24px 80px #0004; }
 .modal::backdrop { background: #080c1480; backdrop-filter: blur(3px); }
-.modal { overscroll-behavior: contain; scrollbar-gutter: stable; }
+.modal { overscroll-behavior: contain; }
 .modal :is(input, textarea, select, .form-error) { scroll-margin-block: 24px; }
 .modal textarea { resize: vertical; min-height: 96px; }
 .modal .form-error { overflow-wrap: anywhere; }
@@ -111,7 +111,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface-soft) 45%, var(--p
 .zone-switch-track > span { display: block; width: 14px; height: 14px; background: white; border-radius: 50%; box-shadow: 0 1px 3px #0002; transition: transform .18s ease; }
 .zone-access-switch[aria-checked="true"] .zone-switch-track { background: var(--accent); }
 .zone-switch-track { flex-shrink: 0; }
-.zone-access-filter { min-height: 42px; }
+.zone-access-filter { min-height: 44px; }
 @media (max-width: 700px) { .zone-access-filter { flex: 1 1 180px; min-width: 0; font-size: 1rem; } }
 .zone-access-switch[aria-checked="true"] .zone-switch-track > span { transform: translateX(12px); }
 .zone-access-error { color: var(--red); margin: 12px 20px; font-size: 14px; }

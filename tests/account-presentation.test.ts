@@ -12,12 +12,12 @@ it("shows the Portal identifier below the human name", () => {
   expect(result.account).toBe("115500001");
   expect(result.studentId).toBe("115500001");
   expect(result.note).toBe("測試備註");
-  expect(result.email).toBeNull();
+  expect(result.email).toBe("secret@example.com");
   expect(result.name).toBe("測試姓名");
 });
-it("does not expose either synthetic or stored contact emails", () => {
+it("exposes stored contact emails only through the admin account presentation", () => {
   const user = { id: "u", email: "portal-hash@accounts.invalid", globalRole: "USER" as const, accounts: [{ providerAccountId: "someone" }] };
   expect(accountPresentation(user)).toMatchObject({ email: null, account: "someone" });
-  expect(accountPresentation({ ...user, portalEmail: "owner@example.invalid" })).toMatchObject({ email: null, account: "someone", protected: false, globalRole: "USER" });
-  expect(accountPresentation({ id: "u", email: "test@example.com", globalRole: "USER" })).toMatchObject({ email: null, account: "未綁定 Portal (u)" });
+  expect(accountPresentation({ ...user, portalEmail: "owner@example.invalid" })).toMatchObject({ email: "owner@example.invalid", account: "someone", protected: false, globalRole: "USER" });
+  expect(accountPresentation({ id: "u", email: "test@example.com", globalRole: "USER" })).toMatchObject({ email: "test@example.com", account: "未綁定 Portal (u)" });
 });
