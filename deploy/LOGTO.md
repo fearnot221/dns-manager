@@ -22,7 +22,7 @@ AUTH_LOGTO_SECRET=由你在伺服器填入
 AUTH_PASSWORD_LOGIN_ENABLED=true
 ```
 
-本專案已確認 Logto 的頂層 `name` 是 NCU Portal 同步、使用者不能修改的學號。最高權限要求經驗證的 `profile.name` 為 `115502532`，且帳號已有資料庫 `SUPER_ADMIN` 角色。`LOGTO_OWNER_SUB` 已停用，可從 env 移除；`sub` 僅保留作 OIDC 登入綁定，不指定最高權限。一般管理員仍需人工指派角色，學號本身不會自動授予角色。
+本專案已確認 Logto 的頂層 `name` 是 NCU Portal 同步、使用者不能修改的學號。經驗證的 `profile.name=115502532` 直接取得最高權限，不要求特定 User ID、sub、email、舊帳號綁定或原有 SUPER_ADMIN 角色。`LOGTO_OWNER_SUB` 已停用；sub 僅作 OIDC 登入／資料關聯。只有本次登入 provider 為 Logto 時才採用已驗證學號；同一資料帳號改用密碼登入不會繼承此最高權限。其他學號仍由後台指定一般管理員角色，不能從 custom_data 或顯示姓名取得權限。停用／移除帳號仍禁止登入。
 
 部署須先執行新增 `User.logtoName` 的 migration。新欄位不從歷史顯示姓名、學號或備註回填，只在成功驗證 Logto UserInfo 後寫入。既有最高管理員請重新登入一次；之前的 session 不會憑歷史欄位取得最高權限。帳密測試登入保持可用。
 
@@ -30,11 +30,11 @@ AUTH_PASSWORD_LOGIN_ENABLED=true
 
 畫面姓名依序使用 `custom_data.username` → `chinese-name` → `chineseName`，不再將標準 `name` 的學號當成人名。`custom_data.username` 只接受去除頭尾空白後不超過 300 字的非空字串。每次登入同步 `User.name`；缺少顯示姓名時保留既有姓名。頂層 `name` 另存 `User.logtoName` 作驗證識別，並作為學號輔助顯示。`student-id`、`studentId`、email 和 custom_data 不參與授權。
 
-Scope 保持 `openid profile custom_data`，不保證回傳 email。姓名和學號的可信來源以此專案的 NCU connector 設定為前提：若日後允許使用者修改標準 `name`，必須先停用此授權對應。保留資料庫內部 ID、既有登入 email 與歷史稽核，不因顯示／驗證識別調整而搬移 DNS 或自動合併帳號。
+Scope 使用 `openid profile identities`，不要求 `email` 或 `custom_data`。因此 `custom_data.username` 不保證回傳；未回傳時，顯示姓名沿用受信任 profile 欄位的既有 fallback。姓名和學號的可信來源以此專案的 NCU connector 設定為前提：若日後允許使用者修改標準 `name`，必須先停用此授權對應。保留資料庫內部 ID、既有登入 email 與歷史稽核，不因顯示／驗證識別調整而搬移 DNS 或自動合併帳號。
 
 ## 既有帳號綁定
 
-新 subject 首次登入仍建立獨立 USER，不因 email 或學號相同自動取得既有資料或角色。登入綁定繼續使用 OIDC sub；管理權驗證改用受控的 `profile.name` 與儲存角色。既有帳號記錄過 `logtoName` 後，回傳名稱若不符即拒絕登入，不靜默更換授權識別。要更換登入綁定仍需維運核對，不能僅輸入姓名就合併帳號。
+新 subject 首次登入仍建立獨立資料帳號，資料庫角色預設 USER；最高學號的實際授權直接解析為 SUPER_ADMIN，不需手動 UPDATE 或 link。其他學號使用人工指派的角色。取得最高權限不會合併、搬移舊帳號的 DNS／單位資料。既有帳號記錄過 logtoName 後，若同一登入綁定回傳不同 name 則拒絕登入。以下工具僅用於明確要求的資料帳號綁定調整，不是取得最高權限的必要步驟。
 
 新版 tools image 建好後，在 VM 的 Bash 使用下列共用指令（不依賴 `/opt/dns-manager/.git`）：
 
@@ -63,7 +63,7 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
   --apply --confirm-subject VERIFIED_LOGTO_USER_ID
 ```
 
-工具只新增 Logto Account 綁定並記錄稽核，不改角色、姓名、密碼或 DNS／單位關聯；拒絕停用帳號、重複綁定與已儲存的最高帳號學號不符。工具不猜測 UserInfo 學號，實際登入仍須通過 `profile.name` 檢查。舊 Portal Account 保留作為歷史對照，不自動刪除或合併帳號。
+工具只新增 Logto Account 綁定並記錄稽核，不改角色、姓名、密碼或 DNS／單位關聯；拒絕停用帳號、重複綁定。工具不猜測 UserInfo 學號，實際登入仍須通過 `profile.name` 檢查。舊 Portal Account 保留作為歷史對照，不自動刪除或合併帳號。
 
 ### 暫時解除綁定以測試一般登入
 
@@ -76,7 +76,7 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
 ./node_modules/.bin/tsx scripts/unlink-logto-user.ts --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID --apply --confirm-subject VERIFIED_LOGTO_USER_ID
 ```
 
-工具僅刪除指定 user ID／subject 的 Logto Account 並撤銷該使用者所有登入 session，記錄稽核；保留使用者、角色、密碼、舊 Portal 綁定及 DNS／單位資料。先確認仍能用另一個管理員或既有帳密進入管理功能；工具不建立或重設密碼。若本來未綁定則不變更資料。之後該 subject 會建立獨立 USER 帳號，不取得原管理權限。測試完成後不能直接將已被測試帳號使用的 subject 綁回最高帳號，需核對測試帳號資料再另行處理；不得自動合併或刪除。
+工具僅刪除指定 user ID／subject 的 Logto Account 並撤銷該使用者所有登入 session，記錄稽核；保留使用者、角色、密碼、舊 Portal 綁定及 DNS／單位資料。解除綁定不能讓 name=115502532 變成一般使用者：該學號重新驗證後仍取得最高權限。測試一般使用者請使用其他學號。綁定調整不會自動合併或刪除帳號。
 
 ## 登出與驗收
 
@@ -85,7 +85,6 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
 查看 `docker logs --since 10m --tail 150 dns-manager-web-1` 中的 `logto-signin-denied`：
 
 - `account_link_required`：同一 subject 的內部合成 email 已存在，但缺少 Account 綁定，需核對並人工處理；一般真實 email 相同不阻擋登入。
-- `owner_binding_mismatch`：最高角色帳號回傳的 `profile.name` 不是 `115502532`。
 - `account_inactive`：帳號停用或已移除，不得繞過狀態檢查。
 - `account_name_missing`：管理員登入未回傳頂層 `name` 學號。
 - `account_name_mismatch`：已綁定帳號回傳的學號與先前驗證值不符，需維運核對。

@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 const timings = new AsyncLocalStorage<{ id: string }>();
 
-type LoginDenialReason = "subject_mismatch" | "account_name_missing" | "account_name_mismatch" | "account_inactive" | "owner_binding_mismatch" | "account_link_required" | "invalid_profile" | "account_lookup_failed" | "profile_update_failed";
+type LoginDenialReason = "subject_mismatch" | "account_name_missing" | "account_name_mismatch" | "account_inactive" | "account_link_required" | "invalid_profile" | "account_lookup_failed" | "profile_update_failed";
 
 /** Fixed reason codes only: never log claims, credentials, or raw database errors. */
 export function denyLogtoLogin(reason: LoginDenialReason): false {

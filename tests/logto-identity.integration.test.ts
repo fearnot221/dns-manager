@@ -15,7 +15,7 @@ it.skipIf(!url)("persists verified Logto names separately from display and histo
     const verified = await db.user.update({ where: { id }, data: { logtoName: "115502532" }, include: { accounts: true } });
     expect(verified.name).toBe("中文姓名");
     expect(accountOwnerIdentifier(verified.accounts, verified.globalRole, verified.logtoName)).toBe("115502532");
-    expect(accountOwnerIdentifier(verified.accounts, "USER", verified.logtoName)).toBeNull();
+    expect(accountOwnerIdentifier(verified.accounts, "USER", verified.logtoName)).toBe("115502532");
   } finally {
     await db.user.deleteMany({ where: { id } });
     await db.$disconnect();

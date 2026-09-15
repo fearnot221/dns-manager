@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { verifyPassword } from "@/lib/auth/password";
 import { demoUsers } from "@/lib/users/demo";
-import { OWNER_IDENTIFIER, resolvedGlobalRole } from "@/lib/auth/owner";
+import { resolvedGlobalRole } from "@/lib/auth/owner";
 import { logtoProvider, logtoConfigured, logtoIdentity } from "./logto";
 import { passwordLoginEnabled, loginProviderAllowed } from "./policy";
 import { logAuditEvent } from "@/lib/audit/service";
@@ -54,7 +54,7 @@ const config: NextAuthConfig = {
     async jwt({ token, user, account, profile }) {
       if (account) token.loginProvider = account.provider;
       if (account?.provider === "logto") { token.portalEmail = logtoIdentity(profile).portalEmail || undefined; token.logtoIdToken = account.id_token; }
-      // Roles come from the database, never Portal claims or an email domain.
+      // The controlled Portal name identifies the owner; other roles are assigned locally.
       if (!loginProviderAllowed(token.loginProvider)) return null;
       if (user) {
         token.userId = user.id;
@@ -62,6 +62,7 @@ const config: NextAuthConfig = {
         if (!user.globalRole && process.env.DATABASE_URL) {
           token.globalRole = (await db.user.findUnique({ where: { id: user.id }, select: { globalRole: true } }))?.globalRole ?? "USER";
         }
+        token.globalRole = resolvedGlobalRole(user.email || "", token.globalRole, account?.provider === "logto" ? logtoIdentity(profile).logtoName : null);
       }
       if (user?.id && account) {
         token.idleSessionId = crypto.randomUUID();
@@ -95,8 +96,6 @@ const config: NextAuthConfig = {
           const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "logto", providerAccountId: identity.id } }, include: { user: { include: { accounts: true } } } });
           if (linked) {
             if (linked.user.disabled || linked.user.removedAt) return denyLogtoLogin("account_inactive");
-            const ownerTarget = linked.user.globalRole === "SUPER_ADMIN";
-            if (ownerTarget && identity.logtoName !== OWNER_IDENTIFIER) return denyLogtoLogin("owner_binding_mismatch");
             if (linked.user.globalRole !== "USER" && !identity.logtoName) return denyLogtoLogin("account_name_missing");
             if (linked.user.logtoName && linked.user.logtoName !== identity.logtoName) return denyLogtoLogin("account_name_mismatch");
             const displayName = identity.hasName ? identity.name : linked.user.name || identity.name;

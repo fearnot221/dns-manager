@@ -55,9 +55,9 @@ PowerDNS 如果在 host 上，容器中的 `127.0.0.1` 不會連到 host；使�
 
 - 重定向 URI：`https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/logto`
 - 登出後重定向 URI：`https://dnsmgr.ce.ncu.edu.tw/login`
-- Scopes：`openid profile custom_data`
+- Scopes：`openid profile identities`
 
-既有帳號由維運人工核對 Logto User ID 後綁定，不自動依 Email 合併；最高帳號登入時須回傳 NCU 同步的 `profile.name=115502532` 且已有 SUPER_ADMIN 角色。正式 SSO 流程需另行驗收。
+既有帳號由維運人工核對 Logto User ID 後綁定，不自動依 Email 合併；最高帳號登入時須回傳 NCU 同步的 `profile.name=115502532`。正式 SSO 流程需另行驗收。
 
 ## 4. 安裝 webhook 接收程式
 

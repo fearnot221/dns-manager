@@ -36,3 +36,20 @@ it("never promotes a new USER merely because its Logto subject matches the owner
   vi.mocked(db.user.findUnique).mockResolvedValue({ id: "independent-user", email: "synthetic@accounts.invalid", globalRole: "USER", accounts: [{ provider: "logto", providerAccountId: "owner-subject" }], zonePermissions: [], groupMemberships: [] } as never);
   expect(await requireActor()).toMatchObject({ globalRole: "USER", portalIdentifier: null, zoneRoles: {} });
 });
+
+it.each(["USER", "ADMIN", "SUPER_ADMIN"] as const)("grants verified student 115502532 owner access regardless of stored %s role or internal IDs", async (globalRole) => {
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("DATABASE_URL", "postgresql://test/db");
+  const id = "new-independent-account";
+  vi.mocked(auth as () => Promise<Session | null>).mockResolvedValue({ loginProvider: "logto", user: { id, email: "new@accounts.invalid", globalRole: "USER" }, expires: "2099-01-01" });
+  vi.mocked(db.user.findUnique).mockResolvedValue({ id, email: "new@accounts.invalid", globalRole, logtoName: "115502532", name: "顯示姓名", accounts: [{ provider: "logto", providerAccountId: "different-sub" }], zonePermissions: [], groupMemberships: [] } as never);
+  expect(await requireActor()).toMatchObject({ id, globalRole: "SUPER_ADMIN", portalIdentifier: "115502532" });
+});
+
+it("does not grant remembered Logto-name privileges to a password session", async () => {
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("DATABASE_URL", "postgresql://test/db");
+  vi.mocked(auth as () => Promise<Session | null>).mockResolvedValue({ loginProvider: "credentials", user: { id: "same-record", email: "owner-bootstrap@accounts.invalid", globalRole: "SUPER_ADMIN" }, expires: "2099-01-01" });
+  vi.mocked(db.user.findUnique).mockResolvedValue({ id: "same-record", email: "owner-bootstrap@accounts.invalid", globalRole: "USER", logtoName: "115502532", accounts: [{ provider: "logto", providerAccountId: "irrelevant-sub" }], zonePermissions: [], groupMemberships: [] } as never);
+  expect(await requireActor()).toMatchObject({ globalRole: "USER", portalIdentifier: null });
+});

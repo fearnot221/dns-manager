@@ -23,7 +23,7 @@ export function logtoProvider(): OIDCConfig<Record<string, unknown>> {
     id: "logto", name: "NCU Portal", type: "oidc", issuer: LOGTO_ISSUER,
     wellKnown: `${LOGTO_ISSUER}/.well-known/openid-configuration`,
     clientId: process.env.AUTH_LOGTO_ID || LOGTO_CLIENT_ID, clientSecret: process.env.AUTH_LOGTO_SECRET,
-    authorization: { params: { scope: "openid profile custom_data", prompt: "login" } },
+    authorization: { params: { scope: "openid profile identities", prompt: "login" } },
     client: { token_endpoint_auth_method: "client_secret_basic", id_token_signed_response_alg: "ES384" },
     checks: ["pkce", "state", "nonce"],
     // Fetch full profile; Auth.js still verifies the ID token and userinfo subject.

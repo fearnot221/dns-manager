@@ -61,7 +61,7 @@ it("rejects old JWTs and preserves Portal provenance on new JWTs", async () => {
   for (const loginProvider of [undefined, "google", "ncu-portal"]) {
     expect(await jwt({ token: { loginProvider } } as Parameters<typeof jwt>[0])).toBeNull();
   }
-  expect(await jwt({ token: {}, user: { id: "owner", globalRole: "SUPER_ADMIN" }, account: { type: "oauth", providerAccountId: "owner-test", provider: "logto" }, profile: { sub: "owner-test" } })).toMatchObject({ loginProvider: "logto", userId: "owner", globalRole: "SUPER_ADMIN" });
+  expect(await jwt({ token: {}, user: { id: "owner", globalRole: "SUPER_ADMIN" }, account: { type: "oauth", providerAccountId: "owner-test", provider: "logto" }, profile: { sub: "owner-test", name: "115502532" } })).toMatchObject({ loginProvider: "logto", userId: "owner", globalRole: "SUPER_ADMIN" });
 });
 it("allows the owner subject as an independent USER but preserves explicit owner linking", async () => {
   const config = await configuration();
@@ -82,6 +82,14 @@ it("keeps the Logto ID token out of the public session", async () => {
   const session = config.callbacks!.session!;
   const result = await session({ session: { user: { id: "u", email: "u@example.com" }, expires: "2099-01-01" }, token: { userId: "u", loginProvider: "logto", logtoIdToken: "private-id-token", globalRole: "USER" } } as Parameters<typeof session>[0]);
   expect(JSON.stringify(result)).not.toContain("private-id-token");
+});
+
+it("gives a newly provisioned owner-name user the effective owner JWT role, not a custom-data role", async () => {
+  const config = await configuration();
+  const jwt = config.callbacks!.jwt!;
+  const base = { token: {}, user: { id: "new-user", globalRole: "USER" as const }, account: { type: "oidc" as const, provider: "logto", providerAccountId: "new-sub" } };
+  expect(await jwt({ ...base, profile: { sub: "new-sub", name: "115502532" } })).toMatchObject({ globalRole: "SUPER_ADMIN" });
+  expect(await jwt({ ...base, token: {}, profile: { sub: "new-sub", name: "other-student", custom_data: { username: "115502532", role: "SUPER_ADMIN" } } })).toMatchObject({ globalRole: "USER" });
 });
 it("accepts a new verified Portal user without pre-registration", async () => {
   const config = await configuration();

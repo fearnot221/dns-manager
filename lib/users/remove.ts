@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db/client";
 import { ApiError } from "@/lib/api/respond";
-import { isOwner } from "@/lib/auth/owner";
+import { isOwner, accountOwnerIdentifier, OWNER_IDENTIFIER } from "@/lib/auth/owner";
 import type { Actor } from "@/lib/dns/types";
 import { lockUnit, unitAudit } from "@/lib/units/service";
 import { newPasscode, passcodeHash } from "@/lib/units/passcode";
@@ -12,7 +12,7 @@ export async function removeUser(actor: Actor, id: string) {
     await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${id} FOR UPDATE`;
     const user = await tx.user.findUnique({ where: { id }, include: { accounts: { where: { provider: { in: ["ncu-portal", "logto"] } } }, unitMemberships: { orderBy: { unitId: "asc" } } } });
     if (!user) throw new ApiError("找不到使用者。", 404);
-    if (id === actor.id || user.globalRole === "SUPER_ADMIN") throw new ApiError("此帳號不能移除。", 403);
+    if (id === actor.id || accountOwnerIdentifier(user.accounts, user.globalRole, user.logtoName) === OWNER_IDENTIFIER) throw new ApiError("此帳號不能移除。", 403);
     if (user.removedAt) throw new ApiError("此帳號已移除。", 409);
     for (const membership of user.unitMemberships) {
       await lockUnit(tx, membership.unitId);
