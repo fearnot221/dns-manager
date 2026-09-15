@@ -96,8 +96,8 @@ const config: NextAuthConfig = {
           const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "logto", providerAccountId: identity.id } }, include: { user: { include: { accounts: true } } } });
           if (linked) {
             if (linked.user.disabled || linked.user.removedAt) return denyLogtoLogin("account_inactive");
-            if (linked.user.globalRole !== "USER" && !identity.logtoName) return denyLogtoLogin("account_name_missing");
-            if (linked.user.logtoName && linked.user.logtoName !== identity.logtoName) return denyLogtoLogin("account_name_mismatch");
+            if (linked.user.globalRole !== "USER" && !identity.logtoName) return denyLogtoLogin("account_identifier_missing");
+            if (linked.user.logtoName && linked.user.logtoName !== identity.logtoName) return denyLogtoLogin("account_identifier_mismatch");
             const displayName = identity.hasName ? identity.name : linked.user.name || identity.name;
             failureStage = "profile_update_failed";
             await db.user.update({ where: { id: linked.user.id }, data: { portalEmail: identity.portalEmail, name: displayName, logtoName: identity.logtoName, studentId: identity.studentId } });

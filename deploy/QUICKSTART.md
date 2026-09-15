@@ -113,7 +113,7 @@ curl -f https://dnsmgr.ce.ncu.edu.tw/healthz
 
 ## 4. 最高帳號、Portal 與 PowerDNS
 
-全新安裝的 bootstrap 登入地址為 `owner-bootstrap@accounts.invalid`，只用於初始帳密登入，地址本身沒有授權效果。既有帳號不改 email；最高權限直接以經驗證的 NCU identity `details.name=115502532` 判斷，不要求舊帳號綁定或原有角色（見 [Logto 設定](LOGTO.md)）。初始密碼是獨立隨機值，不是 demo 密碼：
+全新安裝的 bootstrap 登入地址為 `owner-bootstrap@accounts.invalid`，只用於初始帳密登入，地址本身沒有授權效果。既有帳號不改 email；最高權限直接以經驗證的 NCU identity `details.identifier=115502532` 判斷，不要求舊帳號綁定或原有角色（見 [Logto 設定](LOGTO.md)）。初始密碼是獨立隨機值，不是 demo 密碼：
 
 ```bash
 sudo cat /etc/dns-manager/initial-owner-password

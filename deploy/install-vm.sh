@@ -203,7 +203,7 @@ echo '1. Merge /etc/dns-manager/Caddyfile.external into your EXISTING external C
 echo "   Permit Caddy $CADDY_IP -> VM $VM_IP TCP 8080; the gateway rejects other source IPs."
 echo '2. Once https://dnsmgr.ce.ncu.edu.tw/login works, run:'
 echo '   sudo /opt/dns-manager-deploy/register-webhook.sh'
-echo '3. Owner: verified NCU identity details.name=115502532, independent of stored role; Portal users sign up automatically as USER. Assign admins manually.'
+echo '3. Owner: verified NCU identity details.identifier=115502532, independent of stored role; Portal users sign up automatically as USER. Assign admins manually.'
 echo '   Password login is temporarily enabled; set AUTH_PASSWORD_LOGIN_ENABLED=false after testing.'
 echo '4. Set Portal/PowerDNS credentials in /etc/dns-manager/app.env; then run:'
 echo '   sudo /opt/dns-manager-deploy/update-now.sh'

@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 import { accountOwnerIdentifier } from "@/lib/auth/owner";
 
 const url = process.env.UNIT_TEST_DATABASE_URL;
-it.skipIf(!url)("persists verified Logto names separately from display and historical student IDs", async () => {
+it.skipIf(!url)("persists verified Logto identifiers separately from display and historical fields", async () => {
   const target = new URL(url!);
   if (target.hostname !== "127.0.0.1" || target.pathname !== "/dns_units_test") throw new Error("Use the disposable local test database only");
   const db = new PrismaClient({ datasourceUrl: url });

@@ -17,7 +17,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/client", () => ({ db: { user: { findUnique: mocks.findUnique, findFirst: mocks.findFirst, update: mocks.update }, account: { findUnique: mocks.accountFind, create: mocks.accountCreate } } }));
 beforeEach(() => { vi.resetModules(); vi.clearAllMocks(); mocks.findFirst.mockReset(); });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
-const identities = (name?: string, username?: string, identifier = name) => ({ ncu: { userId: "portal-user", details: { name, rawData: { username, identifier } } } });
+const identities = (identifier?: string, username?: string, name = "Portal profile name") => ({ ncu: { userId: "portal-user", details: { name, rawData: { username, identifier } } } });
 async function configuration(production = true, configured = true) {
   vi.stubEnv("NODE_ENV", production ? "production" : "development");
   vi.stubEnv("DATABASE_URL", production ? "postgresql://test/db" : "");
@@ -90,7 +90,7 @@ it("gives a newly provisioned Portal identity the effective owner JWT role, not 
   const jwt = config.callbacks!.jwt!;
   const base = { token: {}, user: { id: "new-user", globalRole: "USER" as const }, account: { type: "oidc" as const, provider: "logto", providerAccountId: "new-sub" } };
   expect(await jwt({ ...base, profile: { sub: "new-sub", identities: identities("115502532") } })).toMatchObject({ globalRole: "SUPER_ADMIN" });
-  expect(await jwt({ ...base, token: {}, profile: { sub: "new-sub", identities: { ncu: { userId: "portal-user", details: { name: "other-student", role: "SUPER_ADMIN", rawData: { username: "115502532" } } } } } })).toMatchObject({ globalRole: "USER" });
+  expect(await jwt({ ...base, token: {}, profile: { sub: "new-sub", identities: { ncu: { userId: "portal-user", details: { name: "115502532", role: "SUPER_ADMIN", rawData: { username: "115502532", identifier: "other-student" } } } } } })).toMatchObject({ globalRole: "USER" });
 });
 it("accepts a new verified Portal user without pre-registration", async () => {
   const config = await configuration();
@@ -125,18 +125,19 @@ it("persists identities details username for existing users and ignores embedded
   const config = await configuration();
   mocks.accountFind.mockResolvedValue({ user: { id: "linked", name: "原姓名", disabled: false, globalRole: "USER", accounts: [] } });
   const user: { name?: string } = {};
-  expect(await config.callbacks!.signIn!({ user, account: { type: "oidc", provider: "logto", providerAccountId: "ordinary" }, profile: { sub: "ordinary", identities: { ncu: { userId: "portal-user", details: { name: "115502532", role: "SUPER_ADMIN", rawData: { username: " 王小明 ", identifier: "115502532" } } } } } })).toBe(true);
+  expect(await config.callbacks!.signIn!({ user, account: { type: "oidc", provider: "logto", providerAccountId: "ordinary" }, profile: { sub: "ordinary", identities: { ncu: { userId: "portal-user", details: { name: "不作授權的姓名", role: "SUPER_ADMIN", rawData: { username: " 王小明 ", identifier: "115502532" } } } } } })).toBe(true);
   expect(user.name).toBe("王小明");
   expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { logtoName: "115502532", portalEmail: null, name: "王小明", studentId: "115502532" } });
 });
 
-it("authorizes the owner by verified identities details name, never sub or display claims", async () => {
+it("authorizes the owner by verified identities identifier, never sub or display claims", async () => {
   const config = await configuration();
   mocks.accountFind.mockResolvedValue({ user: { id: "owner", logtoName: "115502532", globalRole: "SUPER_ADMIN", accounts: [], disabled: false } });
   const attempt = (profile: object) => config.callbacks!.signIn!({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "any-logto-sub" }, profile: { sub: "any-logto-sub", ...profile } });
   expect(await attempt({ identities: identities("115502532", "管理者") })).toBe(true);
   expect(await attempt({ identities: identities("111504515", "115502532") })).toBe(false);
   expect(await attempt({ name: "115502532", custom_data: { username: "管理者" } })).toBe(false);
+  expect(await attempt({ identities: identities("ordinary", "管理者", "115502532") })).toBe(false);
   mocks.accountFind.mockResolvedValue({ user: { id: "admin", logtoName: "111504515", globalRole: "ADMIN", accounts: [], disabled: false } });
   expect(await attempt({ identities: identities("different-student") })).toBe(false);
   expect(await attempt({})).toBe(false);

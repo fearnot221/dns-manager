@@ -22,19 +22,19 @@ AUTH_LOGTO_SECRET=由你在伺服器填入
 AUTH_PASSWORD_LOGIN_ENABLED=true
 ```
 
-本專案只從 Logto UserInfo 的 `identities` 讀取 NCU Portal 資料。經驗證且一致的 identity `details.name=115502532` 直接取得最高權限，不要求特定 User ID、sub、email、舊帳號綁定或原有 SUPER_ADMIN 角色。`LOGTO_OWNER_SUB` 已停用；sub 僅作 OIDC 登入／資料關聯。只有本次登入 provider 為 Logto 時才採用已驗證學號；同一資料帳號改用密碼登入不會繼承此最高權限。其他學號仍由後台指定一般管理員角色，不能從顯示姓名或 identity 內嵌角色取得權限。停用／移除帳號仍禁止登入。
+本專案只從 Logto UserInfo 的 `identities` 讀取 NCU Portal 資料。經驗證且一致的 identity `details.identifier=115502532` 直接取得最高權限，不要求特定 User ID、sub、email、舊帳號綁定或原有 SUPER_ADMIN 角色。`LOGTO_OWNER_SUB` 已停用；sub 僅作 OIDC 登入／資料關聯。只有本次登入 provider 為 Logto 時才採用已驗證 identifier；同一資料帳號改用密碼登入不會繼承此最高權限。其他管理員由最高權限帳號在使用者管理中人工指派，不能從姓名或 identity 內嵌角色取得權限。停用／移除帳號仍禁止登入。
 
 部署須先執行新增 `User.logtoName` 的 migration。新欄位不從歷史顯示姓名、學號或備註回填，只在成功驗證 Logto UserInfo 後寫入。既有最高管理員請重新登入一次；之前的 session 不會憑歷史欄位取得最高權限。帳密測試登入保持可用。
 
 舊 `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、`NCU_OWNER_IDENTIFIER` 不再用於登入；新版本 Docker Compose 已傳遞 Logto 變數。保留 `AUTH_SECRET`、資料庫、既有內部 email 與原使用者 ID，不重建資料庫或重新 seed 覆寫帳號。
 
-每個 identity 的格式為 `{ userId, details }`。授權學號取自 `details.name`；畫面姓名依序使用 `details.username`、`details.rawData.username`、`chinese-name`、`chineseName`；姓名下方顯示 `details.identifier`，並以 `details.rawData.identifier` 為 fallback。每次登入分別同步 `User.name`、`User.studentId` 與 `User.logtoName`。若多個 linked identities 回傳互相衝突的授權學號，系統不採用任何一筆 identity 資料作授權或顯示，但仍允許該帳號以一般使用者登入。
+每個 identity 的格式為 `{ userId, details }`。授權與帳號管理識別取自 `details.identifier`，並以 `details.rawData.identifier` 為 fallback；畫面姓名依序使用 `details.username`、`details.rawData.username`、`chinese-name`、`chineseName`、`name`。姓名下方顯示同一 identifier。每次登入分別同步 `User.name`、`User.studentId`，並將已驗證 identifier 保存於既有 `User.logtoName` 欄位。若多個 linked identities 回傳互相衝突的 identifier，系統不採用任何一筆 identity 資料作授權或顯示，但仍允許該帳號以一般使用者登入。
 
 授權參數使用 `openid identities`。其中 `identities` 是唯一要求的 Logto `UserScope`；`openid` 是 OIDC 登入與 `sub` 驗證所需的協定 scope，不要求 `profile`、`email` 或 `custom_data`。姓名和學號的可信來源以此專案的 NCU connector 設定為前提。保留資料庫內部 ID、既有登入 email 與歷史稽核，不因顯示／驗證識別調整而搬移 DNS 或自動合併帳號。
 
 ## 既有帳號綁定
 
-新 subject 首次登入仍建立獨立資料帳號，資料庫角色預設 USER；最高學號的實際授權直接解析為 SUPER_ADMIN，不需手動 UPDATE 或 link。其他學號使用人工指派的角色。取得最高權限不會合併、搬移舊帳號的 DNS／單位資料。既有帳號記錄過 logtoName 後，若同一登入綁定回傳不同 name 則拒絕登入。以下工具僅用於明確要求的資料帳號綁定調整，不是取得最高權限的必要步驟。
+新 subject 首次登入仍建立獨立資料帳號，資料庫角色預設 USER；最高 identifier 的實際授權直接解析為 SUPER_ADMIN，不需手動 UPDATE 或 link。其他 identifier 使用人工指派的角色。取得最高權限不會合併、搬移舊帳號的 DNS／單位資料。既有帳號記錄過 identifier 後，若同一登入綁定回傳不同 identifier 則拒絕登入。以下工具僅用於明確要求的資料帳號綁定調整，不是取得最高權限的必要步驟。
 
 新版 tools image 建好後，在 VM 的 Bash 使用下列共用指令（不依賴 `/opt/dns-manager/.git`）：
 
@@ -76,7 +76,7 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
 ./node_modules/.bin/tsx scripts/unlink-logto-user.ts --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID --apply --confirm-subject VERIFIED_LOGTO_USER_ID
 ```
 
-工具僅刪除指定 user ID／subject 的 Logto Account 並撤銷該使用者所有登入 session，記錄稽核；保留使用者、角色、密碼、舊 Portal 綁定及 DNS／單位資料。解除綁定不能讓 name=115502532 變成一般使用者：該學號重新驗證後仍取得最高權限。測試一般使用者請使用其他學號。綁定調整不會自動合併或刪除帳號。
+工具僅刪除指定 user ID／subject 的 Logto Account 並撤銷該使用者所有登入 session，記錄稽核；保留使用者、角色、密碼、舊 Portal 綁定及 DNS／單位資料。解除綁定不能讓 identifier=115502532 變成一般使用者：該 identifier 重新驗證後仍取得最高權限。測試一般使用者請使用其他 identifier。綁定調整不會自動合併或刪除帳號。
 
 ## 登出與驗收
 
@@ -86,8 +86,8 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
 
 - `account_link_required`：同一 subject 的內部合成 email 已存在，但缺少 Account 綁定，需核對並人工處理；一般真實 email 相同不阻擋登入。
 - `account_inactive`：帳號停用或已移除，不得繞過狀態檢查。
-- `account_name_missing`：管理員登入未回傳頂層 `name` 學號。
-- `account_name_mismatch`：已綁定帳號回傳的學號與先前驗證值不符，需維運核對。
+- `account_identifier_missing`：管理員登入未回傳 identity identifier。
+- `account_identifier_mismatch`：已綁定帳號回傳的 identifier 與先前驗證值不符，需維運核對。
 - `subject_mismatch`／`invalid_profile`：身分回傳不符，檢查 Logto connector claims 設定。
 - `account_lookup_failed`／`profile_update_failed`：檢查資料庫連線、migration 與可用性；不透過放寬登入規則修復。
 

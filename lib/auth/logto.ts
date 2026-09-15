@@ -8,7 +8,7 @@ export const LOGTO_CLIENT_ID = "dtvpigx50sgdvy4aeadee";
 const displayName = z.string().trim().max(300).nullish();
 const studentId = z.string().trim().max(100).nullish();
 const identityDetailsSchema = z.object({
-  name: studentId,
+  name: displayName,
   identifier: studentId,
   username: displayName,
   "chinese-name": displayName,
@@ -28,20 +28,20 @@ function identityClaims(raw: unknown) {
     if (!parsed.success) return [];
     const nested = identityDetailsSchema.safeParse(parsed.data.rawData);
     return [{
-      logtoName: parsed.data.name || (nested.success ? nested.data.name : null) || null,
       identifier: parsed.data.identifier || (nested.success ? nested.data.identifier : null) || null,
       displayName: parsed.data.username || (nested.success ? nested.data.username : null) ||
         parsed.data["chinese-name"] || parsed.data.chineseName ||
-        (nested.success ? nested.data["chinese-name"] || nested.data.chineseName : null) || null,
+        (nested.success ? nested.data["chinese-name"] || nested.data.chineseName : null) ||
+        parsed.data.name || (nested.success ? nested.data.name : null) || null,
     }];
   });
-  const names = [...new Set(claims.flatMap(({ logtoName }) => logtoName ? [logtoName] : []))];
-  if (names.length > 1) return { logtoName: null, displayName: null, identifier: null };
-  const relevant = names.length === 1 ? claims.filter((claim) => claim.logtoName === names[0]) : claims;
+  const identifiers = [...new Set(claims.flatMap(({ identifier }) => identifier ? [identifier] : []))];
+  if (identifiers.length > 1) return { logtoName: null, displayName: null, identifier: null };
+  const relevant = identifiers.length === 1 ? claims.filter((claim) => claim.identifier === identifiers[0]) : claims;
   const displayNames = [...new Set(relevant.flatMap(({ displayName }) => displayName ? [displayName] : []))];
-  const identifiers = [...new Set(relevant.flatMap(({ identifier }) => identifier ? [identifier] : []))];
   return {
-    logtoName: names[0] || null,
+    // logtoName is the legacy database field for the verified Portal identifier.
+    logtoName: identifiers[0] || null,
     displayName: displayNames.length === 1 ? displayNames[0] : null,
     identifier: identifiers.length === 1 ? identifiers[0] : null,
   };
