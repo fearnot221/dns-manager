@@ -9,6 +9,7 @@ const displayName = z.string().trim().max(300).nullish();
 const studentId = z.string().trim().max(100).nullish();
 const identityDetailsSchema = z.object({
   name: studentId,
+  identifier: studentId,
   username: displayName,
   "chinese-name": displayName,
   chineseName: displayName,
@@ -20,7 +21,7 @@ const profileSchema = z.object({ sub: z.string().min(1).max(200), identities: z.
 
 function identityClaims(raw: unknown) {
   const identities = identitiesSchema.safeParse(raw);
-  if (!identities.success) return { logtoName: null, displayName: null };
+  if (!identities.success) return { logtoName: null, displayName: null, identifier: null };
 
   const claims = Object.values(identities.data).flatMap(({ details }) => {
     const parsed = identityDetailsSchema.safeParse(details);
@@ -28,15 +29,22 @@ function identityClaims(raw: unknown) {
     const nested = identityDetailsSchema.safeParse(parsed.data.rawData);
     return [{
       logtoName: parsed.data.name || (nested.success ? nested.data.name : null) || null,
+      identifier: parsed.data.identifier || (nested.success ? nested.data.identifier : null) || null,
       displayName: parsed.data.username || (nested.success ? nested.data.username : null) ||
         parsed.data["chinese-name"] || parsed.data.chineseName ||
         (nested.success ? nested.data["chinese-name"] || nested.data.chineseName : null) || null,
     }];
   });
   const names = [...new Set(claims.flatMap(({ logtoName }) => logtoName ? [logtoName] : []))];
-  if (names.length !== 1) return { logtoName: null, displayName: null };
-  const displayNames = [...new Set(claims.flatMap((claim) => claim.logtoName === names[0] && claim.displayName ? [claim.displayName] : []))];
-  return { logtoName: names[0], displayName: displayNames.length === 1 ? displayNames[0] : null };
+  if (names.length > 1) return { logtoName: null, displayName: null, identifier: null };
+  const relevant = names.length === 1 ? claims.filter((claim) => claim.logtoName === names[0]) : claims;
+  const displayNames = [...new Set(relevant.flatMap(({ displayName }) => displayName ? [displayName] : []))];
+  const identifiers = [...new Set(relevant.flatMap(({ identifier }) => identifier ? [identifier] : []))];
+  return {
+    logtoName: names[0] || null,
+    displayName: displayNames.length === 1 ? displayNames[0] : null,
+    identifier: identifiers.length === 1 ? identifiers[0] : null,
+  };
 }
 
 export function logtoIdentity(raw: unknown) {
@@ -44,7 +52,7 @@ export function logtoIdentity(raw: unknown) {
   // Only connector-backed identities are trusted for Portal attributes. Conflicting
   // linked identities remain usable as an ordinary account but cannot authorize a role.
   const identity = identityClaims(profile.identities);
-  return { id: profile.sub, logtoName: identity.logtoName, hasName: !!identity.displayName, name: identity.displayName || "未提供姓名", studentId: identity.logtoName, portalEmail: null,
+  return { id: profile.sub, logtoName: identity.logtoName, hasName: !!identity.displayName, name: identity.displayName || "未提供姓名", studentId: identity.identifier, portalEmail: null,
     email: `logto-${createHash("sha256").update(`${LOGTO_ISSUER}|${profile.sub}`).digest("hex")}@accounts.invalid` };
 }
 export const logtoConfigured = () => Boolean(process.env.DATABASE_URL && process.env.AUTH_LOGTO_SECRET);

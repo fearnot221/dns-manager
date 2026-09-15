@@ -28,7 +28,7 @@ AUTH_PASSWORD_LOGIN_ENABLED=true
 
 舊 `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、`NCU_OWNER_IDENTIFIER` 不再用於登入；新版本 Docker Compose 已傳遞 Logto 變數。保留 `AUTH_SECRET`、資料庫、既有內部 email 與原使用者 ID，不重建資料庫或重新 seed 覆寫帳號。
 
-每個 identity 的格式為 `{ userId, details }`。學號取自 `details.name`；畫面姓名依序使用 `details.username`、`details.rawData.username`、`chinese-name`、`chineseName`。每次登入同步 `User.name`；缺少顯示姓名時保留既有姓名。學號另存 `User.logtoName` 作驗證識別與輔助顯示。若多個 linked identities 回傳互相衝突的學號，系統不採用任何一筆作授權，但仍允許該帳號以一般使用者登入。
+每個 identity 的格式為 `{ userId, details }`。授權學號取自 `details.name`；畫面姓名依序使用 `details.username`、`details.rawData.username`、`chinese-name`、`chineseName`；姓名下方顯示 `details.identifier`，並以 `details.rawData.identifier` 為 fallback。每次登入分別同步 `User.name`、`User.studentId` 與 `User.logtoName`。若多個 linked identities 回傳互相衝突的授權學號，系統不採用任何一筆 identity 資料作授權或顯示，但仍允許該帳號以一般使用者登入。
 
 授權參數使用 `openid identities`。其中 `identities` 是唯一要求的 Logto `UserScope`；`openid` 是 OIDC 登入與 `sub` 驗證所需的協定 scope，不要求 `profile`、`email` 或 `custom_data`。姓名和學號的可信來源以此專案的 NCU connector 設定為前提。保留資料庫內部 ID、既有登入 email 與歷史稽核，不因顯示／驗證識別調整而搬移 DNS 或自動合併帳號。
 

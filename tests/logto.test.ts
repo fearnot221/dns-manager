@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { logtoIdentity, logtoProvider, logtoLogoutUrl, LOGTO_ISSUER } from "@/lib/auth/logto";
 import { accountOwnerIdentifier } from "@/lib/auth/owner";
 import { personDisplay } from "@/lib/users/display";
-const portalIdentity = (name?: string, username?: string) => ({ ncu: { userId: "portal-user", details: { name, rawData: { username } } } });
+const portalIdentity = (name?: string, username?: string, identifier = name) => ({ ncu: { userId: "portal-user", details: { name, rawData: { username, identifier } } } });
 afterEach(() => vi.unstubAllEnvs());
 it("uses OIDC with discovery, issuer checks, PKCE, state, nonce and ES384", () => {
   const provider = logtoProvider();
@@ -32,13 +32,13 @@ it("keeps logout destination fixed to Logto with the configured application retu
   expect(() => logtoLogoutUrl("token", "https://example.com/evil")).toThrow();
 });
 it("presents names first, identifiers second, and hides synthetic email addresses", () => {
-  expect(personDisplay({ name: "王小明", email: "student@example.com", studentId: "115500001" })).toEqual({ primary: "王小明", secondary: "student@example.com · 115500001" });
+  expect(personDisplay({ name: "王小明", email: "student@example.com", studentId: "115500001" })).toEqual({ primary: "王小明", secondary: "115500001 · student@example.com" });
   expect(personDisplay({ email: "opaque@accounts.invalid", studentId: "115500001" })).toEqual({ primary: "115500001", secondary: "" });
   expect(personDisplay({ email: "opaque@accounts.invalid" }).primary).toBe("未提供姓名");
 });
 
 it("reads Portal attributes only from a single consistent linked identity", () => {
-  expect(logtoIdentity({ sub: "opaque", identities: { ncu: { userId: "id", details: { name: " 115502532 ", "chinese-name": " 王小明 " } } } })).toMatchObject({ name: "王小明", hasName: true, studentId: "115502532" });
+  expect(logtoIdentity({ sub: "opaque", identities: { ncu: { userId: "id", details: { name: " 115502532 ", identifier: " ncu-account ", "chinese-name": " 王小明 " } } } })).toMatchObject({ name: "王小明", hasName: true, studentId: "ncu-account" });
   expect(logtoIdentity({ sub: "opaque", identities: { ncu: { userId: "id", details: { name: "115502532", rawData: { chineseName: "映射姓名" } } } } }).name).toBe("映射姓名");
   expect(logtoIdentity({ sub: "opaque", name: "115502532", username: "王小明", custom_data: { username: "王小明" } })).toMatchObject({ name: "未提供姓名", hasName: false, studentId: null });
 });
@@ -67,4 +67,12 @@ it("fails closed for conflicting linked identity names", () => {
     other: { userId: "two", details: { name: "111504515", username: "另一人" } },
   };
   expect(logtoIdentity({ sub: "ordinary", identities })).toMatchObject({ name: "未提供姓名", logtoName: null, studentId: null });
+});
+
+it("keeps the identity identifier separate from the authorization name", () => {
+  expect(logtoIdentity({ sub: "ordinary", identities: portalIdentity("115502532", "王小明", "fearnot") })).toMatchObject({
+    logtoName: "115502532",
+    studentId: "fearnot",
+    name: "王小明",
+  });
 });

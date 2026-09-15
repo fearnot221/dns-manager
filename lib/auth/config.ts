@@ -100,7 +100,7 @@ const config: NextAuthConfig = {
             if (linked.user.logtoName && linked.user.logtoName !== identity.logtoName) return denyLogtoLogin("account_name_mismatch");
             const displayName = identity.hasName ? identity.name : linked.user.name || identity.name;
             failureStage = "profile_update_failed";
-            await db.user.update({ where: { id: linked.user.id }, data: { portalEmail: identity.portalEmail, name: displayName, logtoName: identity.logtoName, ...(identity.studentId ? { studentId: identity.studentId } : {}) } });
+            await db.user.update({ where: { id: linked.user.id }, data: { portalEmail: identity.portalEmail, name: displayName, logtoName: identity.logtoName, studentId: identity.studentId } });
             user.name = displayName;
             return true;
           }

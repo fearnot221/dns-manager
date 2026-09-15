@@ -8,7 +8,7 @@ A production-oriented PowerDNS Authoritative management platform built with Next
 
 測試期間保留帳密與 Portal 登入；`AUTH_PASSWORD_LOGIN_ENABLED=true`（預設）允許已有密碼的測試帳號登入，測試完成可設為 `false` 關閉。local demo 仍保留測試登入。請於 Portal 應用設定授權 `identifier student-id email`。使用者管理以電子郵件為主，顯示名稱採 Portal identifier（帳密使用者採登入帳號），不使用暱稱或學號取代帳號。Portal 信箱另存 User.portalEmail，僅供顯示、不參與帳號連結或權限判斷；未授權時標示未提供，既有使用者重新登入後更新。管理頁可編輯最多 1000 字備註，備註不影響權限。
 
-登入已改接 Logto，前端仍顯示 NCU Portal。應用只要求 Logto 的 `UserScope.Identities`；OIDC 必要的 `openid` 仍保留。最高權限以 NCU connector identity 的 `details.name=115502532` 驗證，姓名由同一 identity 的 `details.rawData.username` 等顯示欄位同步；sub 僅作登入綁定，備註和 email 不授權。詳見 [Logto 切換指南](deploy/LOGTO.md)。
+登入已改接 Logto，前端仍顯示 NCU Portal。應用只要求 Logto 的 `UserScope.Identities`；OIDC 必要的 `openid` 仍保留。最高權限以 NCU connector identity 的 `details.name=115502532` 驗證，姓名由同一 identity 的 `details.rawData.username` 等顯示欄位同步，姓名下方顯示其 `identifier`；sub 僅作登入綁定，備註和 email 不授權。詳見 [Logto 切換指南](deploy/LOGTO.md)。
 
 部署須先執行 Prisma migration（Docker 部署的 migrate 服務會執行），新增 User.studentId、User.note 與 User.portalEmail。既有 Portal 帳號下次登入會更新學號，無需刪除或重建帳號；歷史稽核原始資料不會被改寫。
 

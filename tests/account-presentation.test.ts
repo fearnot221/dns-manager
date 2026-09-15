@@ -7,9 +7,10 @@ it("never grants ownership by email, student display or notes", () => {
   expect(isOwner({ ...user, zoneRoles: {} })).toBe(false);
   expect(resolvedGlobalRole("unrelated@example.com", "USER", "115502532")).toBe("SUPER_ADMIN");
 });
-it("shows email and a human name without changing the login account", () => {
+it("shows the Portal identifier below the human name", () => {
   const result = accountPresentation({ id: "u", name: "測試姓名", email: "secret@example.com", studentId: "115500001", note: "測試備註", globalRole: "USER", accounts: [{ providerAccountId: "portal-account" }] });
-  expect(result.account).toBe("portal-account");
+  expect(result.account).toBe("115500001");
+  expect(result.studentId).toBe("115500001");
   expect(result.note).toBe("測試備註");
   expect(result.email).toBe("secret@example.com");
   expect(result.name).toBe("測試姓名");

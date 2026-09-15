@@ -17,7 +17,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/client", () => ({ db: { user: { findUnique: mocks.findUnique, findFirst: mocks.findFirst, update: mocks.update }, account: { findUnique: mocks.accountFind, create: mocks.accountCreate } } }));
 beforeEach(() => { vi.resetModules(); vi.clearAllMocks(); mocks.findFirst.mockReset(); });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
-const identities = (name?: string, username?: string) => ({ ncu: { userId: "portal-user", details: { name, rawData: { username } } } });
+const identities = (name?: string, username?: string, identifier = name) => ({ ncu: { userId: "portal-user", details: { name, rawData: { username, identifier } } } });
 async function configuration(production = true, configured = true) {
   vi.stubEnv("NODE_ENV", production ? "production" : "development");
   vi.stubEnv("DATABASE_URL", production ? "postgresql://test/db" : "");
@@ -107,7 +107,7 @@ it("refreshes Portal identity details without trusting unrequested top-level ema
   expect(await signIn({ user: {}, account: { type: "oauth", provider: "logto", providerAccountId: "account" }, profile: { sub: "account", identities: identities("111504515", "王小明"), email: "display@example.com", email_verified: true } })).toBe(true);
   expect(mocks.update).toHaveBeenCalledWith({ where: { id: "linked" }, data: { logtoName: "111504515", portalEmail: null, name: "王小明", studentId: "111504515" } });
   expect(await signIn({ user: {}, account: { type: "oauth", provider: "logto", providerAccountId: "account" }, profile: { sub: "account" } })).toBe(true);
-  expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { logtoName: null, portalEmail: null, name: "未提供姓名" } });
+  expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { logtoName: null, portalEmail: null, name: "未提供姓名", studentId: null } });
 });
 
 it("synchronizes identity names and student IDs without granting roles or rewriting login email", async () => {
@@ -118,14 +118,14 @@ it("synchronizes identity names and student IDs without granting roles or rewrit
   expect(user.name).toBe("王小明");
   expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { logtoName: "115502532", portalEmail: null, name: "王小明", studentId: "115502532" } });
   expect(await config.callbacks!.signIn!({ user: {}, account: { type: "oidc", provider: "logto", providerAccountId: "ordinary" }, profile: { sub: "ordinary" } })).toBe(true);
-  expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { logtoName: null, portalEmail: null, name: "舊姓名" } });
+  expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { logtoName: null, portalEmail: null, name: "舊姓名", studentId: null } });
 });
 
 it("persists identities details username for existing users and ignores embedded roles", async () => {
   const config = await configuration();
   mocks.accountFind.mockResolvedValue({ user: { id: "linked", name: "原姓名", disabled: false, globalRole: "USER", accounts: [] } });
   const user: { name?: string } = {};
-  expect(await config.callbacks!.signIn!({ user, account: { type: "oidc", provider: "logto", providerAccountId: "ordinary" }, profile: { sub: "ordinary", identities: { ncu: { userId: "portal-user", details: { name: "115502532", role: "SUPER_ADMIN", rawData: { username: " 王小明 " } } } } } })).toBe(true);
+  expect(await config.callbacks!.signIn!({ user, account: { type: "oidc", provider: "logto", providerAccountId: "ordinary" }, profile: { sub: "ordinary", identities: { ncu: { userId: "portal-user", details: { name: "115502532", role: "SUPER_ADMIN", rawData: { username: " 王小明 ", identifier: "115502532" } } } } } })).toBe(true);
   expect(user.name).toBe("王小明");
   expect(mocks.update).toHaveBeenLastCalledWith({ where: { id: "linked" }, data: { logtoName: "115502532", portalEmail: null, name: "王小明", studentId: "115502532" } });
 });
