@@ -13,6 +13,7 @@ import type { InventoryRecord } from "@/lib/inventory/types";
 import { OwnershipDialog } from "./ownership-dialog";
 import { RecordDialog } from "./record-dialog";
 import { isRecordView, recordViews } from "./view-options";
+import { Select } from "@/components/ui/select";
 
 import { useResource } from "@/lib/client/use-resource";
 import { ResourceError } from "@/components/ui/resource-error";
@@ -91,10 +92,7 @@ export function RecordsWorkbench({ zoneName }: { zoneName: string }) {
           <input ref={searchInput} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋名稱、內容或類型" aria-label="搜尋 DNS 紀錄" />
           {query ? <button className="search-clear" onClick={() => setQuery("")} aria-label="清除搜尋"><XCircle size={15} /></button> : <kbd>/</kbd>}
         </div>
-        <select value={type} onChange={(event) => setType(event.target.value)} aria-label="篩選紀錄類型">
-          <option value="ALL">所有類型</option>
-          {availableTypes.map((item) => <option key={item}>{item}</option>)}
-        </select>
+        <Select aria-label="篩選紀錄類型" value={type} onChange={setType} options={[{ value: "ALL", label: "所有類型" }, ...availableTypes.map((item) => ({ value: item, label: item }))]} />
         <div className="view-switcher" role="group" aria-label="檢視模式">
           {recordViews.map(({ key, label, icon: Icon }) => (
             <button key={key} className={view === key ? "active" : ""} onClick={() => selectView(key)} aria-pressed={view === key} title={label}>

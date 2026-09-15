@@ -10,6 +10,7 @@ import { apiRequest, jsonRequest } from "@/lib/client/api";
 import { useResource } from "@/lib/client/use-resource";
 import { Dialog } from "@/components/ui/dialog";
 import { canSubmitUnitRequest, type UnitRole } from "@/lib/units/policy";
+import { Select } from "@/components/ui/select";
 
 import { policyViolation, type ApplicationPolicy } from "@/lib/requests/policy-model";
 type DraftRecord = { id: number; zoneName: string; name: string; type: RecordType; content: string; ttl: string; purpose: string };
@@ -134,7 +135,7 @@ export function DnsApplicationForm() {
     <div className="modal-body">
       <fieldset className="application-section" disabled={pending}>
         <legend>申請人資料</legend>
-        <label>DNS 歸屬<select value={unitId} onChange={(event) => setUnitId(event.target.value)} disabled={unitResource.loading || Boolean(unitResource.error)}><option value="">個人（不與單位共享）</option>{unitResource.data?.units.filter((unit) => canSubmitUnitRequest(unit.role)).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}（單位共享）</option>)}</select></label>
+        <label>DNS 歸屬<Select aria-label="DNS 歸屬" value={unitId} onChange={setUnitId} disabled={unitResource.loading || Boolean(unitResource.error)} options={[{ value: "", label: "個人（不與單位共享）" }, ...(unitResource.data?.units.filter((unit) => canSubmitUnitRequest(unit.role)).map((unit) => ({ value: unit.id, label: `${unit.name}（單位共享）` })) ?? [])]} /></label>
         <p className="application-help">選擇單位後，核准的 DNS 與申請進度會供單位成員查看；查看角色不能代單位申請。</p>
         {unitResource.error && <p className="request-notice" role="status">無法載入共享單位，目前僅可申請個人 DNS。<button className="button" type="button" onClick={() => void unitResource.reload()}>重新載入單位</button></p>}
         <div className="applicant-grid">
@@ -155,15 +156,11 @@ export function DnsApplicationForm() {
         {records.map((record, index) => <fieldset key={record.id} className={"application-record" + (errorRecordId === record.id ? " has-error" : "")} disabled={pending} aria-label={"第 " + (index + 1) + " 筆 DNS 紀錄"}>
           <div className="application-record-head"><h3>紀錄 {index + 1}</h3><button className="icon-button danger-hover" type="button" disabled={records.length === 1 || pending} aria-label={"移除第 " + (index + 1) + " 筆"} title="移除此筆，可復原" onClick={() => removeRecord(record.id)}><Trash2 size={16} /></button></div>
           <div className="dns-fields">
-            <label>Zone 網域<select value={record.zoneName} required disabled={loading || Boolean(zoneError) || !zones.length} onChange={(event) => update(record.id, { zoneName: event.target.value })}>
-              <option value="" disabled>選擇網域</option>
-              {record.zoneName && !zones.some((zone) => zone.name === record.zoneName) && <option value={record.zoneName} disabled>{record.zoneName}（目前無法使用）</option>}
-              {zones.map((zone) => <option key={zone.name} value={zone.name}>{zone.name.replace(/\.$/, "")}</option>)}
-            </select></label>
-            <label>名稱<input value={record.name} onChange={(event) => update(record.id, { name: event.target.value })} placeholder="www 或 @" required maxLength={253} autoCapitalize="none" spellCheck={false} ref={(node) => { if (node && focusId.current === record.id) { if (!record.zoneName) node.closest("fieldset")?.querySelector("select")?.focus(); else node.focus(); focusId.current = null; } }} /></label>
-            <label>類型<select value={record.type} onChange={(event) => update(record.id, { type: event.target.value as RecordType })}>{!requestTypes.includes(record.type as typeof requestTypes[number]) && <option value={record.type} disabled>{record.type}（未開放，請改選）</option>}{requestTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
+            <label>Zone 網域<Select aria-label="Zone 網域" value={record.zoneName} required disabled={loading || Boolean(zoneError) || !zones.length} onChange={(value) => update(record.id, { zoneName: value })} options={[{ value: "", label: "選擇網域", disabled: true }, ...(record.zoneName && !zones.some((zone) => zone.name === record.zoneName) ? [{ value: record.zoneName, label: `${record.zoneName}（目前無法使用）`, disabled: true }] : []), ...zones.map((zone) => ({ value: zone.name, label: zone.name.replace(/\.$/, "") }))]} /></label>
+            <label>名稱<input value={record.name} onChange={(event) => update(record.id, { name: event.target.value })} placeholder="www 或 @" required maxLength={253} autoCapitalize="none" spellCheck={false} ref={(node) => { if (node && focusId.current === record.id) { if (!record.zoneName) node.closest("fieldset")?.querySelector<HTMLElement>(".custom-select-trigger")?.focus(); else node.focus(); focusId.current = null; } }} /></label>
+            <label>類型<Select aria-label="DNS 類型" value={record.type} onChange={(value) => update(record.id, { type: value as RecordType })} options={[...(!requestTypes.includes(record.type as typeof requestTypes[number]) ? [{ value: record.type, label: `${record.type}（未開放，請改選）`, disabled: true }] : []), ...requestTypes.map((type) => ({ value: type, label: type }))]} /></label>
             <label className="content-field">解析內容<input value={record.content} onChange={(event) => update(record.id, { content: event.target.value })} placeholder={hints[record.type]} required maxLength={65535} autoCapitalize="none" spellCheck={false} aria-label="解析內容" aria-describedby={`content-help-${record.id}`} /><small id={`content-help-${record.id}`}>{contentHelp(record.type)}</small></label>
-            <label>TTL<select value={record.ttl} onChange={(event) => update(record.id, { ttl: event.target.value })}><option value="60">1 分鐘</option><option value="300">5 分鐘</option><option value="600">10 分鐘</option><option value="1800">30 分鐘</option><option value="3600">1 小時</option></select></label>
+            <label>TTL<Select aria-label="TTL" value={record.ttl} onChange={(value) => update(record.id, { ttl: value })} options={[{ value: "60", label: "1 分鐘" }, { value: "300", label: "5 分鐘" }, { value: "600", label: "10 分鐘" }, { value: "1800", label: "30 分鐘" }, { value: "3600", label: "1 小時" }]} /></label>
             <label className="purpose-field">用途（選填）<input value={record.purpose} onChange={(event) => update(record.id, { purpose: event.target.value })} placeholder="服務名稱或申請原因" maxLength={1000} /></label>
           </div>
           {errorRecordId === record.id && <p className="record-error" role="alert" tabIndex={-1} ref={errorTarget}>{error}。其餘資料已保留。</p>}

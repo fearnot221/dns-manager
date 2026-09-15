@@ -5,6 +5,7 @@ import { useResource } from "@/lib/client/use-resource";
 import { ResourceError } from "@/components/ui/resource-error";
 import { ScrollRegion } from "@/components/ui/scroll-region";
 import { Badge } from "@/components/ui";
+import { Select } from "@/components/ui/select";
 import type { AuditEvent } from "@/lib/audit/service";
 
 const labels: Record<string, string> = { EXPORT_ALL_DNS_CSV: "匯出全部 DNS CSV", CREATE_DNS_UNIT: "建立單位", JOIN_DNS_UNIT: "加入單位", ROTATE_UNIT_PASSCODE: "重設單位加入碼", MANAGE_UNIT_MEMBER: "調整單位成員", REQUEST_UNIT_DNS_CHANGE: "送出單位 DNS 變更", APPLY_UNIT_DNS_REQUEST: "套用單位 DNS 申請", REVIEW_UNIT_DNS_REQUEST: "審核單位 DNS 申請", REQUEST_DNS_RECORD: "送出單筆 DNS 申請", APPLY_APPROVED_DNS_RECORD: "寫入核准 DNS", CREATE_TEST_USER: "建立測試帳號", UPDATE_ZONE_APPLICATION_ACCESS: "調整網域申請開放", MUTATION_STARTED: "開始操作", MUTATION_COMPLETED: "操作結束", CREATE_ZONE: "新增 Zone", DELETE_ZONE: "刪除 Zone", CREATE_RECORD: "新增 DNS", UPDATE_RECORD: "修改 DNS", DELETE_RECORD: "刪除 DNS", UPDATE_PERMISSION: "調整權限", CREATE_USER: "新增使用者", UPDATE_USER: "修改使用者", ADD_PORTAL_ALLOWLIST: "加入登入白名單", REMOVE_PORTAL_ALLOWLIST: "移除登入白名單", UPDATE_DNS_OWNERSHIP: "修改 DNS 歸屬", INSPECT_DNS_RECORD: "DNS 清查", REQUEST_DNS_APPLICATION: "送出 DNS 申請", APPROVE_DNS_REQUEST: "核准 DNS 申請", REJECT_DNS_REQUEST: "駁回 DNS 申請", SIGN_IN: "登入", SIGN_OUT: "登出" };
@@ -23,8 +24,8 @@ export function AuditWorkbench() {
     <form className="admin-toolbar audit-toolbar" onSubmit={(event) => { event.preventDefault(); setSearch(query.trim()); setPage(1); }}>
       <div className="filter-input"><input ref={searchInput} type="search" maxLength={200} aria-label="搜尋操作紀錄" placeholder="姓名、網域或請求編號" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
       <button className="button" type="submit">搜尋</button>
-      <label>結果<select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="all">全部</option><option value="success">成功／開始</option><option value="failed">失敗</option></select></label>
-      <label>操作<select value={action} onChange={(event) => { setAction(event.target.value); setPage(1); }}><option value="">全部操作</option>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label>結果<Select aria-label="結果" value={status} onChange={(value) => { setStatus(value); setPage(1); }} options={[{ value: "all", label: "全部" }, { value: "success", label: "成功／開始" }, { value: "failed", label: "失敗" }]} /></label>
+      <label>操作<Select aria-label="操作" value={action} onChange={(value) => { setAction(value); setPage(1); }} options={[{ value: "", label: "全部操作" }, ...Object.entries(labels).map(([value, label]) => ({ value, label }))]} /></label>
       <button className="button" type="button" disabled={loading} onClick={() => void reload()}>重新整理</button>
       {hasFilters && <button className="button" type="button" onClick={resetFilters}>清除所有條件</button>}
     </form>

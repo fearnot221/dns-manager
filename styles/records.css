@@ -14,7 +14,7 @@
 .inventory-view-toolbar { grid-template-columns: 1fr; margin-bottom: 18px; }
 .inventory-view-toolbar .view-switcher { grid-column: 1; }
 .view-switcher-label { color: var(--muted); font-size: .75rem; font-weight: 600; }
-.record-results { min-height: 42px; display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: .75rem; padding: 8px 2px; }
+.record-results { min-height: 42px; display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: .75rem; line-height: 1.5; padding: 10px 16px; margin: 0 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); }
 .record-results button { border: 0; background: transparent; color: var(--accent); padding: 0; font-size: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .copy-value { display: flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
 .copy-value > span { overflow-wrap: anywhere; white-space: normal; }

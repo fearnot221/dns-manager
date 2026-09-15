@@ -9,6 +9,7 @@ import { creatableTypes, protectedTypes, type DialogState } from "./model";
 
 import { Dialog } from "@/components/ui/dialog";
 import { apiRequest, jsonRequest } from "@/lib/client/api";
+import { Select } from "@/components/ui/select";
 
 export function RecordDialog({ zone, dialog, onClose, onSaved }: { zone: string; dialog: DialogState; onClose: () => void; onSaved: () => Promise<void> }) {
   const [pending, setPending] = useState(false);
@@ -56,9 +57,9 @@ export function RecordDialog({ zone, dialog, onClose, onSaved }: { zone: string;
           <label>解析內容 <small>每行一筆</small><textarea name="contents" defaultValue={rr?.records.map((record) => record.content).join("\n")} rows={Math.max(3, rr?.records.length ?? 3)} required autoFocus /></label>
           <label>TTL<input name="ttl" type="number" min="30" defaultValue={rr?.ttl ?? 300} required /></label>
         </> : <>
-          <div className="field-grid"><label>類型<select value={type} onChange={(event) => setType(event.target.value as RecordType)}>{creatableTypes.map((item) => <option key={item}>{item}</option>)}</select></label><label>名稱<input name="name" placeholder="@ 或 www" required autoFocus /></label></div>
+          <div className="field-grid"><label>類型<Select aria-label="DNS 類型" value={type} onChange={(value) => setType(value as RecordType)} options={creatableTypes.map((item) => ({ value: item, label: item }))} /></label><label>名稱<input name="name" placeholder="@ 或 www" required autoFocus /></label></div>
           <DynamicFields type={type} />
-          <label>TTL<select name="ttl" defaultValue="300"><option value="60">1 分鐘</option><option value="300">5 分鐘</option><option value="600">10 分鐘</option><option value="1800">30 分鐘</option><option value="3600">1 小時</option></select></label>
+          <label>TTL<Select name="ttl" aria-label="TTL" defaultValue="300" options={[{ value: "60", label: "1 分鐘" }, { value: "300", label: "5 分鐘" }, { value: "600", label: "10 分鐘" }, { value: "1800", label: "30 分鐘" }, { value: "3600", label: "1 小時" }]} /></label>
         </>}
         {error && <div className="form-error" role="alert"><AlertTriangle size={15} />{error}</div>}
       </div><div className="modal-foot"><button className="button" type="button" disabled={pending} onClick={onClose}>取消</button><SubmitButton pending={pending} label={dialog.mode === "delete" ? "確認刪除" : dialog.mode === "edit" ? "儲存紀錄組" : "新增紀錄"} /></div></fieldset></form>
@@ -68,7 +69,7 @@ export function RecordDialog({ zone, dialog, onClose, onSaved }: { zone: string;
 function DynamicFields({ type }: { type: RecordType }) {
   if (type === "MX") return <div className="field-grid"><label>優先序<input name="priority" type="number" defaultValue="10" required /></label><label>郵件伺服器<input name="target" required /></label></div>;
   if (type === "SRV") return <div className="field-grid four"><label>優先序<input name="priority" type="number" defaultValue="10" required /></label><label>權重<input name="weight" type="number" defaultValue="5" required /></label><label>連接埠<input name="port" type="number" defaultValue="443" required /></label><label>目標主機<input name="target" required /></label></div>;
-  if (type === "CAA") return <div className="field-grid four"><label>旗標<input name="flags" type="number" defaultValue="0" required /></label><label>標籤<select name="tag"><option>issue</option><option>issuewild</option><option>iodef</option></select></label><label className="span-2">值<input name="value" required /></label></div>;
+  if (type === "CAA") return <div className="field-grid four"><label>旗標<input name="flags" type="number" defaultValue="0" required /></label><label>標籤<Select name="tag" aria-label="CAA 標籤" defaultValue="issue" options={[{ value: "issue", label: "issue" }, { value: "issuewild", label: "issuewild" }, { value: "iodef", label: "iodef" }]} /></label><label className="span-2">值<input name="value" required /></label></div>;
   return <label>{type === "A" ? "IPv4 位址" : type === "AAAA" ? "IPv6 位址" : type === "TXT" ? "文字內容" : "目標主機名稱"}<input name="content" required /></label>;
 }
 function contentFor(type: RecordType, data: FormData) {

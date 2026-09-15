@@ -12,6 +12,7 @@ import { ActionFeedback, type Feedback } from "@/components/ui/action-feedback";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState, LoadingRows } from "@/components/ui";
 import { ScrollRegion } from "@/components/ui/scroll-region";
+import { Select } from "@/components/ui/select";
 
 type ZoneSetting = { id: string; name: string; applicationAccess: ZoneApplicationAccess };
 
@@ -58,11 +59,7 @@ function GlobalApplicationPolicy() {
           <div className="policy-types">{applicationTypes.map((type) => <label className="type-option" key={type}><input type="checkbox" name="types" value={type} defaultChecked={policy.allowedTypes.includes(type)} /><span>{type}</span></label>)}</div>
         </fieldset>
         <p className="field-help" id="policy-types-help">未勾選任何類型時，將暫停所有類型的新申請。</p>
-        <label>申請資格與歸屬<select name="ownership" defaultValue={policy.ownership} aria-describedby="policy-ownership-help">
-          <option value="ANY">所有使用者，可申請個人或單位 DNS</option>
-          <option value="MEMBERS_ONLY">必須已加入單位，可申請個人或單位 DNS</option>
-          <option value="UNIT_ONLY">必須選擇單位歸屬，且具該單位申請權限</option>
-        </select></label>
+        <label>申請資格與歸屬<Select name="ownership" defaultValue={policy.ownership} aria-describedby="policy-ownership-help" options={[{ value: "ANY", label: "所有使用者，可申請個人或單位 DNS" }, { value: "MEMBERS_ONLY", label: "必須已加入單位，可申請個人或單位 DNS" }, { value: "UNIT_ONLY", label: "必須選擇單位歸屬，且具該單位申請權限" }]} /></label>
         <p className="field-help" id="policy-ownership-help">單位編輯者僅能提出變更申請；DNS 仍須由系統管理員審核後生效。</p>
         <div className="form-actions"><button className="button primary" aria-busy={pending}>{pending ? "儲存中…" : "儲存設定"}</button></div>
       </fieldset>
@@ -123,7 +120,7 @@ function ZoneApplicationSettings() {
     <header className="workflow-panel-head"><Globe2 size={22} aria-hidden="true" /><div><h2>開放申請的網域</h2><p>選擇使用者可在申請表中選取的 Zone。暫停申請不會刪除 DNS，也不影響已送出的案件。</p></div></header>
     <div className="table-tools">
       <div className="filter-input"><Search size={15} aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋網域" aria-label="搜尋申請網域" /></div>
-      <select className="zone-access-filter" aria-label="申請開放狀態" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">全部申請狀態</option><option value="open">開放申請</option><option value="closed">暫停申請</option></select>
+      <Select className="zone-access-filter" aria-label="申請開放狀態" value={status} onChange={setStatus} options={[{ value: "all", label: "全部申請狀態" }, { value: "open", label: "開放申請" }, { value: "closed", label: "暫停申請" }]} />
       <div className="tool-spacer" />
       <button type="button" className="button" disabled={resource.loading || !!pending} onClick={refresh}><RefreshCw size={14} className={resource.loading ? "spin" : ""} aria-hidden="true" />重新整理</button>
     </div>

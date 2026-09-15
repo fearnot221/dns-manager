@@ -11,6 +11,7 @@ import { ReviewDialog } from "./request-dialogs";
 
 import { useResource } from "@/lib/client/use-resource";
 import { ResourceError } from "@/components/ui/resource-error";
+import { Select } from "@/components/ui/select";
 
 const emptyRequests: DnsRequest[] = [];
 
@@ -33,7 +34,7 @@ export function DnsRequestsWorkbench({ admin, actorId }: { admin: boolean; actor
   ])), [requests]);
 
   return <>
-    <div className="request-scope-bar"><label>資料範圍<select value={scope} onChange={(event) => { setScope(event.target.value as RequestScope); setStatus("ALL"); }}><option value="ALL">{admin ? "所有可查看的申請" : "我的申請與單位共享"}</option><option value="MINE">我送出的申請</option><option value="SHARED">單位共享申請</option>{admin && <option value="REVIEWABLE">我可審核的申請</option>}</select></label><p className="field-help">{admin ? "僅授權網域可直接管理；單位 DNS 申請須由系統管理員核准。" : "只顯示本人申請與已加入單位的共享申請；共享不代表具備編輯或審核權限。"}</p></div>
+    <div className="request-scope-bar"><label>資料範圍<Select aria-label="申請資料範圍" value={scope} onChange={(value) => { setScope(value as RequestScope); setStatus("ALL"); }} options={[{ value: "ALL", label: admin ? "所有可查看的申請" : "我的申請與單位共享" }, { value: "MINE", label: "我送出的申請" }, { value: "SHARED", label: "單位共享申請" }, ...(admin ? [{ value: "REVIEWABLE", label: "我可審核的申請" }] : [])]} /></label><p className="field-help">{admin ? "僅授權網域可直接管理；單位 DNS 申請須由系統管理員核准。" : "只顯示本人申請與已加入單位的共享申請；共享不代表具備編輯或審核權限。"}</p></div>
     <div className="request-toolbar">
       <div className="filter-input request-search"><Search size={15} aria-hidden="true" /><input ref={searchInput} type="search" value={query} onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); clearSearch(); } }} onChange={(event) => setQuery(event.target.value)} placeholder={admin ? "搜尋名稱、帳號、姓名、單位或用途" : "搜尋名稱、網域、內容或用途"} aria-label="搜尋 DNS 申請" />{query && <button type="button" className="search-clear" onClick={clearSearch} aria-label="清除搜尋"><X size={15} /></button>}</div>
       <button type="button" className="button request-refresh" disabled={loading} onClick={() => void load()}><RefreshCw size={15} className={loading ? "spin" : ""} />重新整理</button>
