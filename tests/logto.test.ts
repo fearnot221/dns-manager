@@ -6,7 +6,7 @@ const portalIdentity = (identifier?: string, username?: string, name = "Portal p
 afterEach(() => vi.unstubAllEnvs());
 it("uses OIDC with discovery, issuer checks, PKCE, state, nonce and ES384", () => {
   const provider = logtoProvider();
-  expect(provider).toMatchObject({ id: "logto", type: "oidc", issuer: LOGTO_ISSUER, checks: ["pkce", "state", "nonce"], allowDangerousEmailAccountLinking: false, client: { id_token_signed_response_alg: "ES384" } });
+  expect(provider).toMatchObject({ id: "logto", type: "oidc", issuer: LOGTO_ISSUER, checks: ["pkce", "state", "nonce"], allowDangerousEmailAccountLinking: true, client: { id_token_signed_response_alg: "ES384" } });
   expect(provider.authorization).toMatchObject({ params: { scope: "openid identities", prompt: "login" } });
   expect(provider.account!({ access_token: "secret", refresh_token: "secret", id_token: "secret" })).toEqual({});
 });

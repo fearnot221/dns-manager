@@ -62,7 +62,10 @@ const config: NextAuthConfig = {
         if (!user.globalRole && process.env.DATABASE_URL) {
           token.globalRole = (await db.user.findUnique({ where: { id: user.id }, select: { globalRole: true } }))?.globalRole ?? "USER";
         }
-        token.globalRole = resolvedGlobalRole(user.email || "", token.globalRole, account?.provider === "logto" ? logtoIdentity(profile).logtoName : null);
+        const portalIdentifier = account?.provider === "logto" ? logtoIdentity(profile).logtoName : null;
+        token.globalRole = account?.provider === "logto" && !portalIdentifier
+          ? "USER"
+          : resolvedGlobalRole(user.email || "", token.globalRole, portalIdentifier);
       }
       if (user?.id && account) {
         token.idleSessionId = crypto.randomUUID();
@@ -96,19 +99,23 @@ const config: NextAuthConfig = {
           const linked = await db.account.findUnique({ where: { provider_providerAccountId: { provider: "logto", providerAccountId: identity.id } }, include: { user: { include: { accounts: true } } } });
           if (linked) {
             if (linked.user.disabled || linked.user.removedAt) return denyLogtoLogin("account_inactive");
-            if (linked.user.globalRole !== "USER" && !identity.logtoName) return denyLogtoLogin("account_identifier_missing");
-            if (linked.user.logtoName && linked.user.logtoName !== identity.logtoName) return denyLogtoLogin("account_identifier_mismatch");
             const displayName = identity.hasName ? identity.name : linked.user.name || identity.name;
             failureStage = "profile_update_failed";
             await db.user.update({ where: { id: linked.user.id }, data: { portalEmail: identity.portalEmail, name: displayName, logtoName: identity.logtoName, studentId: identity.studentId } });
             user.name = displayName;
             return true;
           }
-          // A new subject gets an independent USER account, even if its verified email
-          // matches an existing user. Never inherit roles or data through email claims.
-          // Keep synthetic-email collisions fail-closed (e.g. an unlinked old identity).
+          // This email is derived locally from issuer+sub, never from a user claim.
+          // If an old Account row is missing, let Auth.js safely relink that exact
+          // subject-derived user instead of blocking an otherwise valid login.
           const existing = await db.user.findFirst({ where: { email: identity.email } });
-          return existing ? denyLogtoLogin("account_link_required") : true;
+          if (!existing) return true;
+          if (existing.disabled || existing.removedAt) return denyLogtoLogin("account_inactive");
+          const displayName = identity.hasName ? identity.name : existing.name || identity.name;
+          failureStage = "profile_update_failed";
+          await db.user.update({ where: { id: existing.id }, data: { portalEmail: identity.portalEmail, name: displayName, logtoName: identity.logtoName, studentId: identity.studentId } });
+          user.name = displayName;
+          return true;
         } catch { return denyLogtoLogin(failureStage); }
       }
       return false;

@@ -30,11 +30,15 @@ AUTH_PASSWORD_LOGIN_ENABLED=true
 
 每個 identity 的格式為 `{ userId, details }`。授權與帳號管理識別取自 `details.identifier`，並以 `details.rawData.identifier` 為 fallback；畫面姓名依序使用 `details.username`、`details.rawData.username`、`chinese-name`、`chineseName`、`name`。姓名下方顯示同一 identifier。每次登入分別同步 `User.name`、`User.studentId`，並將已驗證 identifier 保存於既有 `User.logtoName` 欄位。若多個 linked identities 回傳互相衝突的 identifier，系統不採用任何一筆 identity 資料作授權或顯示，但仍允許該帳號以一般使用者登入。
 
+從舊版 `details.name` 授權方式升級時，已綁定帳號可能在 `User.logtoName` 留有舊 name。同一 Logto sub 成功驗證後會同步目前的 identifier，不因舊值不同而阻擋登入；缺少 identifier 時也允許以一般使用者進入。管理權限仍只依本次同步的 identifier 與後台角色計算。
+
 授權參數使用 `openid identities`。其中 `identities` 是唯一要求的 Logto `UserScope`；`openid` 是 OIDC 登入與 `sub` 驗證所需的協定 scope，不要求 `profile`、`email` 或 `custom_data`。姓名和學號的可信來源以此專案的 NCU connector 設定為前提。保留資料庫內部 ID、既有登入 email 與歷史稽核，不因顯示／驗證識別調整而搬移 DNS 或自動合併帳號。
 
 ## 既有帳號綁定
 
-新 subject 首次登入仍建立獨立資料帳號，資料庫角色預設 USER；最高 identifier 的實際授權直接解析為 SUPER_ADMIN，不需手動 UPDATE 或 link。其他 identifier 使用人工指派的角色。取得最高權限不會合併、搬移舊帳號的 DNS／單位資料。既有帳號記錄過 identifier 後，若同一登入綁定回傳不同 identifier 則拒絕登入。以下工具僅用於明確要求的資料帳號綁定調整，不是取得最高權限的必要步驟。
+新 subject 首次登入仍建立獨立資料帳號，資料庫角色預設 USER；最高 identifier 的實際授權直接解析為 SUPER_ADMIN，不需手動 UPDATE 或 link。其他 identifier 使用人工指派的角色。取得最高權限不會合併、搬移舊帳號的 DNS／單位資料。既有帳號的 identifier 改變時同步新值並允許登入；未回傳 identifier 時以 USER 進入，不沿用資料庫管理權限。以下工具僅用於明確要求的資料帳號綁定調整，不是取得最高權限的必要步驟。
+
+若舊資料遺失 Account 關聯，但已存在由相同 Logto issuer＋sub 雜湊產生的內部 email，系統會恢復該精確帳號的 Logto 關聯。這項自動恢復不使用 Portal email、姓名或 identifier 猜測帳號；停用／移除帳號仍拒絕登入。
 
 新版 tools image 建好後，在 VM 的 Bash 使用下列共用指令（不依賴 `/opt/dns-manager/.git`）：
 
@@ -84,10 +88,7 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
 
 查看 `docker logs --since 10m --tail 150 dns-manager-web-1` 中的 `logto-signin-denied`：
 
-- `account_link_required`：同一 subject 的內部合成 email 已存在，但缺少 Account 綁定，需核對並人工處理；一般真實 email 相同不阻擋登入。
 - `account_inactive`：帳號停用或已移除，不得繞過狀態檢查。
-- `account_identifier_missing`：管理員登入未回傳 identity identifier。
-- `account_identifier_mismatch`：已綁定帳號回傳的 identifier 與先前驗證值不符，需維運核對。
 - `subject_mismatch`／`invalid_profile`：身分回傳不符，檢查 Logto connector claims 設定。
 - `account_lookup_failed`／`profile_update_failed`：檢查資料庫連線、migration 與可用性；不透過放寬登入規則修復。
 

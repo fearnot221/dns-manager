@@ -53,3 +53,11 @@ it("does not grant remembered Logto-name privileges to a password session", asyn
   vi.mocked(db.user.findUnique).mockResolvedValue({ id: "same-record", email: "owner-bootstrap@accounts.invalid", globalRole: "USER", logtoName: "115502532", accounts: [{ provider: "logto", providerAccountId: "irrelevant-sub" }], zonePermissions: [], groupMemberships: [] } as never);
   expect(await requireActor()).toMatchObject({ globalRole: "USER", portalIdentifier: null });
 });
+
+it("lets a Logto user without an identifier enter as USER instead of restoring a stored admin role", async () => {
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("DATABASE_URL", "postgresql://test/db");
+  vi.mocked(auth as () => Promise<Session | null>).mockResolvedValue({ loginProvider: "logto", user: { id: "admin", email: "admin@accounts.invalid", globalRole: "USER" }, expires: "2099-01-01" });
+  vi.mocked(db.user.findUnique).mockResolvedValue({ id: "admin", email: "admin@accounts.invalid", globalRole: "ADMIN", logtoName: null, accounts: [{ provider: "logto", providerAccountId: "admin-sub" }], zonePermissions: [], groupMemberships: [] } as never);
+  expect(await requireActor()).toMatchObject({ globalRole: "USER", portalIdentifier: null });
+});

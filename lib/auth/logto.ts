@@ -67,7 +67,9 @@ export function logtoProvider(): OIDCConfig<Record<string, unknown>> {
     // Fetch connector-backed identities from UserInfo; Auth.js still verifies the
     // ID token and requires the UserInfo subject to match it.
     idToken: false,
-    allowDangerousEmailAccountLinking: false,
+    // The mapped email is a deterministic issuer+sub hash, never a provider or
+    // user-controlled email, so Auth.js may safely recover a missing Account row.
+    allowDangerousEmailAccountLinking: true,
     profile(raw) { const identity = logtoIdentity(raw); return { id: identity.id, email: identity.email, name: identity.name, logtoName: identity.logtoName, studentId: identity.studentId, portalEmail: identity.portalEmail, globalRole: "USER" }; },
     account() { return {}; },
     [customFetch](input, init) {

@@ -22,7 +22,8 @@ export async function requireActor():Promise<Actor>{
     const current=zoneRoles[permission.zoneName]; const rank={VIEWER:1,EDITOR:2,ADMIN:3}; if(!current||rank[permission.role]>rank[current])zoneRoles[permission.zoneName]=permission.role;
   }
   const portalIdentifier = session.loginProvider === "logto" ? accountOwnerIdentifier(user.accounts, user.globalRole, user.logtoName) : null;
-  return {id:user.id,email:user.email,portalEmail:user.portalEmail,name:user.name,portalIdentifier,studentId:user.studentId,globalRole:resolvedGlobalRole(user.email,user.globalRole,portalIdentifier),zoneRoles};
+  const storedRole = session.loginProvider === "logto" && !user.logtoName ? "USER" : user.globalRole;
+  return {id:user.id,email:user.email,portalEmail:user.portalEmail,name:user.name,portalIdentifier,studentId:user.studentId,globalRole:resolvedGlobalRole(user.email,storedRole,portalIdentifier),zoneRoles};
 }
 
 export class AuthError extends Error { readonly status=401; constructor(){super("Authentication required");this.name="AuthError";} }
