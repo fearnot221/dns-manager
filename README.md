@@ -8,7 +8,7 @@ A production-oriented PowerDNS Authoritative management platform built with Next
 
 測試期間保留帳密與 Portal 登入；`AUTH_PASSWORD_LOGIN_ENABLED=true`（預設）允許已有密碼的測試帳號登入，測試完成可設為 `false` 關閉。local demo 仍保留測試登入。請於 Portal 應用設定授權 `identifier student-id email`。使用者管理以電子郵件為主，顯示名稱採 Portal identifier（帳密使用者採登入帳號），不使用暱稱或學號取代帳號。Portal 信箱另存 User.portalEmail，僅供顯示、不參與帳號連結或權限判斷；未授權時標示未提供，既有使用者重新登入後更新。管理頁可編輯最多 1000 字備註，備註不影響權限。
 
-登入已改接 Logto，前端仍顯示 NCU Portal。最高權限直接以 NCU 同步、使用者不可修改的 Logto 頂層 `name=115502532` 驗證。`custom_data.username` 只供顯示；sub 僅作登入綁定，備註和 email 不授權。詳見 [Logto 切換指南](deploy/LOGTO.md)。
+登入已改接 Logto，前端仍顯示 NCU Portal。應用只要求 Logto 的 `UserScope.Identities`；OIDC 必要的 `openid` 仍保留。最高權限以 NCU connector identity 的 `details.name=115502532` 驗證，姓名由同一 identity 的 `details.rawData.username` 等顯示欄位同步；sub 僅作登入綁定，備註和 email 不授權。詳見 [Logto 切換指南](deploy/LOGTO.md)。
 
 部署須先執行 Prisma migration（Docker 部署的 migrate 服務會執行），新增 User.studentId、User.note 與 User.portalEmail。既有 Portal 帳號下次登入會更新學號，無需刪除或重建帳號；歷史稽核原始資料不會被改寫。
 
@@ -46,7 +46,7 @@ Every API operation authenticates the caller, resolves effective direct/group pe
 - Collapsible sidebar groups and desktop navigation toggle
 
 - Open NCU Portal sign-in with automatic USER provisioning; administrator roles assigned manually by the protected owner
-- Owner authorization requires verified Logto `profile.name=115502532`; email and student IDs grant no privileges. Global `ADMIN` / `USER` and zone `VIEWER`, `EDITOR`, `ADMIN` roles remain separate.
+- Owner authorization requires a consistent Logto identity with `details.name=115502532`; email, sub and display claims grant no privileges. Global `ADMIN` / `USER` and zone `VIEWER`, `EDITOR`, `ADMIN` roles remain separate.
 - Per-value applicant, unit, extension and purpose; grouped inventory with server-stamped inspection history
 - User creation, name editing and suspension; only the owner can assign administrator privileges
 - Environment-only PowerDNS API configuration; no web credential input or database override
@@ -95,7 +95,7 @@ Record views show applicant, unit and purpose beside each individual DNS value; 
 
 `/inventory` groups current DNS records by applicant, unit, purpose or zone, with search and filters for uninspected records or incomplete ownership. Each inspection appends the server time, authenticated account ID/name/email and an optional note. Clients cannot supply dates or impersonate inspectors. Editing ownership does not erase inspection history. Stale edits return HTTP 409. Historical rows remain stored if a DNS value disappears, but this screen only lists values currently in PowerDNS. This is an on-demand inventory workflow, not an automatically scheduled inspection.
 
-`/admin/users` manages account roles, status and notes. Only the account with a verified NCU-synced `profile.name=115502532` may assign administrators or delegate zone permissions. The owner's role and status cannot be changed through the UI; notes remain editable. Names are synchronized from `custom_data.username` or Chinese-name display claims. Email, display names and unverified student ID fields do not authorize access. Disabled accounts and current database roles are checked on protected requests. Unlinked historical `SUPER_ADMIN` accounts receive ordinary `ADMIN` access, not owner privileges.
+`/admin/users` manages account roles, status and notes. Only the account with a verified NCU identity `details.name=115502532` may assign administrators or delegate zone permissions. The owner's role and status cannot be changed through the UI; notes remain editable. Names are synchronized from display fields inside the same identity details. Email, sub and display names do not authorize access. Disabled accounts and current database roles are checked on protected requests. Unlinked historical `SUPER_ADMIN` accounts receive ordinary `ADMIN` access, not owner privileges.
 
 ## Database-backed local setup
 
@@ -119,7 +119,7 @@ Open `http://localhost:3000`. Configure the database, seed the protected owner a
 | `DATABASE_URL` | Production | PostgreSQL connection string |
 | `AUTH_SECRET` / `NEXTAUTH_SECRET` | Yes | The same random 32+ byte signing secret |
 | `NEXTAUTH_URL` | Yes | Public app origin |
-| `AUTH_LOGTO_ID`, `AUTH_LOGTO_SECRET` | Live login | Logto application credentials; owner identity uses verified profile.name |
+| `AUTH_LOGTO_ID`, `AUTH_LOGTO_SECRET` | Live login | Logto application credentials; owner identity uses verified `identities` details |
 | `OWNER_INITIAL_PASSWORD` | One-time seed | Unique 16+ character password for the protected owner |
 | `PDNS_API_URL`, `PDNS_API_KEY` | Live mode | Server-side PowerDNS credentials |
 | `PDNS_SERVER_ID` | No | Defaults to `localhost` |
@@ -147,7 +147,7 @@ Anyone with a valid NCU Portal identity and verified contact email can sign in; 
 https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/logto
 ```
 
-Configure AUTH_LOGTO_ID and AUTH_LOGTO_SECRET and `AUTH_URL`, then recreate the web container. Password login remains available for testing; set `AUTH_PASSWORD_LOGIN_ENABLED=false` to disable it. Google is not supported. New Portal accounts always default to `USER`, never to administrator based on email/domain or Portal role claims. Only the protected owner can manually grant ADMIN through user management; existing roles and suspended-account checks remain enforced. The owner is verified by NCU-synced profile.name. Access to existing account data requires explicit operator linking; otherwise a new subject creates an independent USER account; they are never silently merged by email. New accounts store USER by default; the verified owner name receives effective SUPER_ADMIN access. The former allowlist page/API are retired. Old membership data and historical audit events are preserved, but have no effect on login.
+Configure AUTH_LOGTO_ID and AUTH_LOGTO_SECRET and `AUTH_URL`, then recreate the web container. Password login remains available for testing; set `AUTH_PASSWORD_LOGIN_ENABLED=false` to disable it. Google is not supported. New Portal accounts always default to `USER`, never to administrator based on email/domain or Portal role claims. Only the protected owner can manually grant ADMIN through user management; existing roles and suspended-account checks remain enforced. The owner is verified by NCU identity `details.name`. Access to existing account data requires explicit operator linking; otherwise a new subject creates an independent USER account; they are never silently merged by email. New accounts store USER by default; the verified owner identity receives effective SUPER_ADMIN access. The former allowlist page/API are retired. Old membership data and historical audit events are preserved, but have no effect on login.
 
 PowerDNS reads only `PDNS_API_URL` (ending in `/api/v1`), `PDNS_API_KEY` and `PDNS_SERVER_ID`. Move previously web-entered settings to the server environment before upgrading. Existing encrypted database settings are retained but ignored. Inventory metadata remains scoped to the API URL/server ID; keep those unchanged to retain its associations. Unscoped legacy applications are not used to infer ownership on live servers.
 
@@ -158,7 +158,7 @@ npm run db:migrate
 npm run db:seed
 ```
 
-The seed creates only `owner-bootstrap@accounts.invalid` with a scrypt password hash using `OWNER_INITIAL_PASSWORD` (16+ characters). It refuses to overwrite an existing owner account, including its password. Initialize the owner through this trusted operator command; do not expose a public bootstrap route. Remove the initial password from the runtime environment after seeding. No old-account linking or pre-existing SUPER_ADMIN role is required for verified profile.name=115502532 to access `/admin/users`; new account passwords require 12+ characters. Legacy seed variables are no longer used. For schema changes use `npm run db:migrate:dev -- --name descriptive_name` and commit the migration.
+The seed creates only `owner-bootstrap@accounts.invalid` with a scrypt password hash using `OWNER_INITIAL_PASSWORD` (16+ characters). It refuses to overwrite an existing owner account, including its password. Initialize the owner through this trusted operator command; do not expose a public bootstrap route. Remove the initial password from the runtime environment after seeding. No old-account linking or pre-existing SUPER_ADMIN role is required for verified identity `details.name=115502532` to access `/admin/users`; new account passwords require 12+ characters. Legacy seed variables are no longer used. For schema changes use `npm run db:migrate:dev -- --name descriptive_name` and commit the migration.
 
 ## PowerDNS configuration
 
@@ -192,7 +192,7 @@ docker compose --env-file /etc/dns-manager/app.env --profile maintenance run --r
 
 The standalone image runs non-root with a read-only filesystem and writable temporary/cache paths. PostgreSQL stays on an internal Docker network. Web binds only to host loopback; terminate TLS at a trusted reverse proxy. PowerDNS is external and must be routed over a firewall-restricted private path. Compose does not provision a PowerDNS server. Startup requires HTTPS AUTH_URL, persistent session/encryption secrets and a database. Production never uses demo account credentials.
 
-The NCU Portal button uses Logto OIDC (ES384, PKCE, state and nonce). Configure AUTH_LOGTO_SECRET; AUTH_LOGTO_ID defaults to the registered application ID. Owner authorization uses NCU-controlled profile.name alone, not the Logto sub. Existing accounts require operator-verified binding, never automatic email merging. See [Logto deployment and migration](deploy/LOGTO.md). Local demo remains disabled; credentials remain available for testing.
+The NCU Portal button uses Logto OIDC (ES384, PKCE, state and nonce). Configure AUTH_LOGTO_SECRET; AUTH_LOGTO_ID defaults to the registered application ID. The only requested Logto user scope is `identities`; owner authorization uses a consistent NCU identity `details.name`, not the Logto sub. Existing accounts require operator-verified binding, never automatic email merging. See [Logto deployment and migration](deploy/LOGTO.md). Local demo remains disabled; credentials remain available for testing.
 
 ## Security notes
 

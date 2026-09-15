@@ -22,15 +22,15 @@ AUTH_LOGTO_SECRET=由你在伺服器填入
 AUTH_PASSWORD_LOGIN_ENABLED=true
 ```
 
-本專案已確認 Logto 的頂層 `name` 是 NCU Portal 同步、使用者不能修改的學號。經驗證的 `profile.name=115502532` 直接取得最高權限，不要求特定 User ID、sub、email、舊帳號綁定或原有 SUPER_ADMIN 角色。`LOGTO_OWNER_SUB` 已停用；sub 僅作 OIDC 登入／資料關聯。只有本次登入 provider 為 Logto 時才採用已驗證學號；同一資料帳號改用密碼登入不會繼承此最高權限。其他學號仍由後台指定一般管理員角色，不能從 custom_data 或顯示姓名取得權限。停用／移除帳號仍禁止登入。
+本專案只從 Logto UserInfo 的 `identities` 讀取 NCU Portal 資料。經驗證且一致的 identity `details.name=115502532` 直接取得最高權限，不要求特定 User ID、sub、email、舊帳號綁定或原有 SUPER_ADMIN 角色。`LOGTO_OWNER_SUB` 已停用；sub 僅作 OIDC 登入／資料關聯。只有本次登入 provider 為 Logto 時才採用已驗證學號；同一資料帳號改用密碼登入不會繼承此最高權限。其他學號仍由後台指定一般管理員角色，不能從顯示姓名或 identity 內嵌角色取得權限。停用／移除帳號仍禁止登入。
 
 部署須先執行新增 `User.logtoName` 的 migration。新欄位不從歷史顯示姓名、學號或備註回填，只在成功驗證 Logto UserInfo 後寫入。既有最高管理員請重新登入一次；之前的 session 不會憑歷史欄位取得最高權限。帳密測試登入保持可用。
 
 舊 `NCU_PORTAL_CLIENT_ID`、`NCU_PORTAL_CLIENT_SECRET`、`NCU_OWNER_IDENTIFIER` 不再用於登入；新版本 Docker Compose 已傳遞 Logto 變數。保留 `AUTH_SECRET`、資料庫、既有內部 email 與原使用者 ID，不重建資料庫或重新 seed 覆寫帳號。
 
-畫面姓名依序使用 `custom_data.username` → `chinese-name` → `chineseName`，不再將標準 `name` 的學號當成人名。`custom_data.username` 只接受去除頭尾空白後不超過 300 字的非空字串。每次登入同步 `User.name`；缺少顯示姓名時保留既有姓名。頂層 `name` 另存 `User.logtoName` 作驗證識別，並作為學號輔助顯示。`student-id`、`studentId`、email 和 custom_data 不參與授權。
+每個 identity 的格式為 `{ userId, details }`。學號取自 `details.name`；畫面姓名依序使用 `details.username`、`details.rawData.username`、`chinese-name`、`chineseName`。每次登入同步 `User.name`；缺少顯示姓名時保留既有姓名。學號另存 `User.logtoName` 作驗證識別與輔助顯示。若多個 linked identities 回傳互相衝突的學號，系統不採用任何一筆作授權，但仍允許該帳號以一般使用者登入。
 
-Scope 使用 `openid profile identities`，不要求 `email` 或 `custom_data`。因此 `custom_data.username` 不保證回傳；未回傳時，顯示姓名沿用受信任 profile 欄位的既有 fallback。姓名和學號的可信來源以此專案的 NCU connector 設定為前提：若日後允許使用者修改標準 `name`，必須先停用此授權對應。保留資料庫內部 ID、既有登入 email 與歷史稽核，不因顯示／驗證識別調整而搬移 DNS 或自動合併帳號。
+授權參數使用 `openid identities`。其中 `identities` 是唯一要求的 Logto `UserScope`；`openid` 是 OIDC 登入與 `sub` 驗證所需的協定 scope，不要求 `profile`、`email` 或 `custom_data`。姓名和學號的可信來源以此專案的 NCU connector 設定為前提。保留資料庫內部 ID、既有登入 email 與歷史稽核，不因顯示／驗證識別調整而搬移 DNS 或自動合併帳號。
 
 ## 既有帳號綁定
 
@@ -63,7 +63,7 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
   --apply --confirm-subject VERIFIED_LOGTO_USER_ID
 ```
 
-工具只新增 Logto Account 綁定並記錄稽核，不改角色、姓名、密碼或 DNS／單位關聯；拒絕停用帳號、重複綁定。工具不猜測 UserInfo 學號，實際登入仍須通過 `profile.name` 檢查。舊 Portal Account 保留作為歷史對照，不自動刪除或合併帳號。
+工具只新增 Logto Account 綁定並記錄稽核，不改角色、姓名、密碼或 DNS／單位關聯；拒絕停用帳號、重複綁定。工具不猜測 UserInfo 學號，實際登入仍須通過 `identities` details 檢查。舊 Portal Account 保留作為歷史對照，不自動刪除或合併帳號。
 
 ### 暫時解除綁定以測試一般登入
 
