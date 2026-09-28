@@ -102,6 +102,23 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toMatchObject({ status: 409 });
     expect(await db.unitMember.count({ where: { unitId } })).toBe(3);
   });
+  it("lets the verified Logto owner manage units with a stored USER role", async () => {
+    await db.user.update({ where: { id: outsider.id }, data: { logtoName: "115502532" } });
+    await db.account.create({ data: { userId: outsider.id, type: "oauth", provider: "logto", providerAccountId: crypto.randomUUID() } });
+    const owner: Actor = { ...outsider, globalRole: "SUPER_ADMIN", portalIdentifier: "115502532" };
+    await editUnit(owner, unitId, { action: "rename", name: "Owner-" + unitId });
+    const created = await createUnit(owner, "Owner-created-" + unitId, creator.studentId!);
+    await assignUnitManager(owner, created.unit.id, editor.studentId!);
+    await editUnit(owner, created.unit.id, { action: "delete" });
+    expect(await db.dnsUnit.findUnique({ where: { id: created.unit.id } })).toBeNull();
+    await db.user.update({ where: { id: owner.id }, data: { disabled: true } });
+    await expect(editUnit(owner, unitId, { action: "delete" })).rejects.toMatchObject({ status: 403 });
+    await db.user.update({ where: { id: owner.id }, data: { disabled: false } });
+    await db.account.deleteMany({ where: { userId: owner.id } });
+    await expect(editUnit(owner, unitId, { action: "delete" })).rejects.toMatchObject({ status: 403 });
+    await expect(createUnit(owner, "Forbidden-" + unitId, creator.studentId!)).rejects.toMatchObject({ status: 403 });
+    expect(await db.dnsUnit.findUnique({ where: { id: unitId } })).not.toBeNull();
+  });
   it("rejects unit managers, zone admins, disabled and revoked system admins for unit edits", async () => {
     for (const actor of [creator, { ...outsider, zoneRoles: { "example.com.": "ADMIN" as const } }]) {
       for (const input of [{ action: "delete" as const }, { action: "rename" as const, name: "Forbidden" }]) await expect(editUnit(actor, unitId, input)).rejects.toMatchObject({ status: 403 });

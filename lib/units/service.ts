@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db/client";
 import { ApiError } from "@/lib/api/respond";
 import type { Actor } from "@/lib/dns/types";
-import { isGlobalAdmin } from "@/lib/auth/owner";
+import { accountOwnerIdentifier, isGlobalAdmin, isOwner, OWNER_IDENTIFIER } from "@/lib/auth/owner";
 import { canSubmitUnitRequest, type UnitRole, wouldRemoveLastAdmin } from "./policy";
 
 import { redactAudit } from "@/lib/audit/redact";
@@ -48,10 +48,17 @@ async function resolveUnitManager(tx: Prisma.TransactionClient, studentId: strin
   if (users.length !== 1) throw new ApiError("此學號對應多個帳號，請先確認帳號資料後再指派。", 409);
   return users[0].id;
 }
+// Recheck stored privileges while retaining the verified Logto owner's resolved role.
+async function isCurrentUnitAdmin(tx: Prisma.TransactionClient, actor: Actor) {
+  const current = await tx.user.findUniqueOrThrow({ where: { id: actor.id }, select: {
+    globalRole: true, logtoName: true, accounts: { where: { provider: "logto" }, select: { provider: true, providerAccountId: true } },
+  } });
+  return isGlobalAdmin({ ...actor, globalRole: current.globalRole }) ||
+    (isOwner(actor) && accountOwnerIdentifier(current.accounts, current.globalRole, current.logtoName) === OWNER_IDENTIFIER);
+}
 async function lockManagerAndActor(tx: Prisma.TransactionClient, actor: Actor, userId: string, studentId: string) {
   for (const id of [...new Set([actor.id, userId])].sort()) await lockActiveUser(tx, id);
-  const currentActor = await tx.user.findUniqueOrThrow({ where: { id: actor.id }, select: { globalRole: true } });
-  if (!["ADMIN", "SUPER_ADMIN"].includes(currentActor.globalRole)) throw new ApiError("只有系統管理員可以建立單位或指定管理人。", 403);
+  if (!await isCurrentUnitAdmin(tx, actor)) throw new ApiError("只有系統管理員可以建立單位或指定管理人。", 403);
   const user = await tx.user.findUnique({ where: { id: userId }, select: { studentId: true } });
   if (user?.studentId !== studentId.trim()) throw new ApiError("管理人的學號資料已更新，請重新確認。", 409);
 }
@@ -114,8 +121,7 @@ export async function editUnit(actor: Actor, id: string, input: { action: "renam
   try {
     return await db.$transaction(async (tx) => {
       await lockActiveUser(tx, actor.id);
-      const current = await tx.user.findUniqueOrThrow({ where: { id: actor.id }, select: { globalRole: true } });
-      if (!["ADMIN", "SUPER_ADMIN"].includes(current.globalRole)) throw new ApiError("只有系統管理員可以修改或刪除單位。", 403);
+      if (!await isCurrentUnitAdmin(tx, actor)) throw new ApiError("只有系統管理員可以修改或刪除單位。", 403);
       await lockUnit(tx, id);
       const before = await tx.dnsUnit.findUniqueOrThrow({ where: { id }, select: { id: true, name: true } });
       if (input.action === "rename") {
