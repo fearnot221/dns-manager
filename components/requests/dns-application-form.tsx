@@ -118,6 +118,7 @@ export function DnsApplicationForm() {
     try {
       const result = await apiRequest<{ applicationId: string; count: number }>("/api/dns-requests", jsonRequest("POST", {
         applicantName: formData.get("applicantName"),
+        applicantEmail: formData.get("applicantEmail"),
         applicantUnit: selectedUnit?.name || formData.get("applicantUnit"),
         ...(unitId ? { unitId } : {}),
         applicantExtension: formData.get("applicantExtension"),
@@ -149,9 +150,10 @@ export function DnsApplicationForm() {
         <div className="applicant-grid">
           <label>申請人姓名<input name="applicantName" autoComplete="name" required maxLength={100} placeholder="請填寫姓名" /></label>
           <label>申請單位<input value={selectedUnit?.name || "請先選擇單位"} readOnly /></label>
+          <label>申請人電子郵件（選填）<input name="applicantEmail" type="email" autoComplete="email" maxLength={320} placeholder="可聯絡的電子郵件" /></label>
           <label>單位分機<input name="applicantExtension" inputMode="numeric" autoComplete="tel-extension" required pattern="[0-9]{1,10}" maxLength={10} title="請填入 1–10 位數字" placeholder="例如 1234" /></label>
         </div>
-        <p className="application-help">聯絡資料為必填，同一份申請只需填一次。</p>
+        <p className="application-help">姓名與分機為必填，聯絡資料同一份申請只需填一次。核准後會帶入 DNS 清查資料。</p>
       </fieldset>
 
       <section className="application-records" aria-labelledby="application-records-title">
@@ -169,7 +171,7 @@ export function DnsApplicationForm() {
             <label>類型<Select aria-label="DNS 類型" value={record.type} onChange={(value) => update(record.id, { type: value as RecordType })} options={[...(!requestTypes.includes(record.type as typeof requestTypes[number]) ? [{ value: record.type, label: `${record.type}（未開放，請改選）`, disabled: true }] : []), ...requestTypes.map((type) => ({ value: type, label: type }))]} /></label>
             <label className="content-field">解析內容<input value={record.content} onChange={(event) => update(record.id, { content: event.target.value })} placeholder={hints[record.type]} required maxLength={65535} autoCapitalize="none" spellCheck={false} aria-label="解析內容" aria-describedby={`content-help-${record.id}`} /><small id={`content-help-${record.id}`}>{contentHelp(record.type)}</small></label>
             <label>TTL<Select aria-label="TTL" value={record.ttl} onChange={(value) => update(record.id, { ttl: value })} options={[{ value: "60", label: "1 分鐘" }, { value: "300", label: "5 分鐘" }, { value: "600", label: "10 分鐘" }, { value: "1800", label: "30 分鐘" }, { value: "3600", label: "1 小時" }]} /></label>
-            <label className="purpose-field">用途（選填）<input value={record.purpose} onChange={(event) => update(record.id, { purpose: event.target.value })} placeholder="服務名稱或申請原因" maxLength={1000} /></label>
+            <label className="purpose-field">用途（選填）<textarea rows={3} value={record.purpose} onChange={(event) => update(record.id, { purpose: event.target.value })} placeholder="請說明此 DNS 的服務名稱與實際用途，供後續清查使用" maxLength={1000} /></label>
           </div>
           {errorRecordId === record.id && <p className="record-error" role="alert" tabIndex={-1} ref={errorTarget}>{error}。其餘資料已保留。</p>}
         </fieldset>)}

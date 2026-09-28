@@ -7,6 +7,7 @@ export type DevDnsRequest = {
   userId: string;
   applicationId?: string | null;
   applicantName?: string | null;
+  applicantEmail?: string | null;
   applicantUnit?: string | null;
   applicantExtension?: string | null;
   zoneName: string;

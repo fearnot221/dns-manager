@@ -15,8 +15,14 @@ export function replaceUnitValue(before: RRSet, oldContent: string, content: str
   if (before.records.some((record) => record.content === content)) throw new Error("新解析值已存在，不能覆蓋其他紀錄。");
   return { ...before, records: before.records.map((record) => record.content === oldContent ? { ...record, content } : record) };
 }
-export function unitChangeState(current: RRSet | undefined, before: RRSet, after: RRSet) {
+export function unitChangeState(current: RRSet | undefined, before: RRSet, after: RRSet | undefined) {
   if (unitRRSetHash(current) === unitRRSetHash(before)) return "READY";
   if (unitRRSetHash(current) === unitRRSetHash(after)) return "APPLIED";
   return "CONFLICT";
+}
+
+export function deleteUnitValue(before: RRSet, content: string): RRSet | undefined {
+  if (!before.records.some((record) => record.content === content)) throw new Error("原始解析值已不存在。");
+  const records = before.records.filter((record) => record.content !== content);
+  return records.length ? { ...before, records } : undefined;
 }

@@ -10,6 +10,13 @@ const zones = ["example.com.", "student.example.com."];
 const actor = (): Actor => ({ id: crypto.randomUUID(), email: "user@example.com", globalRole: "USER", zoneRoles: {} });
 
 describe("multi-record DNS applications", () => {
+  it("validates contact email and keeps record purpose for inventory", () => {
+    const input = prepareApplication({ ...contact, applicantEmail: " contact@example.com ", records: [{ ...record, purpose: " 實驗室網站 " }] }, zones);
+    expect(input.applicantEmail).toBe("contact@example.com");
+    expect(input.records[0].purpose).toBe("實驗室網站");
+    expect(() => prepareApplication({ ...contact, applicantEmail: "invalid", records: [record] }, zones)).toThrow("申請人電子郵件");
+    expect(prepareApplication({ ...contact, applicantEmail: "", records: [record] }, zones).applicantEmail).toBe("");
+  });
   it("normalizes every record and shares applicant details across different zones", () => {
     const input = prepareApplication({ ...contact, applicantName: " 王小明 ", records: [record, { ...record, zoneName: "student.example.com", type: "CNAME", content: "Target.Example.NET" }] }, zones);
     expect(input.applicantName).toBe("王小明");

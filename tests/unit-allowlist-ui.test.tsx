@@ -30,3 +30,12 @@ it("shows system admins the selected unit users and DNS without application acti
   expect(html).toContain("搜尋 DNS"); expect(html).toContain("管理權限");
   expect(html).not.toContain('href="/requests/new"'); expect(html).not.toContain("申請變更</button>");
 });
+
+
+it.each([false, true])("offers inspections to unit members and deletion only to editors (canApply: %s)", (canApply) => {
+  vi.mocked(useResource).mockImplementation((url) => ({ loading: false, error: "", reload: vi.fn(), data: url === "/api/units" ? { units: [{ id: "lab", name: "實驗室", status: "APPROVED", role: canApply ? "EDITOR" : "VIEWER", memberCount: 1 }] } : { unit: { id: "lab", name: "實驗室", status: "APPROVED" }, role: canApply ? "EDITOR" : "VIEWER", canApply, canReview: false, members: [], records: [{ id: "dns", recordName: "lab.example.com.", recordType: "A", content: "192.0.2.1", ttl: 300, purpose: "研究" }], recordsError: "", allowlist: [] } }) as never);
+  const html = renderToStaticMarkup(createElement(UnitsWorkbench, { systemAdmin: false, mode: "dns" }));
+  expect(html).toContain("清查</button>");
+  expect(html.includes("申請刪除</button>")).toBe(canApply);
+  expect(html.includes("申請變更</button>")).toBe(canApply);
+});

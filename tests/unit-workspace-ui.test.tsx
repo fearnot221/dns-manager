@@ -42,6 +42,8 @@ it("does not show an application form before unit eligibility is established", (
 it("fixes the application to the selected unit instead of silently using another eligible unit", () => {
   vi.mocked(useResource).mockImplementation((url) => ({ data: url === "/api/units" ? { units: [{ ...unit, canApply: true }, { ...unit, id: "two", name: "另一單位", canApply: true }] } : url === "/api/application-policy" ? { policy: { allowedTypes: ["A"], ownership: "UNIT_ONLY" } } : { zones: [{ name: "example.com." }] }, loading: false, error: "", reload: vi.fn() }) as never);
   const html = inWorkspace(createElement(DnsApplicationForm));
+  expect(html).toContain('name="applicantEmail"'); expect(html).toContain('type="email"');
+  expect(html).toContain("服務名稱與實際用途"); expect(html).toContain("<textarea");
   expect(html).toContain("本次申請歸屬「測試單位」"); expect(html).not.toContain("另一單位");
   const other = inWorkspace(createElement(DnsApplicationForm), [{ ...unit, id: "not-eligible" }]);
   expect(other).toContain("此單位目前無法申請"); expect(other).not.toContain("送出 1 筆申請");

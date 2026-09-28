@@ -3,11 +3,14 @@ import type { RecordType } from "@/lib/dns/types";
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 export type DnsRequest = {
   id: string;
+  operation?: "CREATE" | "UPDATE" | "DELETE";
   applicationId?: string | null;
   unitId?: string | null;
   sourceRecordId?: string | null;
   originalContent?: string | null;
   applicantName?: string | null;
+  applicantEmail?: string | null;
+  recordPurpose?: string | null;
   applicantUnit?: string | null;
   applicantExtension?: string | null;
   zoneName: string;
@@ -43,7 +46,7 @@ export function filterRequests(requests: DnsRequest[], query: string, status: "A
   return requests.filter((item) => (status === "ALL" || item.status === status) && [
     item.zoneName, item.recordName, item.recordType, item.content,
     item.user.name, item.user.studentId,
-    item.applicantName, item.applicantUnit, item.applicantExtension, item.purpose, item.reviewNote,
+    item.applicantName, item.applicantEmail, item.recordPurpose, item.applicantUnit, item.applicantExtension, item.purpose, item.reviewNote,
   ].filter(Boolean).join(" ").toLowerCase().includes(needle));
 }
 

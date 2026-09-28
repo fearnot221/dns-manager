@@ -8,9 +8,18 @@ export const recordDeleteSchema=z.object({name:z.string().min(1),type:z.enum(REC
 export const permissionSchema=z.object({userId:z.string().min(1).optional(),userEmail:z.email().optional(),role:z.enum(["VIEWER","EDITOR","ADMIN"]),expiresAt:z.iso.datetime().nullable().optional(),resourcePattern:z.string().max(253).nullable().optional()}).refine((value)=>Boolean(value.userId||value.userEmail),"A user is required");
 export const userRoleSchema=z.object({globalRole:z.enum(["USER","SUPER_ADMIN"])}).strict();
 export const dnsRequestSchema=z.object({zoneName:z.string().min(1).max(253),name:z.string().min(1).max(253),type:z.enum(["A","AAAA","CNAME","MX","TXT","SRV","CAA","PTR"]),ttl:z.number().int().min(30).max(2147483647),content:z.string().min(1).max(65535),purpose:z.string().trim().max(1000).optional()}).strict();
+export const applicantEmailSchema = z.string().trim().pipe(z.union([z.email().max(320), z.literal("")]));
+export const requestOwnershipSchema = z.object({
+  expectedUpdatedAt: z.iso.datetime(),
+  applicantName: z.string().trim().max(100),
+  applicantEmail: applicantEmailSchema,
+  applicantExtension: z.string().trim().max(30),
+  purpose: z.string().trim().max(1000),
+}).strict();
 export const dnsApplicationSchema = z.object({
   unitId: z.string().trim().min(1).max(100),
   applicantName: z.string().trim().min(1, "請填寫申請人姓名").max(100),
+  applicantEmail: applicantEmailSchema.optional(),
   applicantUnit: z.string().trim().min(1, "請填寫申請單位").max(200),
   applicantExtension: z.string().trim().regex(/^[0-9]{1,10}$/, "單位分機請填入 1–10 位數字"),
   records: z.array(dnsRequestSchema).min(1, "請至少填寫一筆 DNS 紀錄"),

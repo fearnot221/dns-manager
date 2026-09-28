@@ -73,3 +73,7 @@
 .inventory-row > div:first-child > strong { font-size: var(--text-body); font-weight: 600; }
 .inventory-row:hover { background: color-mix(in srgb, var(--surface-soft) 45%, var(--panel)); }
 @media (max-width: 600px) { .inventory-toolbar { padding-inline: 0; } }
+
+.inventory-row-managed { grid-template-columns: minmax(0, 1fr) minmax(120px, .4fr) minmax(170px, 240px); }
+.inventory-row-managed .page-actions { justify-content: flex-end; }
+@media (max-width: 900px) { .inventory-row-managed { grid-template-columns: minmax(0, 1fr); } }

@@ -9,16 +9,17 @@
 | 審核既有待審核單位 | 不可 | 不可（除非兼具系統管理員） | 可核准／退回 |
 | 查看申請 | 本人及所屬單位共享申請 | 另含授權網域的申請 | 全站申請 |
 | 審核既有歷史個人申請 | 不可 | 僅授權網域 | 全站 |
-| 審核單位申請／變更 | 不可，單位管理員也不可 | 不可（除非兼具系統管理員） | 可，並驗證提交者仍具有效權限 |
+| 審核單位新增／變更／刪除申請 | 不可，單位管理員也不可 | 不可（除非兼具系統管理員） | 可，並驗證提交者仍具有效權限 |
 | Zone、直接維護 DNS、開放申請設定 | 不可 | 僅授權網域 | 全站 |
-| DNS 定期清查、補登歸屬 | 不可 | 僅授權網域 | 全站 |
+| 單位 DNS 清查 | 所屬已核准單位，可記錄清查與查看歷史 | 同左 | 管理員清查入口 |
+| DNS 全站清查、補登歸屬 | 不可 | 僅授權網域 | 全站 |
 | 匯出全部 DNS CSV | 不可 | 不可 | 可 |
 | 使用者、申請規則、操作紀錄 | 不可 | 不可 | 依系統管理權限開放 |
 
 ## 單位內部角色
 
-- 查看：讀取該單位 DNS 與成員；不可送出單位 DNS 變更。
-- 編輯：另可送出 DNS 申請與變更，必須經系統管理員審核。
+- 查看：讀取該單位 DNS 與成員，可記錄清查；不可送出 DNS 新增、變更或刪除申請。
+- 編輯：另可送出 DNS 新增、變更及刪除申請，必須經系統管理員審核。
 - 單位管理：另可管理成員與學號白名單；不得移除或降級最後一位管理員。
 - 一般使用者及單位管理人不可建立單位。系統管理員建立時必須輸入管理人學號，新單位直接核准生效；建立者不會自動加入單位。
 - 管理人學號須精確對應唯一的已註冊、未移除且啟用的帳號。找不到或出現重複學號時不指派、不自動建立使用者。
@@ -151,3 +152,37 @@
 - 沿用網域權限、連線身分及更新版本比對，不寫入 PowerDNS。單位指派仍限一般網域，反解清查對話框不顯示無法使用的指派入口。
 - 對應本次清查服務、總覽說明、反解對話框與測試的工作樹：`npm run build`、`npm run lint` 通過；`UNIT_TEST_DATABASE_URL=postgresql://dns_test@127.0.0.1:55439/dns_units_test npm test` 共 49 個測試檔、312 項測試通過；`git diff --check` 通過。包含 IPv4／IPv6 清查頁籤、限定管理網域、兩種清查儲存模式及隔離 PostgreSQL 持久化。
 - 未啟動 local demo，未做瀏覽器視覺驗證；隔離測試資料庫已停止。無 migration／正式資料操作，尚未推送。
+
+## 單位 DNS 清查與刪除申請（2026-09-29）
+
+- 已核准單位的成員（含 VIEWER）可在單位 DNS 記錄清查、查看歷史；伺服器驗證啟用帳號、目前成員資格、單位歸屬、連線識別與 DNS 快照。只新增清查歷史，不修改歸屬或 DNS；請求不得指定清查者、時間或其他單位。
+- EDITOR／單位 ADMIN 可提出刪除申請，沿用修改申請的申請政策、類型與重複待審核限制。管理員審核畫面明確顯示刪除目標與原因；送出時不寫 DNS，只有系統管理員核准後才刪除指定解析值，保留同組其他值、TTL、註解與歷史。
+- 審核重新驗證申請人資格與歸屬，DNS 衝突時拒絕覆寫。最後一筆使用 RRset DELETE；外部 DNS 已成功但交易未完成時可辨識套用後狀態並重試，避免重複寫入。
+- migration `20260929120000_unit_dns_deletion_requests` 新增 CREATE／UPDATE／DELETE 申請操作類型，既有帶原紀錄識別的申請回填 UPDATE。只在隔離 PostgreSQL 執行 `DATABASE_URL=postgresql://dns_test@127.0.0.1:55439/dns_units_test npx prisma migrate deploy`，成功；部署時須套用此 migration。
+- 對應本次功能、介面與測試工作樹（基底 2ab8f2c）：`npm run build`（含 TypeScript）、`npm run lint`、`git diff --check` 通過；`UNIT_TEST_DATABASE_URL=postgresql://dns_test@127.0.0.1:55439/dns_units_test npm test` 共 50 個測試檔、329 項通過。涵蓋清查／刪除權限與 UI、CSRF、偽造欄位、跨單位與已停用帳號、失去資格、DNS 衝突、並行審核、退回／取消不寫 DNS、單值／最後一值刪除及交易失敗重試。
+- 隔離 PostgreSQL 已停止。未啟動 local demo，未做瀏覽器視覺驗證；未操作正式 DNS／資料庫、未推送或驗證 VM 部署。
+
+## 申請表單與清查資料一致（2026-09-29）
+
+- 新增申請補上申請人電子郵件（選填），每筆用途以多行欄位填寫；姓名、所屬單位、分機與用途一起保存，核准後帶入 DNS 清查歸屬資料。單位仍由伺服器依實際單位 ID 決定，不接受任意指派。
+- 變更申請預填該單位 DNS 的姓名、電子郵件、單位、分機及用途，將 DNS 用途與必填變更原因分開。核准前不更改現有資料；核准後寫入新解析值的歸屬資料，舊歷史保留。刪除與清查表單顯示目前聯絡資料及用途供確認；刪除不提供修改這些欄位的入口。
+- 單位 DNS 回傳所屬紀錄的聯絡資料，仍不回傳使用者帳號電子郵件或其他單位紀錄。新增申請未提供聯絡郵件時僅使用 Portal 聯絡郵件，不以內部帳號識別郵件作為新紀錄聯絡方式。
+- 變更表單與審核驗證歸屬資料版本，審核時鎖定原資料列，避免覆蓋等待審核期間的清查資料更新。既有未帶清查欄位的歷史申請保留原行為。
+- migration `20260929130000_request_ownership_fields` 新增聯絡郵件、DNS 用途及原歸屬版本，僅於隔離 PostgreSQL 透過 `DATABASE_URL=postgresql://dns_test@127.0.0.1:55439/dns_units_test npx prisma migrate deploy` 套用成功；正式部署仍須執行 migration。
+- 對應本次欄位、資料傳遞、版本檢查與測試工作樹：`npm run build`（含 TypeScript）、`npm run lint`、`git diff --check` 通過；`UNIT_TEST_DATABASE_URL=postgresql://dns_test@127.0.0.1:55439/dns_units_test npm test` 全部 50 個測試檔、334 項通過。最後調整聯絡資料排版與說明後，重跑 `npx vitest run tests/unit-workspace-ui.test.tsx tests/unit-allowlist-ui.test.tsx tests/unit-request-deletion-ui.test.tsx` 通過；重新 build／lint 亦通過。
+- 未啟動 local demo 或做瀏覽器視覺驗證，未更動正式 DNS／資料庫，未推送。隔離 PostgreSQL 驗證後停止。
+
+## 清查網域頁籤優先順序（2026-09-29）
+
+- 清查頁籤優先列出 `ee.ncu.edu.tw`、`ce.ncu.edu.tw`，其餘網域維持原字母排序；大小寫與 DNS 結尾句點不影響優先判斷。預設顯示排序後第一個可用網域，權限與資料不變。
+- 本次排序工作樹：`npx vitest run tests/inspection-ui.test.tsx tests/inventory-view.test.ts` 18 項通過；相關三個檔案的 `npx eslint`、`npm run typecheck` 與 `git diff --check` 通過。測試起初預期省略頁籤結尾句點，已修正為既有顯示格式後通過。
+- 小型 UI 排序不重跑 production build／資料庫整合測試；未啟動 local demo、未做瀏覽器視覺驗證、未推送。
+
+## 管理員 DNS 管理整合頁（2026-09-29）
+
+- 側邊欄合併「網域管理」與「DNS 清查」為 `/zones`「DNS 管理」。依 domain 頁籤顯示原清查列表，優先 ee.ncu.edu.tw／ce.ncu.edu.tw，包含一般、IPv4／IPv6 反解與空網域。頁籤清單讀取授權網域，紀錄只讀取目前選取網域。
+- 同頁保留 DNS 新增、編輯整組、刪除單一解析值、類型／清查狀態篩選、搜尋、TTL 與網域資訊；管理員可從原清查對話框維護歸屬、指派單位與查看歷史。系統管理員的全站匯出與 owner 清查歷史刪除權限保留，不增加檢視模式。
+- 紀錄修改沿用既有 RecordDialog 與 API、完整 RRset hash 及權限檢查；刪除僅將所選解析值交給對話框。非 SUPER_ADMIN 不顯示 apex SOA／NS 刪除按鈕，後端仍為最終權限邊界。反解指派限制維持原樣。
+- `/inventory` 授權後導向整合頁；舊 `/zones/[zone]` 先驗證該網域授權，再導向 `/zones?domain=...` 保留目標。一般使用者不能藉由舊路徑取得管理介面。
+- 對應本次整合頁、導覽、路由及測試工作樹：`npm run build`（含 TypeScript）、`npm run lint`、`git diff --check` 通過；`UNIT_TEST_DATABASE_URL=postgresql://dns_test@127.0.0.1:55439/dns_units_test npm test` 共 51 個測試檔、340 項通過。含整合頁靜態呈現、頁籤排序、空／反解網域、紀錄錯誤恢復、操作權限、apex 保護、舊網址與委派管理員授權邊界。
+- 本次整合不新增 migration 或更動正式 DNS／資料庫。local demo 維持關閉，未做瀏覽器視覺驗證；隔離 PostgreSQL 測試後停止。尚未推送，先前新增的申請資料 migration 仍待正式部署套用。

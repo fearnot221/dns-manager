@@ -30,7 +30,7 @@ export async function saveApplication(actor: Actor, input: PreparedApplication, 
       await lockUnit(tx, input.unitId);
       await assertApplicationPolicy(actor, input.records.map((r) => r.recordType), input.unitId, tx);
       const unit = await tx.dnsUnit.findUniqueOrThrow({ where: { id: input.unitId } });
-      input = { ...input, applicantUnit: unit.name };
+      input = { ...input, applicantUnit: unit.name, applicantEmail: input.applicantEmail ?? actor.portalEmail ?? "" };
       const userId = actor.id;
       const { records, ...applicant } = input;
       const existing = await tx.dnsRecordRequest.findMany({

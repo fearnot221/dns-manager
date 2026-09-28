@@ -4,16 +4,17 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class AuthError extends Error {} }));
 vi.mock("@/lib/audit/service", () => ({ logAuditEvent: vi.fn(async () => undefined) }));
 vi.mock("@/lib/units/service", () => ({ createUnit: vi.fn(), listUnits: vi.fn(), manageUnit: vi.fn(), reviewUnit: vi.fn(), assignUnitManager: vi.fn() }));
-vi.mock("@/lib/units/records", () => ({ unitDetail: vi.fn(), requestUnitChange: vi.fn() }));
+vi.mock("@/lib/units/records", () => ({ unitDetail: vi.fn(), requestUnitChange: vi.fn(), inspectUnitRecord: vi.fn() }));
 vi.mock("@/lib/requests/dev-store", () => ({ isDevRequestStore: () => false }));
 vi.mock("@/lib/db/client", () => ({ db: { dnsRecordRequest: { findMany: vi.fn() } } }));
 import { requireActor, AuthError } from "@/lib/auth/session";
 import { manageAllowlist } from "@/lib/units/allowlist";
 import { createUnit, listUnits, manageUnit, assignUnitManager } from "@/lib/units/service";
-import { requestUnitChange } from "@/lib/units/records";
+import { inspectUnitRecord, requestUnitChange } from "@/lib/units/records";
 import { GET, POST } from "@/app/api/units/route";
 import { PATCH } from "@/app/api/units/[id]/route";
 import { POST as change } from "@/app/api/units/[id]/changes/route";
+import { POST as inspect } from "@/app/api/units/[id]/inspections/route";
 import { GET as requests } from "@/app/api/dns-requests/route";
 import { db } from "@/lib/db/client";
 const ctx = { params: Promise.resolve({ id: "unit-1" }) };
@@ -91,4 +92,31 @@ describe("unit API boundaries", () => {
     vi.mocked(requireActor).mockResolvedValue({ id: "scoped-admin", email: "scoped@example.com", globalRole: "USER", zoneRoles: { "example.com.": "ADMIN" } });
     expect((await (await requests()).json()).requests[0].canReview).toBe(false);
   });
+  it("validates deletion and inspection inputs, authentication and origin", async () => {
+    const deletion = { operation: "DELETE", recordId: "record", expectedHash: "a".repeat(64), purpose: "退役" };
+    const inspection = { recordId: "record", expectedHash: "a".repeat(64), note: "確認" };
+    vi.mocked(requestUnitChange).mockResolvedValue({ id: "request" });
+    vi.mocked(inspectUnitRecord).mockResolvedValue({ id: "inspection" });
+    expect((await change(req(deletion), ctx)).status).toBe(201);
+    expect((await inspect(req(inspection), ctx)).status).toBe(201);
+    expect(inspectUnitRecord).toHaveBeenCalledWith(expect.objectContaining({ id: "user" }), "unit-1", inspection);
+    for (const extra of [{ content: "forged" }, { approved: true }, { unitId: "other" }]) expect((await change(req({ ...deletion, ...extra }), ctx)).status).toBe(400);
+    for (const extra of [{ inspectorId: "admin" }, { inspectedAt: "2000-01-01" }, { unitId: "other" }]) expect((await inspect(req({ ...inspection, ...extra }), ctx)).status).toBe(400);
+    expect((await inspect(req(inspection, "https://evil.invalid"), ctx)).status).toBe(403);
+    expect((await change(req(deletion, "https://evil.invalid"), ctx)).status).toBe(403);
+    vi.mocked(requireActor).mockRejectedValue(new AuthError());
+    expect((await inspect(req(inspection), ctx)).status).toBe(401);
+    expect((await change(req(deletion), ctx)).status).toBe(401);
+    expect(inspectUnitRecord).toHaveBeenCalledOnce(); expect(requestUnitChange).toHaveBeenCalledOnce();
+  });
+
+  it("validates requested ownership without allowing unit assignment or inspection forgery", async () => {
+    const body = { recordId: "record", expectedHash: "a".repeat(64), content: "192.0.2.2", purpose: "搬遷", ownership: { expectedUpdatedAt: "2026-09-29T00:00:00.000Z", applicantName: "聯絡人", applicantEmail: "dns@example.com", applicantExtension: "1234", purpose: "網站" } };
+    for (const extra of [{ unitId: "other" }, { applicantUnit: "other" }, { inspections: [] }, { applicantEmail: "invalid" }]) expect((await change(req({ ...body, ownership: { ...body.ownership, ...extra } }), ctx)).status).toBe(400);
+    expect(requestUnitChange).not.toHaveBeenCalled();
+    vi.mocked(requestUnitChange).mockResolvedValue({ id: "r" });
+    expect((await change(req(body), ctx)).status).toBe(201);
+    expect(requestUnitChange).toHaveBeenCalledWith(expect.anything(), "unit-1", body);
+  });
+
 });

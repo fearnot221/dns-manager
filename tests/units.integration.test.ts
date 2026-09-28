@@ -7,7 +7,7 @@ vi.mock("@/lib/db/client", async () => {
   return { db: new PrismaClient({ datasourceUrl: process.env.UNIT_TEST_DATABASE_URL || "postgresql://unused@127.0.0.1:1/unused" }) };
 });
 vi.mock("@/lib/powerdns/settings", () => ({ connectionEnvironment: async () => ({ PDNS_MOCK: "true" }) }));
-vi.mock("@/lib/powerdns/client", () => ({ powerdns: { getZone: vi.fn(), replaceRRSet: vi.fn() } }));
+vi.mock("@/lib/powerdns/client", () => ({ powerdns: { getZone: vi.fn(), replaceRRSet: vi.fn(), deleteRRSet: vi.fn() } }));
 import { requireActor } from "@/lib/auth/session";
 import { PATCH as patchUser } from "@/app/api/users/[id]/route";
 import { manageAllowlist } from "@/lib/units/allowlist";
@@ -19,7 +19,7 @@ import { memberWorkspaces } from "@/lib/units/workspace";
 import { db } from "@/lib/db/client";
 import { powerdns } from "@/lib/powerdns/client";
 import { createUnit, listUnits, manageUnit, unitAccess, reviewUnit, assignUnitManager } from "@/lib/units/service";
-import { requestUnitChange, unitDetail } from "@/lib/units/records";
+import { inspectUnitRecord, requestUnitChange, unitDetail } from "@/lib/units/records";
 import { reviewUnitRequest } from "@/lib/units/review";
 import { saveApplication } from "@/lib/requests/save-application";
 import { recordId } from "@/lib/inventory/service";
@@ -59,6 +59,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     zone = { id: "example.com.", name: "example.com.", kind: "Native", serial: 1, dnssec: false, rrsets: [] };
     vi.mocked(powerdns.getZone).mockImplementation(async () => structuredClone(zone));
     vi.mocked(powerdns.replaceRRSet).mockImplementation(async (_name, rrset) => { zone.rrsets = [structuredClone(rrset)]; });
+    vi.mocked(powerdns.deleteRRSet).mockImplementation(async (_zone, name, type) => { zone.rrsets = zone.rrsets.filter((r) => r.name !== name || r.type !== type); });
     [creator, viewer, editor, outsider, admin] = await Promise.all([account(), account(), account(), account(), account("ADMIN")]);
     const created = await createUnit(admin, `test-${crypto.randomUUID()}`, creator.studentId!);
     unitId = created.unit.id;
@@ -489,4 +490,131 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     for (const request of requests.reverse()) await reviewUnitRequest(admin, request.id, "APPROVE");
     expect((await unitDetail(viewer, unitId)).records).toHaveLength(2);
   });
+  it("lets members append inspections without changing ownership, DNS or exposing contact fields", async () => {
+    const source = await sourceRecord();
+    const before = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    const input = { recordId: source.id, expectedHash: source.expectedHash, note: "仍在使用" };
+    await expect(inspectUnitRecord(outsider, unitId, input)).rejects.toMatchObject({ status: 403 });
+    await expect(inspectUnitRecord(admin, unitId, input)).rejects.toMatchObject({ status: 403 });
+    for (const actor of [viewer, editor, creator]) await inspectUnitRecord(actor, unitId, input);
+    expect(await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).toEqual(before);
+    const detail = await unitDetail(viewer, unitId);
+    expect(detail.records[0].inspections).toHaveLength(3);
+    expect(detail.records[0].inspections[0].note).toBe("仍在使用");
+    expect(JSON.stringify(detail.records)).not.toContain("inspectorEmail");
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
+    zone.rrsets[0].ttl = 600;
+    await expect(inspectUnitRecord(viewer, unitId, input)).rejects.toMatchObject({ status: 409 });
+    await db.user.update({ where: { id: viewer.id }, data: { disabled: true } });
+    await expect(inspectUnitRecord(viewer, unitId, input)).rejects.toMatchObject({ status: 403 });
+  });
+  it("rejects cross-unit inspection targets and serializes loss of membership", async () => {
+    const source = await sourceRecord();
+    const input = { recordId: source.id, expectedHash: source.expectedHash, note: "check" };
+    const other = await createUnit(admin, `other-${crypto.randomUUID()}`, viewer.studentId!);
+    await expect(inspectUnitRecord(viewer, other.unit.id, input)).rejects.toMatchObject({ status: 404 });
+    await manageAllowlist(creator, unitId, viewer.studentId!, true);
+    await expect(inspectUnitRecord(viewer, unitId, input)).rejects.toMatchObject({ status: 403 });
+    expect(await db.dnsInspection.count({ where: { recordId: source.id } })).toBe(0);
+  });
+  it.each([false, true])("deletes only the approved value, preserving history (last value: %s)", async (last) => {
+    const source = await sourceRecord();
+    if (last) zone.rrsets[0].records.pop();
+    const expectedHash = rrsetHash(zone.rrsets[0]);
+    await inspectUnitRecord(viewer, unitId, { recordId: source.id, expectedHash, note: "已停用服務" });
+    const input = { operation: "DELETE" as const, recordId: source.id, expectedHash, purpose: "服務退役" };
+    await expect(requestUnitChange(viewer, unitId, input)).rejects.toMatchObject({ status: 403 });
+    const pending = await requestUnitChange(editor, unitId, input);
+    expect(await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).toMatchObject({ operation: "DELETE", content: "192.0.2.1", status: "PENDING" });
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
+    await expect(requestUnitChange(editor, unitId, input)).rejects.toMatchObject({ status: 409 });
+    await expect(requestUnitChange(editor, unitId, { ...changeInput(source), expectedHash })).rejects.toMatchObject({ status: 409 });
+    await expect(reviewUnitRequest(creator, pending.id, "APPROVE")).rejects.toMatchObject({ status: 403 });
+    const results = await Promise.allSettled([reviewUnitRequest(admin, pending.id, "APPROVE"), reviewUnitRequest(admin, pending.id, "APPROVE")]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    if (last) { expect(zone.rrsets).toHaveLength(0); expect(powerdns.deleteRRSet).toHaveBeenCalledOnce(); expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); }
+    else { expect(zone.rrsets[0]).toMatchObject({ ttl: 300, comments: [{ content: "preserve" }], records: [{ content: "192.0.2.99", disabled: false }] }); expect(powerdns.replaceRRSet).toHaveBeenCalledOnce(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled(); }
+    expect(await db.dnsInspection.count({ where: { recordId: source.id } })).toBe(1);
+    expect(await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).toMatchObject({ unitId: null });
+    expect((await unitDetail(viewer, unitId)).records).toHaveLength(0);
+  });
+  it.each(["stale", "demotion", "reassignment", "disabled", "cancelled"])("blocks deletion after %s and makes no DNS write", async (scenario) => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, { operation: "DELETE", recordId: source.id, expectedHash: source.expectedHash, purpose: "退役" });
+    if (scenario === "stale") zone.rrsets[0].records.push({ content: "192.0.2.88", disabled: false });
+    if (scenario === "demotion") await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "VIEWER" });
+    if (scenario === "reassignment") await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId: null } });
+    if (scenario === "disabled") await db.user.update({ where: { id: editor.id }, data: { disabled: true } });
+    if (scenario === "cancelled") await db.dnsRecordRequest.update({ where: { id: pending.id }, data: { status: "CANCELLED" } });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 409 });
+    if (scenario !== "cancelled") expect((await reviewUnitRequest(admin, pending.id, "REJECT")).status).toBe("REJECTED");
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
+  });
+  it.each([false, true])("recovers an applied deletion after a failed transaction without repeating the DNS write (last: %s)", async (last) => {
+    const source = await sourceRecord();
+    if (last) zone.rrsets[0].records.pop();
+    const pending = await requestUnitChange(editor, unitId, { operation: "DELETE", recordId: source.id, expectedHash: rrsetHash(zone.rrsets[0]), purpose: "退役" });
+    // Simulate a successful external write whose response failed before DB commit.
+    if (last) vi.mocked(powerdns.deleteRRSet).mockImplementationOnce(async () => { zone.rrsets = []; throw new Error("connection lost after write"); });
+    else vi.mocked(powerdns.replaceRRSet).mockImplementationOnce(async (_name, rrset) => { zone.rrsets = [structuredClone(rrset)]; throw new Error("connection lost after write"); });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toThrow("connection lost");
+    expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("PENDING");
+    await reviewUnitRequest(admin, pending.id, "APPROVE");
+    expect(last ? powerdns.deleteRRSet : powerdns.replaceRRSet).toHaveBeenCalledOnce();
+    expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("APPROVED");
+  });
+  it("rejects stale deletion submissions and protected record types", async () => {
+    const source = await sourceRecord();
+    const input = { operation: "DELETE" as const, recordId: source.id, expectedHash: source.expectedHash, purpose: "退役" };
+    zone.rrsets[0].ttl = 600;
+    await expect(requestUnitChange(editor, unitId, input)).rejects.toMatchObject({ status: 409 });
+    await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { recordType: "SOA" } });
+    // A valid SOA identity cannot enter the supported application types.
+    const metadata = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    const id = recordId("local-mock", metadata);
+    await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { id } });
+    await expect(requestUnitChange(editor, unitId, { ...input, recordId: id })).rejects.toMatchObject({ status: 403 });
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
+  });
+
+  it("carries application contact fields and individual purposes into approved inventory", async () => {
+    const input = { unitId, applicantName: "聯絡人", applicantEmail: "service@example.com", applicantUnit: "forged", applicantExtension: "1234", records: ["網站", "資料庫"].map((purpose, i) => ({ zoneName: zone.name, recordName: `contact-${i}-${crypto.randomUUID().slice(0, 8)}.example.com.`, recordType: "A", content: "192.0.2.50", ttl: 300, purpose })) };
+    const result = await saveApplication(editor, input, httpRequest());
+    const requests = await db.dnsRecordRequest.findMany({ where: { applicationId: result.applicationId }, orderBy: { recordName: "asc" } });
+    for (const request of requests) {
+      expect(request).toMatchObject({ applicantName: "聯絡人", applicantEmail: "service@example.com", applicantExtension: "1234" });
+      expect(request.applicantUnit).not.toBe("forged");
+      await reviewUnitRequest(admin, request.id, "APPROVE");
+      const metadata = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: recordId("local-mock", request) } });
+      expect(metadata).toMatchObject({ applicantName: "聯絡人", applicantEmail: "service@example.com", applicantExtension: "1234", applicantUnit: request.applicantUnit, purpose: request.purpose, unitId });
+    }
+  });
+  it("separates change reasons from requested inventory information and only applies it after approval", async () => {
+    const source = await sourceRecord();
+    const before = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    const ownership = { expectedUpdatedAt: before.updatedAt.toISOString(), applicantName: "服務管理人", applicantEmail: "dns@example.com", applicantExtension: "5678", purpose: "實驗室網站" };
+    const pending = await requestUnitChange(editor, unitId, { ...changeInput(source), ownership });
+    expect(await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).toEqual(before);
+    const request = await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } });
+    expect(request).toMatchObject({ purpose: "服務搬遷", recordPurpose: "實驗室網站", applicantName: ownership.applicantName, applicantEmail: ownership.applicantEmail });
+    await reviewUnitRequest(admin, pending.id, "APPROVE");
+    const after = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: recordId("local-mock", request) } });
+    expect(after).toMatchObject({ purpose: "實驗室網站", applicantName: ownership.applicantName, applicantEmail: ownership.applicantEmail, applicantExtension: "5678", unitId });
+    const detail = await unitDetail(viewer, unitId);
+    expect(detail.records[0]).toMatchObject({ applicantName: ownership.applicantName, applicantEmail: ownership.applicantEmail, purpose: "實驗室網站" });
+    await expect(unitDetail(outsider, unitId)).rejects.toMatchObject({ status: 403 });
+  });
+  it("blocks stale ownership forms and approval after inventory edits", async () => {
+    const source = await sourceRecord();
+    const before = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    const ownership = { expectedUpdatedAt: "2000-01-01T00:00:00.000Z", applicantName: "", applicantEmail: "", applicantExtension: "", purpose: "new purpose" };
+    await expect(requestUnitChange(editor, unitId, { ...changeInput(source), ownership })).rejects.toMatchObject({ status: 409 });
+    const pending = await requestUnitChange(editor, unitId, { ...changeInput(source), ownership: { ...ownership, expectedUpdatedAt: before.updatedAt.toISOString() } });
+    await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { purpose: "admin update", updatedAt: new Date(before.updatedAt.getTime() + 1000) } });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 409 });
+    await reviewUnitRequest(admin, pending.id, "REJECT");
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).purpose).toBe("admin update");
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+  });
+
 });

@@ -16,7 +16,8 @@ describe("workspace navigation", () => {
   it("separates zone management from global administration", () => {
     expect(items(true, false).map((item) => item.href)).toContain("/zones");
     expect(items(true, false).map((item) => item.href)).toContain("/admin/application-policy");
-    expect(items(true, false).map((item) => item.href)).toContain("/inventory");
+    expect(items(true, false).map((item) => item.href)).not.toContain("/inventory");
+    expect(items(true, false).find((item) => item.href === "/zones")?.label).toBe("DNS 管理");
     expect(items(true, false).filter((item) => item.href.startsWith("/admin")).map((item) => item.href)).toEqual(["/admin/application-policy"]);
     expect(items(true, true).map((item) => item.href)).toEqual(expect.arrayContaining(["/admin/users", "/admin/application-policy", "/activity"]));
   });

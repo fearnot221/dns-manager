@@ -10,8 +10,7 @@ export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAd
   ];
   if (unitAdmin || systemAdmin) items.push({ href: "/units", label: "單位管理", icon: "units" });
   if (admin) items.push(
-    { href: "/zones", label: "網域管理", icon: "zones", nested: true },
-    { href: "/inventory", label: "DNS 清查", icon: "inventory" },
+    { href: "/zones", label: "DNS 管理", icon: "zones", nested: true },
     { href: "/admin/application-policy", label: "申請規則", icon: "settings" },
   );
   if (systemAdmin) items.push(

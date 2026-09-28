@@ -19,3 +19,14 @@ export function groupInventory(records: InventoryRecord[], group: InventoryGroup
   }
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b, "zh-TW", { numeric: true }));
 }
+
+/** Keep the primary departments first; other domain tabs retain alphabetical order. */
+export function compareInventoryDomains(a: string, b: string) {
+  const priority = (name: string) => {
+    const domain = name.toLowerCase().replace(/\.$/, "");
+    if (domain === "ee.ncu.edu.tw") return 0;
+    if (domain === "ce.ncu.edu.tw") return 1;
+    return 2;
+  };
+  return priority(a) - priority(b) || a.localeCompare(b);
+}

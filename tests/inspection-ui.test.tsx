@@ -66,3 +66,12 @@ it.each(["2.0.192.in-addr.arpa.", "8.b.d.0.1.0.0.2.ip6.arpa."])("shows a reverse
   expect(dialog).toContain('name="note"'); expect(dialog).toContain("儲存並記錄清查");
   expect(dialog).not.toContain("指派單位");
 });
+
+it("places ee and ce first and initially shows ee, ahead of reverse domains", () => {
+  const domains = ["z.example.", "ce.ncu.edu.tw.", "2.0.192.in-addr.arpa.", "EE.NCU.EDU.TW.", "a.example."];
+  vi.mocked(useResource).mockReturnValue({ data: { records: domains.map((zoneName) => ({ ...records[0], zoneName, recordName: `host.${zoneName}` })) }, error: "", loading: false, reload: vi.fn() } as never);
+  const html = renderToStaticMarkup(createElement(InventoryWorkbench));
+  const labels = [...html.matchAll(/role="tab"[^>]*>([^<]+)<\/button>/g)].map((match) => match[1]);
+  expect(labels).toEqual(["EE.NCU.EDU.TW.", "ce.ncu.edu.tw.", "2.0.192.in-addr.arpa.", "a.example.", "z.example."]);
+  expect(html).toContain('aria-label="清查 host.EE.NCU.EDU.TW. 192.0.2.1"');
+});

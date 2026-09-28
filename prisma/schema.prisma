@@ -19,6 +19,12 @@ enum ZoneRole {
   ADMIN
 }
 
+enum DnsRequestOperation {
+  CREATE
+  UPDATE
+  DELETE
+}
+
 enum DnsRequestStatus {
   PENDING
   APPROVED
@@ -188,6 +194,10 @@ model RecordTypePolicy {
 }
 
 model DnsRecordRequest {
+  operation DnsRequestOperation @default(CREATE)
+  applicantEmail String?
+  recordPurpose String? @db.Text
+  sourceMetadataUpdatedAt DateTime?
   id          String           @id @default(cuid())
   userId      String
   applicationId String?
