@@ -14,5 +14,5 @@ export const isGlobalAdmin = (actor: Actor) => actor.globalRole === "ADMIN" || a
 export const resolvedGlobalRole = (_email: string, role: GlobalRole, identifier?: string | null): GlobalRole => identifier === OWNER_IDENTIFIER ? "SUPER_ADMIN" : role === "SUPER_ADMIN" ? "ADMIN" : role;
 export function mayManageUser(actor: Actor, target: { email: string; portalIdentifier?: string | null; globalRole: GlobalRole; zoneAdmin?: boolean }) {
   if (target.portalIdentifier === OWNER_IDENTIFIER) return false;
-  return isOwner(actor) || (isGlobalAdmin(actor) && target.globalRole === "USER" && !target.zoneAdmin);
+  return isGlobalAdmin(actor);
 }

@@ -22,3 +22,11 @@ it("keeps member management out of the unit DNS view even for a unit admin", () 
   expect(html).toContain("搜尋 DNS");
   expect(html).not.toContain("選擇管理單位");
 });
+
+it("shows system admins the selected unit users and DNS without application actions", () => {
+  vi.mocked(useResource).mockImplementation((url) => ({ loading: false, error: "", reload: vi.fn(), data: url === "/api/units" ? { units: [{ id: "lab", name: "實驗室", status: "APPROVED", role: "ADMIN", memberCount: 1 }] } : { unit: { id: "lab", name: "實驗室", status: "APPROVED" }, role: "ADMIN", canApply: true, canReview: true, members: [{ userId: "u", label: "單位成員", studentId: "123", role: "VIEWER", disabled: false }], records: [{ id: "dns", recordName: "lab.example.com.", recordType: "A", content: "192.0.2.1", ttl: 300, purpose: "研究" }], recordsError: "", allowlist: [] } }) as never);
+  const html = renderToStaticMarkup(createElement(UnitsWorkbench, { systemAdmin: true }));
+  expect(html).toContain("單位成員"); expect(html).toContain("lab.example.com."); expect(html).toContain("192.0.2.1");
+  expect(html).toContain("搜尋 DNS"); expect(html).toContain("管理權限");
+  expect(html).not.toContain('href="/requests/new"'); expect(html).not.toContain("申請變更</button>");
+});

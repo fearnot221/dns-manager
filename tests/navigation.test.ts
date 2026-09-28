@@ -21,9 +21,9 @@ describe("workspace navigation", () => {
     expect(items(true, true).map((item) => item.href)).toEqual(expect.arrayContaining(["/admin/users", "/admin/application-policy", "/activity"]));
   });
   it("selects only the relevant route, including zone detail pages", () => {
-    const navigation = items(true, true);
+    const navigation = items(false, false);
     expect(navigation.filter((item) => isNavActive("/requests/new", item)).map((item) => item.href)).toEqual(["/requests/new"]);
-    expect(navigation.filter((item) => isNavActive("/zones/example.com", item)).map((item) => item.href)).toEqual(["/zones"]);
+    expect(items(true, true).filter((item) => isNavActive("/zones/example.com", item)).map((item) => item.href)).toEqual(["/zones"]);
     expect(navigation.filter((item) => isNavActive("/zones-other", item))).toEqual([]);
   });
   it("keeps group IDs and routes unique", () => {
@@ -40,4 +40,10 @@ describe("workspace navigation", () => {
       expect(items(admin, systemAdmin).map((item) => item.href)).not.toContain("/inspections");
     }
   });
+});
+
+it("removes user DNS workflows from system administrator navigation", () => {
+  const routes = workspaceNavigation(true, true, true)[0].items.map((item) => item.href);
+  expect(routes).not.toContain("/dns"); expect(routes).not.toContain("/requests/new");
+  expect(routes).toContain("/units"); expect(routes).toContain("/requests");
 });

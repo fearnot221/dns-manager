@@ -56,10 +56,26 @@ describe("protected owner and user management", () => {
   });
   it("does not expose password hashes", async () => { const response = await GET(); const text = await response.text(); expect(text).not.toContain("passwordHash"); expect(text).not.toContain("never-expose"); });
   it("blocks even the owner from changing the owner account", async () => { vi.mocked(requireActor).mockResolvedValue(owner); expect((await PATCH(request({ disabled: true }), { params: Promise.resolve({ id: owner.id }) })).status).toBe(403); expect(users[0].disabled).toBe(false); });
-  it("blocks admins from promoting anyone", async () => { expect((await PATCH(request({ globalRole: "ADMIN" }), { params: Promise.resolve({ id: "dev-user" }) })).status).toBe(403); });
+  it("allows admins to promote users and demote other admins", async () => {
+    expect((await PATCH(request({ globalRole: "ADMIN" }), { params: Promise.resolve({ id: "dev-user" }) })).status).toBe(200);
+    expect(users[2].globalRole).toBe("ADMIN");
+    expect((await PATCH(request({ globalRole: "USER" }), { params: Promise.resolve({ id: "dev-user" }) })).status).toBe(200);
+    expect(users[2].globalRole).toBe("USER");
+    const data = await (await GET()).json(); expect(data.canAssignAdmin).toBe(true); expect(data.canRemoveUsers).toBe(false);
+  });
   it("blocks admins from creating admins", async () => { expect((await POST(request({ email: "other@example.com", name: "Other", password: "Long-test-password!", globalRole: "ADMIN" }, "POST"))).status).toBe(405); });
   it("blocks creation of the reserved owner email", async () => { vi.mocked(requireActor).mockResolvedValue(owner); expect((await POST(request({ email: "owner@example.invalid".toUpperCase(), name: "Fake owner", password: "Long-test-password!", globalRole: "USER" }, "POST"))).status).toBe(405); });
   it("allows owner promotion and ordinary admin user suspension", async () => { vi.mocked(requireActor).mockResolvedValue(owner); expect((await PATCH(request({ globalRole: "ADMIN" }), { params: Promise.resolve({ id: "dev-user" }) })).status).toBe(200); expect(users[2].globalRole).toBe("ADMIN"); users[2].globalRole = "USER"; vi.mocked(requireActor).mockResolvedValue(admin); expect((await PATCH(request({ disabled: true }), { params: Promise.resolve({ id: "dev-user" }) })).status).toBe(200); });
-  it("prevents editing admin accounts, unknown fields and cross-origin requests", async () => { expect((await PATCH(request({ note: "Changed" }), { params: Promise.resolve({ id: admin.id }) })).status).toBe(403); expect((await PATCH(request({ email: "owner@example.invalid" }), { params: Promise.resolve({ id: "dev-user" }) })).status).toBe(400); const cross = new Request("http://localhost:3000/api/users", { method: "POST", headers: { Origin: "https://other.example" }, body: "{}" }); expect((await POST(cross)).status).toBe(403); });
-  it("does not treat a legacy super admin as the protected owner", () => { expect(resolvedGlobalRole(admin.email, "SUPER_ADMIN")).toBe("ADMIN"); expect(mayManageUser(admin, { email: "owner@example.invalid", globalRole: "SUPER_ADMIN" })).toBe(false); expect(mayManageUser(admin, { email: "scoped@example.com", globalRole: "USER", zoneAdmin: true })).toBe(false); });
+  it("allows admin edits while rejecting unknown fields and cross-origin requests", async () => { expect((await PATCH(request({ note: "Changed" }), { params: Promise.resolve({ id: admin.id }) })).status).toBe(200); expect((await PATCH(request({ email: "owner@example.invalid" }), { params: Promise.resolve({ id: "dev-user" }) })).status).toBe(400); const cross = new Request("http://localhost:3000/api/users", { method: "POST", headers: { Origin: "https://other.example" }, body: "{}" }); expect((await POST(cross)).status).toBe(403); });
+  it("does not treat a legacy super admin as the protected owner", () => { expect(resolvedGlobalRole(admin.email, "SUPER_ADMIN")).toBe("ADMIN"); expect(mayManageUser(admin, { email: "owner@example.invalid", globalRole: "SUPER_ADMIN" })).toBe(true); expect(mayManageUser(admin, { email: "scoped@example.com", globalRole: "USER", zoneAdmin: true })).toBe(true); });
+});
+
+it("rejects owner-role grants and ordinary or delegated admin role changes", async () => {
+  expect((await PATCH(request({ globalRole: "SUPER_ADMIN" }), { params: Promise.resolve({ id: "dev-user" }) })).status).toBe(400);
+  for (const fields of [{ globalRole: "USER" }, { disabled: true }]) expect((await PATCH(request(fields), { params: Promise.resolve({ id: owner.id }) })).status).toBe(403);
+  for (const zoneRoles of [{}, { "example.com.": "ADMIN" }] as Actor["zoneRoles"][]) {
+    vi.mocked(requireActor).mockResolvedValue({ ...admin, globalRole: "USER", zoneRoles });
+    expect((await PATCH(request({ globalRole: "ADMIN" }), { params: Promise.resolve({ id: "dev-user" }) })).status).toBe(403);
+  }
+  expect(users[2].globalRole).toBe("USER");
 });

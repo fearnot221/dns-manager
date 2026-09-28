@@ -60,26 +60,26 @@ export async function captureApprovedRequest(actor: Actor, request: Identity & {
   await db.dnsRecordMetadata.upsert({ where: { id }, create: fields, update: {} });
 }
 
-export async function saveInventory(actor: Actor, input: Identity & { id: string; expectedUpdatedAt: string | null; mode: "metadata" | "inspect"; applicantName: string; applicantEmail: string; applicantUnit: string; applicantExtension: string; purpose: string; note: string }) {
-  if (input.mode === "inspect" && zoneCategory(input.zoneName) !== "forward") throw new ApiError("DNS 定期清查僅適用於一般網域。", 400);
+export async function saveInventory(actor: Actor, input: Identity & { id: string; expectedUpdatedAt: string | null; mode: "metadata" | "inspect" | "inspect-and-metadata"; applicantName: string; applicantEmail: string; applicantUnit: string; applicantExtension: string; purpose: string; note: string }) {
+  if (input.mode !== "metadata" && zoneCategory(input.zoneName) !== "forward") throw new ApiError("DNS 定期清查僅適用於一般網域。", 400);
   if (!canManageZone(actor, input.zoneName)) throw new ApiError("找不到可管理的 DNS 紀錄。", 404);
   if (input.id !== recordId(await connectionScope(), input)) throw new ApiError("DNS 連線已變更，請重新載入。", 409);
   const zone = await powerdns.getZone(input.zoneName);
   const live = (await describeRecords(actor, input.zoneName, zone.rrsets)).find((record) => record.ownership.id === input.id);
   if (!live) throw new ApiError("此解析值已不存在，請重新載入。", 409);
   const { zoneName, recordName, recordType, content } = input;
-  const fields = input.mode === "metadata" ? { applicantName: input.applicantName, applicantEmail: input.applicantEmail, applicantUnit: input.applicantUnit, applicantExtension: input.applicantExtension, purpose: input.purpose } : { applicantName: live.ownership.applicantName, applicantEmail: live.ownership.applicantEmail, applicantUnit: live.ownership.applicantUnit, applicantExtension: live.ownership.applicantExtension, purpose: live.ownership.purpose };
+  const fields = input.mode !== "inspect" ? { applicantName: input.applicantName, applicantEmail: input.applicantEmail, applicantUnit: input.applicantUnit, applicantExtension: input.applicantExtension, purpose: input.purpose } : { applicantName: live.ownership.applicantName, applicantEmail: live.ownership.applicantEmail, applicantUnit: live.ownership.applicantUnit, applicantExtension: live.ownership.applicantExtension, purpose: live.ownership.purpose };
   const inspection = { id: crypto.randomUUID(), inspectedAt: new Date().toISOString(), inspectorId: actor.id, inspectorEmail: actor.email, inspectorName: actor.name || actor.email, note: input.note };
   const checkVersion = (updatedAt: string | Date | null | undefined) => { if ((updatedAt ? new Date(updatedAt).toISOString() : null) !== input.expectedUpdatedAt) throw new ApiError("資料已由其他人更新，請重新載入後再儲存。", 409); };
   if (isLocalDemo()) return localDocument("inventory", async () => ({ records: {} } as Store), (data) => {
     const previous = data.records[input.id]; checkVersion(previous?.updatedAt);
-    data.records[input.id] = { id: input.id, zoneName, recordName, recordType, content, ...fields, updatedAt: new Date().toISOString(), updatedBy: actor.email, inspections: input.mode === "inspect" ? [inspection, ...(previous?.inspections || [])] : previous?.inspections || [] };
+    data.records[input.id] = { id: input.id, zoneName, recordName, recordType, content, ...fields, updatedAt: new Date().toISOString(), updatedBy: actor.email, inspections: input.mode !== "metadata" ? [inspection, ...(previous?.inspections || [])] : previous?.inspections || [] };
     return { before: previous ?? live.ownership, after: data.records[input.id] };
   }, true);
   return db.$transaction(async (tx) => {
     const current = await tx.dnsRecordMetadata.findUnique({ where: { id: input.id } }); checkVersion(current?.updatedAt);
     const saved = await tx.dnsRecordMetadata.upsert({ where: { id: input.id }, create: { id: input.id, zoneName, recordName, recordType, content, ...fields, updatedBy: actor.email }, update: { ...fields, updatedBy: actor.email, updatedAt: new Date() } });
-    if (input.mode === "inspect") await tx.dnsInspection.create({ data: { ...inspection, recordId: input.id, inspectedAt: new Date(inspection.inspectedAt) } });
-    return { before: current ?? live.ownership, after: { ...saved, ...(input.mode === "inspect" ? { inspection } : {}) } };
+    if (input.mode !== "metadata") await tx.dnsInspection.create({ data: { ...inspection, recordId: input.id, inspectedAt: new Date(inspection.inspectedAt) } });
+    return { before: current ?? live.ownership, after: { ...saved, ...(input.mode !== "metadata" ? { inspection } : {}) } };
   }, { isolationLevel: "Serializable" });
 }

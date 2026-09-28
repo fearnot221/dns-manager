@@ -25,7 +25,7 @@ The frontend is organized around a persistent authenticated workspace:
 - `components/records/`: workbench controls, table/list/group views, IP board, record dialog, and shared view types.
 - `components/requests/`: multi-record application form, request filters/cards, review dialog, and shared types.
 - `components/admin/`: inventory, user management, and PowerDNS connection settings.
-- `lib/inventory/`: per-record ownership and append-only inspection history, scoped to the active PowerDNS connection.
+- `lib/inventory/`: per-record ownership and inspection history, scoped to the active PowerDNS connection.
 - `components/ui/dialog.tsx`: native modal with focus trapping, Escape, focus restoration, and pending-state protection.
 - `lib/client/`: typed API requests and cancellable resource loading with visible retry states.
 - `styles/`: design tokens, base rules, workspace, shared components, records, requests, and authentication. `app/globals.css` only imports these layers.
@@ -45,10 +45,10 @@ Every API operation authenticates the caller, resolves effective direct/group pe
 - Read-only administrator operation log at `/activity`, with filters, pagination, before/after details and request correlation
 - Collapsible sidebar groups and desktop navigation toggle
 
-- Open NCU Portal sign-in with automatic USER provisioning; administrator roles assigned manually by the protected owner
+- Open NCU Portal sign-in with automatic USER provisioning; administrator roles assigned manually by system administrators
 - Owner authorization requires a consistent Logto identity with `details.identifier=115502532`; email, sub and display claims grant no privileges. Global `ADMIN` / `USER` and zone `VIEWER`, `EDITOR`, `ADMIN` roles remain separate.
 - Per-value applicant, unit, extension and purpose; grouped inventory with server-stamped inspection history
-- User creation, name editing and suspension; only the owner can assign administrator privileges
+- User creation, name editing and suspension; system administrators can assign or revoke administrator privileges for non-owner accounts
 - Environment-only PowerDNS API configuration; no web credential input or database override
 - Direct and group-ready permission schema, expiry, resource patterns, and record-type policy fields
 - Backend-filtered zones and protected mutation endpoints
@@ -93,9 +93,9 @@ DNS and application changes reset on server restart. User accounts, ownership, i
 
 Record views show applicant, unit and purpose beside each individual DNS value; open the ownership button to edit name, email, unit, extension and purpose without changing DNS. Approval snapshots application details automatically. Legacy approved requests are used as a fallback only when the connection can be safely associated; missing information is shown as missing.
 
-`/inventory` groups current DNS records by applicant, unit, purpose or zone, with search and filters for uninspected records or incomplete ownership. Each inspection appends the server time, authenticated account ID/name/email and an optional note. Clients cannot supply dates or impersonate inspectors. Editing ownership does not erase inspection history. Stale edits return HTTP 409. Historical rows remain stored if a DNS value disappears, but this screen only lists values currently in PowerDNS. This is an on-demand inventory workflow, not an automatically scheduled inspection.
+`/inventory` displays the original inspection list in domain tabs, with search and filters for uninspected records or incomplete ownership within the selected domain. Each inspection appends the server time, authenticated account ID/name/email and an optional note. Clients cannot supply dates or impersonate inspectors. Editing ownership does not erase inspection history. Stale edits return HTTP 409. Historical rows remain stored if a DNS value disappears, but this screen only lists values currently in PowerDNS. This is an on-demand inventory workflow, not an automatically scheduled inspection.
 
-`/admin/users` manages account roles, status and notes. Only the account with a verified NCU identity `details.identifier=115502532` may assign administrators or delegate zone permissions. The owner's role and status cannot be changed through the UI; notes remain editable. Names are synchronized from display fields inside the same identity details. Email, sub and display names do not authorize access. Other administrators are assigned manually through user management. Disabled accounts and current database roles are checked on protected requests. Unlinked historical `SUPER_ADMIN` accounts receive ordinary `ADMIN` access, not owner privileges.
+`/admin/users` manages account roles, status and notes. System administrators can assign or revoke USER/ADMIN roles for other non-owner accounts. Only the account with a verified NCU identity `details.identifier=115502532` may delegate zone permissions. The owner's role and status cannot be changed through the UI; notes remain editable. Names are synchronized from display fields inside the same identity details. Email, sub and display names do not authorize access. Other administrators are assigned manually through user management. Disabled accounts and current database roles are checked on protected requests. Unlinked historical `SUPER_ADMIN` accounts receive ordinary `ADMIN` access, not owner privileges.
 
 ## Database-backed local setup
 
@@ -147,7 +147,7 @@ Anyone with a valid NCU Portal identity and verified contact email can sign in; 
 https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/logto
 ```
 
-Configure AUTH_LOGTO_ID and AUTH_LOGTO_SECRET and `AUTH_URL`, then recreate the web container. Password login remains available for testing; set `AUTH_PASSWORD_LOGIN_ENABLED=false` to disable it. Google is not supported. New Portal accounts always default to `USER`, never to administrator based on email/domain or Portal role claims. Only the protected owner can manually grant ADMIN through user management; existing roles and suspended-account checks remain enforced. The owner is verified by NCU identity `details.identifier`. Access to existing account data requires explicit operator linking; otherwise a new subject creates an independent USER account; they are never silently merged by email. New accounts store USER by default; the verified owner identifier receives effective SUPER_ADMIN access. The former allowlist page/API are retired. Old membership data and historical audit events are preserved, but have no effect on login.
+Configure AUTH_LOGTO_ID and AUTH_LOGTO_SECRET and `AUTH_URL`, then recreate the web container. Password login remains available for testing; set `AUTH_PASSWORD_LOGIN_ENABLED=false` to disable it. Google is not supported. New Portal accounts always default to `USER`, never to administrator based on email/domain or Portal role claims. System administrators can manually grant or revoke ADMIN through user management; existing roles and suspended-account checks remain enforced. The owner is verified by NCU identity `details.identifier`. Access to existing account data requires explicit operator linking; otherwise a new subject creates an independent USER account; they are never silently merged by email. New accounts store USER by default; the verified owner identifier receives effective SUPER_ADMIN access. The former allowlist page/API are retired. Old membership data and historical audit events are preserved, but have no effect on login.
 
 PowerDNS reads only `PDNS_API_URL` (ending in `/api/v1`), `PDNS_API_KEY` and `PDNS_SERVER_ID`. Move previously web-entered settings to the server environment before upgrading. Existing encrypted database settings are retained but ignored. Inventory metadata remains scoped to the API URL/server ID; keep those unchanged to retain its associations. Unscoped legacy applications are not used to infer ownership on live servers.
 
@@ -209,7 +209,7 @@ The NCU Portal button uses Logto OIDC (ES384, PKCE, state and nonce). Configure 
 
 System administrators can use **匯出全部 DNS CSV** in the Zone management header. The download includes every record value from the configured PowerDNS server (forward and reverse zones, enabled and disabled records), plus ownership, inspection history and RRset comments. It ignores UI filters. Any fetch/audit failure aborts the download rather than producing a partial file. Exports are logged and never cached. UTF-8 BOM and CSV quoting support spreadsheet import; formula-like cell values receive a leading apostrophe for safety. This is a human-readable record export, not a restorable database/PowerDNS backup or an atomic cross-zone snapshot. Treat downloaded contact/ownership data as sensitive.
 
-Back up PostgreSQL, the settings encryption key, and the PowerDNS backend. PostgreSQL preserves authorization, ownership, inspection and audit data, not authoritative zones. Test restores. Audit and inspection rows are append-only at the application layer; database operators can still modify storage, so add database retention or write-once exports to meet compliance needs.
+Back up PostgreSQL, the settings encryption key, and the PowerDNS backend. PostgreSQL preserves authorization, ownership, inspection and audit data, not authoritative zones. Test restores. Audit rows are append-only at the application layer. The verified owner can delete individual inspection rows, with the deleted snapshot retained in the audit log; database operators can still modify storage, so add database retention or write-once exports to meet compliance needs.
 
 ## Verification
 

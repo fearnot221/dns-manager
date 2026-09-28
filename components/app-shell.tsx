@@ -70,10 +70,10 @@ function ShellContent({ children, identity, admin, systemAdmin, demo }: ShellPro
     {mobile && <button type="button" className="navigation-backdrop" tabIndex={-1} aria-label="關閉導覽選單" onClick={() => setMobile(false)} />}
     <aside ref={sidebar} id="workspace-navigation" className={`sidebar ${mobile ? "mobile-open" : ""}`}>
       <div className="brand"><Brand /><button className="icon-button mobile-close" onClick={() => setMobile(false)} aria-label="關閉導覽選單"><X size={20} /></button></div>
-      {workspace.units.length > 1 ? <details className="workspace-switcher">
+      {!systemAdmin && workspace.units.length > 1 ? <details className="workspace-switcher">
         <summary><span><small>切換工作區</small><strong>{workspace.active?.name}</strong></span><ChevronDown size={16} aria-hidden="true" /></summary>
         <div>{workspace.units.map((unit) => <button type="button" key={unit.id} data-leave-workspace aria-pressed={unit.id === workspace.active?.id} onClick={() => { workspace.select(unit.id); router.push("/dns"); setMobile(false); }}><span>{unit.name}</span>{unit.id === workspace.active?.id && <span aria-hidden="true">✓</span>}</button>)}</div>
-      </details> : workspace.active ? <p className="sidebar-unit" title={workspace.active.name}>{workspace.active.name}</p> : <p className="sidebar-unit">{systemAdmin ? "DNS 管理系統" : "尚未加入單位"}</p>}
+      </details> : !systemAdmin && workspace.active ? <p className="sidebar-unit" title={workspace.active.name}>{workspace.active.name}</p> : <p className="sidebar-unit">{systemAdmin ? "DNS 管理系統" : "尚未加入單位"}</p>}
       <nav className="nav" aria-label="功能導覽">
         {groups.flatMap((group) => group.items).map((item) => {
           const active = isNavActive(pathname, item);

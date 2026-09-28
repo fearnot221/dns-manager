@@ -30,7 +30,7 @@
 
 ## 特殊權限與已停用功能
 
-- 指派系統管理員、移除使用者與委派 Zone 權限沿用 owner 身分限制，不因一般管理員畫面開放而放寬。
+- 系統管理員可指派或撤銷非 owner 帳號的 USER／ADMIN 身分；移除使用者與委派 Zone 權限沿用 owner 身分限制。
 - owner 在介面仍使用一般「管理」操作，可備註；角色與帳號狀態不可更動。
 - 網站不提供新增 Zone；PowerDNS 憑證只在伺服器環境設定，舊設定 API 回傳 410。
 - 舊的全站登入白名單頁面已停用，不以舊白名單資料限制登入；新的單位學號白名單只控制單位成員資格。
@@ -115,3 +115,32 @@
 - 儲存時檢查版本、連線、解析值存在性與單位狀態；與單位變更審核共用單位鎖，並行指派衝突回傳 409。
 - 最終程式碼驗證：`UNIT_TEST_DATABASE_URL=…/dns_units_test npm test`，48 個檔案、290 項全數通過；`npm run lint`、`npm run build`（包含 TypeScript）與 `git diff --check` 通過。並行測試發現 raw SQL 的 PostgreSQL 40001 需另轉成 409，修正後完整套件通過。
 - 沒有新增 migration；只在隔離資料庫測試，未修改正式 DNS／資料，未啟動 demo、未進行瀏覽器視覺驗證、未推送。
+
+## 清查紀錄刪除（2026-09-29）
+
+- 只有既有 `isOwner` 身分可刪除單筆清查紀錄；一般 ADMIN、未符合 owner 身分的歷史 SUPER_ADMIN、單位／網域管理員均無權限。伺服器頁面傳遞按鈕可見性，API 與服務層另行驗證；畫面不新增角色限制提示。
+- 刪除綁定紀錄 ID、DNS 歸屬 ID、目前連線及歸屬更新時間；失效版本回傳 409。交易中鎖定帳號與歸屬資料，拒絕停用帳號，保留 DNS、單位及其他清查歷史，並將被刪紀錄快照寫入稽核。
+- 對應本次工作樹的刪除 API／服務、兩處頁面權限傳遞與共用清查對話框：`npm run build`、`npm run lint` 通過；`UNIT_TEST_DATABASE_URL=postgresql://dns_test@127.0.0.1:55439/dns_units_test npm test` 共 49 個測試檔、297 項測試通過。涵蓋 owner／非 owner UI、API 越權／CSRF／輸入、隔離 PostgreSQL 資料保留及並行刪除；`git diff --check` 通過。
+- 無 migration，沒有操作正式資料庫或 PowerDNS；隔離測試資料庫已停止。local demo 未啟動，未做瀏覽器視覺驗證，未推送或驗證 VM 部署。
+
+## 清查與歸屬同頁（2026-09-29）
+
+- 共用清查對話框直接顯示歸屬欄位、清查備註及歷史，移除兩者之間的頁籤切換，保留管理員「指派單位」入口與 owner 刪除歷史權限。
+- 「儲存歸屬資料」只更新歸屬；「儲存並記錄清查」使用 `inspect-and-metadata` 模式，在同一交易更新歸屬並新增伺服器時間／登入者的清查紀錄。沿用網域權限、一般網域限制、連線及版本比對，保留單位 ID、DNS 與既有歷史。原 `inspect` API 行為相容。
+- 對應本次同頁 UI、API 模式與服務變更：`npm run build`、`npm run lint` 通過；`UNIT_TEST_DATABASE_URL=postgresql://dns_test@127.0.0.1:55439/dns_units_test npm test` 全部 49 個測試檔、301 項測試通過；`git diff --check` 通過。測試涵蓋同頁欄位、兩種儲存動作、反解與越權拒絕、偽造清查人員／日期拒絕、隔離 PostgreSQL 合併儲存及衝突時保留資料。
+- 無 migration 或正式資料操作；local demo 維持關閉，未進行瀏覽器視覺驗證。尚未推送。
+
+## 系統管理員單位總覽（2026-09-29）
+
+- ADMIN／SUPER_ADMIN 導覽移除「單位 DNS」、「申請 DNS」與成員工作區切換；直接開啟 `/dns` 導回 `/units`，`/requests/new` 導回 `/requests`。一般使用者及委派網域管理員原有單位流程保留。
+- 系統管理員在單位管理可選取各單位，查看使用者、管理權限與目前連線中有效的 DNS 紀錄；可搜尋 DNS，但此畫面沒有新增／變更申請入口。API 沿用單位存取權限與連線範圍，DNS 讀取失敗時仍回傳使用者資料並提示清單不完整。
+- 對應本次導覽、頁面導向、單位管理 UI／服務變更：`npm run build`、`npm run lint` 通過；`UNIT_TEST_DATABASE_URL=postgresql://dns_test@127.0.0.1:55439/dns_units_test npm test` 共 49 個測試檔、305 項測試通過；`git diff --check` 通過。涵蓋 admin 導覽／直接頁面導向、使用者與 DNS 同頁、管理權限隔離、DNS 故障仍可管理使用者。
+- 無 migration、正式 DNS 或資料庫操作。隔離測試資料庫已停止；local demo 維持關閉，未進行瀏覽器視覺驗證，尚未推送。
+
+## Domain 清查頁籤與 admin 角色管理（2026-09-29）
+
+- DNS 清查移除多種檢視模式、瀏覽器檢視偏好與分組切換，固定原本清查列表並依 domain 分頁籤。搜尋與清查狀態篩選套用目前 domain；頁籤支援方向鍵、Home／End，domain 消失後回到第一個可用頁籤。
+- 系統 ADMIN 可將非 owner 帳號設為 USER／ADMIN，也可管理其他 admin 的狀態與備註；一般使用者及委派網域管理員不能修改全域角色。最高帳號的角色／狀態保持不可修改，不能從此 API 授予 SUPER_ADMIN。備註仍沿用既有可編輯行為。
+- 帳號移除按鈕改用獨立 `canRemoveUsers` 權限，不因 `canAssignAdmin` 放寬而開放移除帳號；移除及 Zone 權限委派保持 owner 限制。
+- 對應本次清查 UI、角色 API／共用授權與帳號管理 UI：修正測試型別後 `npm run build` 通過；`npm run lint` 通過；`UNIT_TEST_DATABASE_URL=postgresql://dns_test@127.0.0.1:55439/dns_units_test npm test` 共 49 個測試檔、308 項測試通過；`git diff --check` 通過。包括隔離 PostgreSQL 的升降權、已驗證 owner 保護、拒絕授予最高身分，以及清查 domain 範圍的靜態呈現測試。
+- 無 migration 或正式資料操作。隔離 PostgreSQL 已停止；local demo 未啟動，未做瀏覽器視覺驗證；尚未推送。

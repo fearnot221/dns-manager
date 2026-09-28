@@ -5,8 +5,7 @@ export type NavGroup = { id: string; label: string; items: NavItem[] };
 // Presentation only. Server routes remain responsible for authorization.
 export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAdmin = false): NavGroup[] {
   const items: NavItem[] = [
-    { href: "/dns", label: "單位 DNS", icon: "dns" },
-    { href: "/requests/new", label: "申請 DNS", icon: "apply" },
+    ...(!systemAdmin ? [{ href: "/dns", label: "單位 DNS", icon: "dns" as const }, { href: "/requests/new", label: "申請 DNS", icon: "apply" as const }] : []),
     { href: "/requests", label: admin ? "申請審核" : "申請紀錄", icon: "requests" },
   ];
   if (unitAdmin || systemAdmin) items.push({ href: "/units", label: "單位管理", icon: "units" });

@@ -7,6 +7,7 @@ vi.mock("@/lib/powerdns/settings", () => ({ connectionEnvironment: async () => (
 vi.mock("@/lib/requests/dev-store", () => ({ listDevRequests: () => [] }));
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class extends Error {} }));
 vi.mock("@/lib/audit/service", () => ({ logAuditEvent: vi.fn() }));
+import { logAuditEvent } from "@/lib/audit/service";
 import { localDocument } from "@/lib/db/local-store";
 import { powerdns } from "@/lib/powerdns/client";
 import { requireActor } from "@/lib/auth/session";
@@ -35,8 +36,8 @@ describe("DNS ownership and inspection", () => {
     expect(response.status).toBe(200);
     expect(powerdns.getZone).toHaveBeenCalledExactlyOnceWith("example.com.");
   });
-  it("rejects reverse-zone inspections even when submitted directly", async () => {
-    await expect(saveInventory(actor, { ...input, zoneName: "2.0.192.in-addr.arpa.", mode: "inspect" })).rejects.toMatchObject({ status: 400 });
+  it.each(["inspect", "inspect-and-metadata"] as const)("rejects reverse-zone inspections in %s mode", async (mode) => {
+    await expect(saveInventory(actor, { ...input, zoneName: "2.0.192.in-addr.arpa.", mode })).rejects.toMatchObject({ status: 400 });
     expect(powerdns.getZone).not.toHaveBeenCalled();
   });
   it("stores metadata without changing DNS and keeps blank edits authoritative", async () => {
@@ -61,6 +62,13 @@ describe("DNS ownership and inspection", () => {
     await saveInventory(actor, { ...input, mode: "inspect", expectedUpdatedAt: after.updatedAt });
     expect((await current()).inspections).toHaveLength(2);
   });
+  it("saves ownership and inspection together through the API and audits both", async () => {
+    const response = await PUT(new Request("http://localhost/api/inventory", { method: "PUT", headers: { Origin: "http://localhost" }, body: JSON.stringify({ ...input, mode: "inspect-and-metadata", note: "已確認" }) }));
+    expect(response.status).toBe(200);
+    expect(await current()).toMatchObject({ applicantName: input.applicantName, purpose: input.purpose, inspections: [expect.objectContaining({ note: "已確認", inspectorId: actor.id })] });
+    expect(logAuditEvent).toHaveBeenCalledWith(expect.objectContaining({ action: "INSPECT_DNS_RECORD", after: expect.objectContaining({ purpose: input.purpose, inspections: expect.any(Array) }) }));
+    await expect(saveInventory({ ...actor, globalRole: "USER" }, { ...input, mode: "inspect-and-metadata" })).rejects.toMatchObject({ status: 404 });
+  });
   it("rejects stale edits, mismatched connections, deleted records and unauthorized users", async () => {
     await saveInventory(actor, input);
     await expect(saveInventory(actor, input)).rejects.toMatchObject({ status: 409 });
@@ -68,8 +76,8 @@ describe("DNS ownership and inspection", () => {
     await expect(saveInventory({ ...actor, globalRole: "USER" }, input)).rejects.toMatchObject({ status: 404 });
     zone.rrsets = []; await expect(saveInventory(actor, input)).rejects.toMatchObject({ status: 409 });
   });
-  it("rejects client-supplied inspector/date and blocks ordinary users from inventory", async () => {
-    const response = await PUT(new Request("http://localhost/api/inventory", { method: "PUT", headers: { Origin: "http://localhost" }, body: JSON.stringify({ ...input, mode: "inspect", inspectedAt: "2000-01-01T00:00:00.000Z", inspectorEmail: "forged@example.com" }) }));
+  it.each(["inspect", "inspect-and-metadata"] as const)("rejects client-supplied inspector/date in %s mode and blocks ordinary users", async (mode) => {
+    const response = await PUT(new Request("http://localhost/api/inventory", { method: "PUT", headers: { Origin: "http://localhost" }, body: JSON.stringify({ ...input, mode, inspectedAt: "2000-01-01T00:00:00.000Z", inspectorEmail: "forged@example.com" }) }));
     expect(response.status).toBe(400); expect((await current()).inspections).toEqual([]);
     vi.mocked(requireActor).mockResolvedValue({ ...actor, globalRole: "USER" }); expect((await GET()).status).toBe(403);
   });

@@ -2,7 +2,7 @@ import { auditMutation } from "@/lib/audit/mutation";
 import { accountPresentation } from "@/lib/users/presentation";
 import { z } from "zod";
 import { requireActor } from "@/lib/auth/session";
-import { accountOwnerIdentifier, isGlobalAdmin, isOwner, mayManageUser, OWNER_IDENTIFIER } from "@/lib/auth/owner";
+import { accountOwnerIdentifier, isGlobalAdmin, mayManageUser, OWNER_IDENTIFIER } from "@/lib/auth/owner";
 import { db } from "@/lib/db/client";
 import { demoUsers } from "@/lib/users/demo";
 import { isLocalDemo } from "@/lib/db/local-store";
@@ -18,7 +18,7 @@ async function PATCHHandler(request: Request, { params }: { params: Promise<{ id
     const actor = await requireActor(); const { id } = await params;
     const input = schema.parse(await request.json());
     const noteOnly = Object.keys(input).length === 1 && typeof input.note === "string";
-    if (input.globalRole !== undefined && !isOwner(actor)) throw new ApiError("只有最高使用者可以指派或移除管理員。", 403);
+    if (!isGlobalAdmin(actor)) throw new ApiError("僅管理員可管理使用者。", 403);
     const check = (user: { email: string; name?: string | null; removedAt?: Date | null; portalIdentifier?: string | null; note?: string; disabled?: boolean; globalRole: "USER" | "ADMIN" | "SUPER_ADMIN"; zoneAdmin?: boolean }) => {
       if (user.removedAt) throw new ApiError("已移除帳號不可重新啟用或修改。", 409);
       const protectedNote = user.portalIdentifier === OWNER_IDENTIFIER && isGlobalAdmin(actor) && noteOnly;

@@ -24,3 +24,11 @@ it("allows unit managers and global administrators", async () => {
   vi.mocked(requireActor).mockResolvedValue({ id: "admin", email: "test@example.com", globalRole: "ADMIN", zoneRoles: {} });
   await expect(UnitsPage()).resolves.toBeTruthy();
 });
+
+it.each(["ADMIN", "SUPER_ADMIN"] as const)("redirects %s away from user DNS pages", async (globalRole) => {
+  vi.mocked(requireActor).mockResolvedValue({ id: "admin", email: "test@example.com", globalRole, zoneRoles: {} });
+  const { default: DnsPage } = await import("@/app/(workspace)/dns/page");
+  const { default: NewPage } = await import("@/app/(workspace)/requests/new/page");
+  await expect(DnsPage()).rejects.toThrow("redirect:/units");
+  await expect(NewPage()).rejects.toThrow("redirect:/requests");
+});

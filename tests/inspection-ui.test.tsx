@@ -25,7 +25,10 @@ it("merges list actions into a single inspection entry", () => {
 });
 it("keeps direct inspection and history without assignment controls for delegated admins", () => {
   const html = renderToStaticMarkup(createElement(OwnershipDialog, { record: records[0], inspection: true, onClose: vi.fn(), onSaved: vi.fn(async () => {}) }));
-  expect(html).toContain("DNS 清查"); expect(html).toContain("歷次清查"); expect(html).toContain("歸屬資料"); expect(html).toContain("確認清查並記錄");
+  expect(html).toContain("DNS 清查"); expect(html).toContain("歷次清查"); expect(html).toContain("歸屬資料"); expect(html).toContain("儲存並記錄清查");
+  expect(html).toContain('name="applicantName"'); expect(html).toContain('name="purpose"'); expect(html).toContain('name="note"');
+  expect(html).toContain('value="metadata"'); expect(html).toContain('value="inspect-and-metadata"');
+  expect(html).not.toContain('aria-label="清查操作"');
   expect(html).not.toContain("指派單位"); expect(html).not.toContain("回覆");
 });
 
@@ -34,5 +37,22 @@ it("restores unit assignment inside the system administrator inspection dialog",
   expect(html).toContain("指派單位"); expect(html).toContain("所屬單位");
   expect(html).not.toContain("回覆"); expect(html).not.toContain("通知");
   const reverse = renderToStaticMarkup(createElement(OwnershipDialog, { record: records[0], inspection: false, systemAdmin: true, onClose: vi.fn(), onSaved: vi.fn(async () => {}) }));
-  expect(reverse).not.toContain("指派單位");
+  expect(reverse).not.toContain("指派單位"); expect(reverse).not.toContain('name="note"'); expect(reverse).not.toContain("儲存並記錄清查"); expect(reverse).toContain("儲存歸屬資料");
+});
+
+it.each([false, true])("shows history deletion only when owner permission is %s", (canDeleteInspections) => {
+  const record = { ...records[0], ownership: { ...records[0].ownership, inspections: [{ id: "inspection", inspectedAt: "2026-09-29T00:00:00.000Z", inspectorId: "admin", inspectorName: "Admin", inspectorEmail: "admin@example.com", note: "原備註" }] } };
+  const html = renderToStaticMarkup(createElement(OwnershipDialog, { record, inspection: true, systemAdmin: true, canDeleteInspections, onClose: vi.fn(), onSaved: vi.fn(async () => {}) }));
+  expect(html.includes(">刪除</button>")).toBe(canDeleteInspections);
+  expect(html).toContain("原備註"); expect(html).toContain("歷次清查");
+  expect(html).not.toContain("最高");
+});
+
+it("uses domain tabs and the original inspection rows without view or grouping controls", () => {
+  vi.mocked(useResource).mockReturnValue({ data: { records: [...records, { ...records[0], zoneName: "other.com.", recordName: "hidden.other.com." }] }, loading: false, error: "", reload: vi.fn() } as never);
+  const html = renderToStaticMarkup(createElement(InventoryWorkbench));
+  expect(html).toContain('role="tablist"'); expect(html).toContain('aria-label="清查網域"');
+  expect(html).toContain('role="tabpanel"'); expect(html).toContain("other.com.</button>");
+  expect(html).toContain('class="inventory-row"'); expect(html).toContain("lab.example.com.");
+  expect(html).not.toContain("hidden.other.com."); expect(html).not.toContain("檢視模式"); expect(html).not.toContain("清查分組");
 });

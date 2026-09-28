@@ -1,17 +1,20 @@
 /** Opt-in: UNIT_TEST_DATABASE_URL must point at a disposable local dns_units_test DB. */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/auth/session", () => ({ AuthError: class extends Error {} }));
+vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class extends Error {} }));
 vi.mock("@/lib/db/client", async () => {
   const { PrismaClient } = await import("@prisma/client");
   return { db: new PrismaClient({ datasourceUrl: process.env.UNIT_TEST_DATABASE_URL || "postgresql://unused@127.0.0.1:1/unused" }) };
 });
 vi.mock("@/lib/powerdns/settings", () => ({ connectionEnvironment: async () => ({ PDNS_MOCK: "true" }) }));
 vi.mock("@/lib/powerdns/client", () => ({ powerdns: { getZone: vi.fn(), replaceRRSet: vi.fn() } }));
+import { requireActor } from "@/lib/auth/session";
+import { PATCH as patchUser } from "@/app/api/users/[id]/route";
 import { manageAllowlist } from "@/lib/units/allowlist";
 import { enrollAllowlistedUser } from "@/lib/units/enroll";
+import { deleteInspection } from "@/lib/inventory/inspections";
 import { assignRecordUnit } from "@/lib/inventory/assignment";
-import { describeRecords } from "@/lib/inventory/service";
+import { describeRecords, saveInventory } from "@/lib/inventory/service";
 import { memberWorkspaces } from "@/lib/units/workspace";
 import { db } from "@/lib/db/client";
 import { powerdns } from "@/lib/powerdns/client";
@@ -63,6 +66,69 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await manageAllowlist(creator, unitId, editor.studentId!);
     await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "EDITOR" });
   });
+  it("lets a system admin update another admin role while protecting the verified owner", async () => {
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    const patch = (id: string, body: unknown) => patchUser(new Request("http://localhost/api/users/" + id, { method: "PATCH", headers: { Origin: "http://localhost" }, body: JSON.stringify(body) }), { params: Promise.resolve({ id }) });
+    expect((await patch(outsider.id, { globalRole: "ADMIN" })).status).toBe(200);
+    expect((await db.user.findUniqueOrThrow({ where: { id: outsider.id } })).globalRole).toBe("ADMIN");
+    expect((await patch(outsider.id, { globalRole: "USER" })).status).toBe(200);
+    expect((await db.user.findUniqueOrThrow({ where: { id: outsider.id } })).globalRole).toBe("USER");
+    await db.user.update({ where: { id: outsider.id }, data: { globalRole: "SUPER_ADMIN", logtoName: "115502532" } });
+    await db.account.create({ data: { userId: outsider.id, type: "oauth", provider: "logto", providerAccountId: crypto.randomUUID() } });
+    for (const input of [{ globalRole: "USER" }, { disabled: true }]) expect((await patch(outsider.id, input)).status).toBe(403);
+    expect((await db.user.findUniqueOrThrow({ where: { id: outsider.id } })).globalRole).toBe("SUPER_ADMIN");
+    expect((await patch(viewer.id, { globalRole: "SUPER_ADMIN" })).status).toBe(400);
+  });
+  it("atomically saves ownership and inspection while preserving the assigned unit and existing history", async () => {
+    const source = await sourceRecord();
+    const before = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    const old = await db.dnsInspection.create({ data: { recordId: source.id, inspectorId: admin.id, inspectorName: "Admin", inspectorEmail: admin.email, note: "previous" } });
+    const input = { ...before, mode: "inspect-and-metadata" as const, expectedUpdatedAt: before.updatedAt.toISOString(), applicantName: "Updated", purpose: "updated purpose", note: "confirmed" };
+    await saveInventory(admin, input);
+    const after = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id }, include: { inspections: true } });
+    expect(after).toMatchObject({ unitId, applicantName: "Updated", purpose: "updated purpose", content: before.content });
+    expect(after.inspections).toHaveLength(2);
+    expect(after.inspections).toEqual(expect.arrayContaining([expect.objectContaining({ id: old.id }), expect.objectContaining({ note: "confirmed", inspectorId: admin.id })]));
+    await expect(saveInventory(admin, { ...input, purpose: "stale" })).rejects.toMatchObject({ status: 409 });
+    expect(await db.dnsInspection.count({ where: { recordId: source.id } })).toBe(2);
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).purpose).toBe("updated purpose");
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+  });
+  it("deletes only the selected inspection and audits its snapshot without changing DNS or ownership", async () => {
+    const source = await sourceRecord();
+    const before = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    const data = { recordId: source.id, inspectorId: admin.id, inspectorName: "Admin", inspectorEmail: admin.email, note: "original" };
+    const first = await db.dnsInspection.create({ data });
+    const second = await db.dnsInspection.create({ data });
+    const owner = { ...admin, globalRole: "SUPER_ADMIN" as const, portalIdentifier: "115502532" };
+    const input = { recordId: source.id, expectedUpdatedAt: before.updatedAt.toISOString() };
+    for (const actor of [admin, creator, viewer, { ...owner, portalIdentifier: null }, { ...outsider, zoneRoles: { [zone.name]: "ADMIN" as const } }]) await expect(deleteInspection(actor, first.id, input)).rejects.toMatchObject({ status: 403 });
+    await expect(deleteInspection(owner, first.id, { ...input, recordId: "f".repeat(64) })).rejects.toMatchObject({ status: 404 });
+    await expect(deleteInspection(owner, first.id, { ...input, expectedUpdatedAt: "2000-01-01T00:00:00.000Z" })).rejects.toMatchObject({ status: 409 });
+    await deleteInspection(owner, first.id, input);
+    const after = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id }, include: { inspections: true } });
+    expect(after).toMatchObject({ unitId: before.unitId, content: before.content, purpose: before.purpose });
+    expect(after.updatedAt.getTime()).toBeGreaterThan(before.updatedAt.getTime());
+    expect(after.inspections.map((item) => item.id)).toEqual([second.id]);
+    expect(await db.auditLog.findFirst({ where: { action: "DELETE_DNS_INSPECTION", userId: admin.id } })).toMatchObject({ oldValue: { id: first.id, note: "original" }, success: true });
+    await expect(deleteInspection(owner, first.id, input)).rejects.toMatchObject({ status: 404 });
+    await expect(deleteInspection(owner, second.id, input)).rejects.toMatchObject({ status: 409 });
+    expect(powerdns.getZone).not.toHaveBeenCalled(); expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+  });
+  it("rejects deletion by disabled owners and serializes duplicate deletions", async () => {
+    const source = await sourceRecord();
+    const record = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    const inspection = await db.dnsInspection.create({ data: { recordId: source.id, inspectorId: admin.id, inspectorName: "Admin", inspectorEmail: admin.email, note: "" } });
+    const owner = { ...admin, globalRole: "SUPER_ADMIN" as const, portalIdentifier: "115502532" };
+    const input = { recordId: source.id, expectedUpdatedAt: record.updatedAt.toISOString() };
+    await db.user.update({ where: { id: admin.id }, data: { disabled: true } });
+    await expect(deleteInspection(owner, inspection.id, input)).rejects.toMatchObject({ status: 403 });
+    expect(await db.dnsInspection.count({ where: { id: inspection.id } })).toBe(1);
+    await db.user.update({ where: { id: admin.id }, data: { disabled: false } });
+    const results = await Promise.allSettled([deleteInspection(owner, inspection.id, input), deleteInspection(owner, inspection.id, input)]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(await db.auditLog.count({ where: { action: "DELETE_DNS_INSPECTION", userId: admin.id } })).toBe(1);
+  });
   it("uses actual memberships for workspaces and restricts management data without calling DNS", async () => {
     expect((await memberWorkspaces(creator)).map((unit) => unit.id)).toEqual([unitId]);
     expect(await memberWorkspaces(admin)).toEqual([]);
@@ -72,7 +138,11 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await expect(unitDetail(editor, unitId, "manage")).rejects.toMatchObject({ status: 403 });
     expect((await unitDetail(creator, unitId, "manage")).members).toHaveLength(3);
     expect((await unitDetail(admin, unitId, "manage")).allowlist).toHaveLength(3);
-    expect(powerdns.getZone).not.toHaveBeenCalled();
+    expect(powerdns.getZone).toHaveBeenCalledWith(zone.name);
+    expect((await unitDetail(admin, unitId, "manage")).records.map((record) => record.content)).toEqual(["192.0.2.1"]);
+    vi.mocked(powerdns.getZone).mockRejectedValueOnce(new Error("offline"));
+    const unavailable = await unitDetail(admin, unitId, "manage");
+    expect(unavailable.members).toHaveLength(3); expect(unavailable.recordsError).toContain("暫時無法取得");
   });
   it("assigns a live DNS value to a unit while preserving history, neighboring records and DNS", async () => {
     const source = await sourceRecord();

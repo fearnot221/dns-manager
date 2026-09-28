@@ -21,7 +21,7 @@ export async function unitDetail(actor: Actor, unitId: string, mode: "dns" | "ma
   const members = unit.members.map((m) => ({ userId: m.userId, role: m.role, label: m.user.name || m.user.studentId || "未提供姓名", studentId: m.user.studentId, disabled: m.user.disabled }));
   const allowlist = role === "ADMIN" ? await db.unitAllowlist.findMany({ where: { unitId }, select: { studentId: true, userId: true }, orderBy: { studentId: "asc" } }) : [];
   const summary = { allowlist, unit: { id: unit.id, name: unit.name, status: unit.status, reviewNote: unit.reviewNote }, role, canReview: isGlobalAdmin(actor), canApply: unit.status === "APPROVED" && unit.members.some((m) => m.userId === actor.id && ["EDITOR", "ADMIN"].includes(m.role)), members };
-  if (mode === "manage" || unit.status !== "APPROVED") return { ...summary, records: [], recordsError: "" };
+  if (mode === "manage" && !isGlobalAdmin(actor) || unit.status !== "APPROVED") return { ...summary, records: [], recordsError: "" };
   const saved = await db.dnsRecordMetadata.findMany({ where: { unitId } });
   const scope = await connectionScope();
   const scoped = saved.filter((record) => record.id === recordId(scope, record));

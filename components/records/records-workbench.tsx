@@ -21,7 +21,7 @@ import { ResourceError } from "@/components/ui/resource-error";
 
 const emptyRecords: HashedRRSet[] = [];
 const viewStorageKey = "aegis-record-view";
-export function RecordsWorkbench({ zoneName, systemAdmin = false }: { zoneName: string; systemAdmin?: boolean }) {
+export function RecordsWorkbench({ zoneName, systemAdmin = false, canDeleteInspections = false }: { zoneName: string; systemAdmin?: boolean; canDeleteInspections?: boolean }) {
   const { data, loading, error, reload: load } = useResource<{ rrsets: HashedRRSet[]; permission: string }>(`/api/zones/${encodeURIComponent(zoneName)}/records`);
   const rrsets = data?.rrsets ?? emptyRecords;
   const permission = data?.permission ?? "";
@@ -119,7 +119,7 @@ export function RecordsWorkbench({ zoneName, systemAdmin = false }: { zoneName: 
           : view === "grid" ? <RecordGrid {...viewProps} />
           : <GroupedRecords {...viewProps} mode={view} />}
 
-      {ownership && <OwnershipDialog systemAdmin={systemAdmin} record={ownership} inspection={inspection} onClose={() => setOwnership(null)} onSaved={async () => { setOwnership(null); await load(); }} />}
+      {ownership && <OwnershipDialog canDeleteInspections={canDeleteInspections} systemAdmin={systemAdmin} record={ownership} inspection={inspection} onClose={() => setOwnership(null)} onSaved={async () => { setOwnership(null); await load(); }} />}
       {dialog && <RecordDialog zone={zoneName} dialog={dialog} onClose={() => setDialog(null)} onSaved={async () => { setDialog(null); await load(); }} />}
     </>
   );

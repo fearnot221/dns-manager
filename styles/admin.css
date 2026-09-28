@@ -65,3 +65,6 @@
 .audit-detail dt { color: var(--muted); font-size: .75rem; }
 .audit-detail dd { margin: 0 0 8px; overflow-wrap: anywhere; }
 .audit-detail pre { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--surface-soft); border: 1px solid var(--border); border-radius: 6px; font-size: .75rem; }
+
+.inventory-domain-tabs { overflow-x: auto; flex-wrap: nowrap; margin-bottom: 16px; }
+.inventory-domain-tabs button { flex: 0 0 auto; white-space: nowrap; }
