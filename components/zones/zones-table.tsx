@@ -58,16 +58,16 @@ export function ZonesTable() {
       {!loading && !error && <p className="record-results" role="status">{selected.description} · 顯示 {rows.length} / {counts[category]} 個</p>}
       {error ? <ResourceError message={error} retry={refresh} /> : <ScrollRegion className="table-wrap" label="DNS 網域，可用方向鍵水平捲動">
         <table>
-          <thead><tr><th scope="col">網域名稱</th><th scope="col">模式</th><th scope="col">序號</th><th scope="col">DNSSEC</th><th scope="col">紀錄數</th><th scope="col">權限</th><th scope="col"><span className="sr-only">操作</span></th></tr></thead>
+          <thead><tr><th scope="col">網域名稱</th><th scope="col">模式</th><th scope="col" className="numeric">序號</th><th scope="col">DNSSEC</th><th scope="col" className="numeric">紀錄數</th><th scope="col">權限</th><th scope="col"><span className="sr-only">操作</span></th></tr></thead>
           <tbody>
             {loading ? <LoadingRows columns={7} /> : rows.map((zone) => {
               const path = zone.name.replace(/\.$/, "");
               return <tr key={zone.id}>
                 <td><Link className="zone-link" href={`/zones/${encodeURIComponent(path)}`}><span className="zone-icon"><Globe2 size={15} /></span><strong>{path}</strong></Link></td>
                 <td>{zone.kind}</td>
-                <td className="mono">{zone.serial}</td>
+                <td className="mono numeric">{zone.serial}</td>
                 <td><Badge tone={zone.dnssec ? "green" : "neutral"}>{zone.dnssec ? "已啟用" : "未啟用"}</Badge></td>
-                <td>{zone.recordCount}</td>
+                <td className="numeric">{zone.recordCount}</td>
                 <td><Badge tone="blue">{({ SUPER_ADMIN: "系統管理員", ADMIN: "網域管理員", EDITOR: "編輯者", VIEWER: "唯讀" } as Record<string, string>)[zone.permission] || "—"}</Badge></td>
                 <td><Link className="icon-button" href={`/zones/${encodeURIComponent(path)}`} aria-label={`開啟 ${zone.name}`}><ChevronRight size={16} /></Link></td>
               </tr>;

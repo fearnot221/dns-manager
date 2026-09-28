@@ -10,7 +10,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar, *::-webkit-scrollbar {
   height: 0;
   display: none;
 }
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-geist), "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; font-size: 1rem; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-geist), "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; font-size: .9375rem; line-height: 1.6; -webkit-font-smoothing: antialiased; }
 button, input, select, textarea { font: inherit; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
@@ -21,19 +21,30 @@ h1, h2, h3, p { margin: 0; }
 h1, h2, h3, h4 { text-wrap: balance; }
 p, .description, .field-help { text-wrap: pretty; }
 h1 { font-size: 1.5rem; letter-spacing: -.02em; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
-h2 { font-size: 1.125rem; font-weight: 620; line-height: 1.4; }
+h2 { font-size: var(--text-section); font-weight: 600; line-height: 1.4; }
 h3 { font-size: 1rem; font-weight: 600; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.mono, code { font-family: var(--font-mono), monospace; font-size: .875rem; }
+.mono, code { font-family: var(--font-mono), monospace; font-size: var(--text-body); }
 .muted { color: var(--muted); }
 .success { color: var(--green); }
 .danger { color: var(--red); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-.skip-link { position: fixed; top: 12px; left: 12px; z-index: 60; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 16px; transform: translateY(-150%); }
+.skip-link { position: fixed; top: 12px; left: 12px; z-index: 60; background: var(--panel); border: 1px solid var(--accent); border-radius: var(--radius-control); padding: var(--space-3) var(--space-4); transform: translateY(-150%); }
 .skip-link:focus { transform: none; }
 .spin { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* Shared control feedback; do not rely on color alone for focus or errors. */
+strong, b { font-weight: 600; }
+input, textarea { accent-color: var(--accent); }
+:is(input, textarea)[aria-invalid="true"], .custom-select-trigger[aria-invalid="true"] { border-color: var(--red); }
+:is(input, textarea):read-only { color: var(--muted); }
+:is(button, a) { touch-action: manipulation; }
+@media (forced-colors: active) {
+  :focus-visible { outline-color: Highlight; }
+  :is(button, a)[aria-selected="true"], .nav a.active { outline: 2px solid Highlight; outline-offset: -2px; }
 }

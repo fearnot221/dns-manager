@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, ShieldAlert } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { SubmitButton } from "@/components/ui";
 import type { RecordType } from "@/lib/dns/types";
@@ -17,6 +17,9 @@ export function RecordDialog({ zone, dialog, onClose, onSaved }: { zone: string;
   const rr = dialog.rrset;
   const [type, setType] = useState<RecordType>(rr?.type ?? "A");
   const [error, setError] = useState("");
+  const errorId = useId();
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
 
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -48,7 +51,7 @@ export function RecordDialog({ zone, dialog, onClose, onSaved }: { zone: string;
   return <Dialog title={dialog.mode === "add" ? "新增 DNS 紀錄" : dialog.mode === "edit" ? `編輯 ${rr?.type} 紀錄組` : "刪除此解析值？"}
     description={dialog.mode === "delete" ? "刪除後會立即影響 DNS 解析，且無法復原。" : dialog.mode === "edit" ? "同名稱、同類型的解析內容請每行填一筆。" : "填寫名稱與解析內容，儲存後立即生效。"}
     pending={pending} onClose={onClose}>
-      <form onSubmit={submit}><fieldset className="dialog-fields" disabled={pending}><div className="modal-body">
+      <form onSubmit={submit} aria-describedby={error ? errorId : undefined}><fieldset className="dialog-fields" disabled={pending}><div className="modal-body">
         {protectedRecord && <div className="warning"><ShieldAlert size={18} /><div><strong>受保護的紀錄</strong><p>修改此類紀錄需要管理員權限。</p></div></div>}
         {dialog.mode === "delete" ? <div className="delete-summary">
           <div><span>類型</span><b>{rr?.type}</b></div><div><span>名稱</span><b>{rr?.name}</b></div><div><span>解析內容</span><code>{rr?.records[0].content}</code></div>
@@ -61,8 +64,8 @@ export function RecordDialog({ zone, dialog, onClose, onSaved }: { zone: string;
           <DynamicFields type={type} />
           <label>TTL<Select name="ttl" aria-label="TTL" defaultValue="300" options={[{ value: "60", label: "1 分鐘" }, { value: "300", label: "5 分鐘" }, { value: "600", label: "10 分鐘" }, { value: "1800", label: "30 分鐘" }, { value: "3600", label: "1 小時" }]} /></label>
         </>}
-        {error && <div className="form-error" role="alert"><AlertTriangle size={15} />{error}</div>}
-      </div><div className="modal-foot"><button className="button" type="button" disabled={pending} onClick={onClose}>取消</button><SubmitButton pending={pending} label={dialog.mode === "delete" ? "確認刪除" : dialog.mode === "edit" ? "儲存紀錄組" : "新增紀錄"} /></div></fieldset></form>
+        {error && <div id={errorId} ref={errorRef} tabIndex={-1} className="form-error" role="alert"><AlertTriangle size={15} aria-hidden="true" />{error}</div>}
+      </div><div className="modal-foot"><button className="button" type="button" disabled={pending} onClick={onClose}>取消</button><SubmitButton pending={pending} tone={dialog.mode === "delete" ? "danger" : "primary"} label={dialog.mode === "delete" ? "確認刪除" : dialog.mode === "edit" ? "儲存紀錄組" : "新增紀錄"} /></div></fieldset></form>
   </Dialog>;
 }
 

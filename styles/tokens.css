@@ -1,34 +1,63 @@
 :root {
   color-scheme: light;
-  --bg: #f4f6f5;
+  --bg: #f7f8fa;
   --panel: #ffffff;
-  --surface-soft: #f0f4f3;
-  --ink: #203334;
-  --muted: #596d70;
-  --border: #dce5e2;
-  --border-strong: #b9cbc6;
+  --surface-soft: #f1f3f5;
+  --ink: #20272d;
+  --muted: #606b75;
+  --border: #e1e5e9;
+  --border-strong: #87939f;
   --accent: #17665d;
-  --accent-soft: #e7f3ee;
-  --green: #286749;
-  --blue: #235eb0;
-  --red: #b53838;
-  --shadow: 0 2px 4px #20333403, 0 8px 24px #20333404;
-  --sidebar-width: 264px;
-  --header-height: 64px;
+  --accent-soft: #edf4f1;
+  --on-accent: #ffffff;
+  --green: #326c50;
+  --blue: #32679b;
+  --red: #aa3b46;
+  --amber: #865812;
+  --shadow: none;
+  --shadow-overlay: 0 12px 36px #1018201f;
+  --backdrop: #10182066;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --radius-sm: 6px;
+  --radius-control: 8px;
+  --radius-panel: 10px;
+  --radius-dialog: 12px;
+  --text-caption: .8125rem;
+  --text-body: .875rem;
+  --text-section: 1.125rem;
+  --control-height: 40px;
+  --control-padding: 8px 12px;
+  --control-font: .875rem;
+  --sidebar-width: 248px;
+  --header-height: 60px;
 }
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #111d20;
-  --panel: #18272b;
-  --surface-soft: #203338;
-  --ink: #e6efec;
-  --muted: #a3b9b8;
-  --border: #30474a;
-  --border-strong: #526f71;
+  --bg: #15191e;
+  --panel: #1c2229;
+  --surface-soft: #252d36;
+  --ink: #e7ecf1;
+  --muted: #a4afbb;
+  --border: #343d48;
+  --border-strong: #667586;
   --accent: #91d4be;
-  --accent-soft: #254039;
-  --green: #84c7a3;
-  --blue: #93bbdf;
-  --red: #f39a9a;
-  --shadow: none;
+  --accent-soft: #263b35;
+  --on-accent: #17241f;
+  --green: #8bc6a4;
+  --blue: #99bfe2;
+  --red: #ef9ca5;
+  --amber: #e0bc78;
+  --shadow-overlay: 0 12px 36px #0005;
+  --backdrop: #080c1480;
+}
+@media (max-width: 600px), (pointer: coarse) {
+  :root { --control-height: 44px; --control-font: 1rem; }
 }

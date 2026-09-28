@@ -59,5 +59,5 @@ export function DnsRequestsWorkbench({ admin, actorId }: { admin: boolean; actor
 }
 
 function RequestSkeleton() {
-  return <div className="request-list">{[0, 1, 2].map((item) => <div className="card request-card request-skeleton" key={item}><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div>)}</div>;
+  return <div className="request-list">{[0, 1, 2].map((item) => <div className="request-skeleton" key={item}><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div>)}</div>;
 }

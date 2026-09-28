@@ -18,7 +18,7 @@ function contrast(a: string, b: string) {
 
 describe("core UI text contrast", () => {
   const css = readFileSync(new URL("../styles/tokens.css", import.meta.url), "utf8");
-  for (const [index, block] of [...css.matchAll(/\{([^}]+)\}/g)].entries()) {
+  for (const [index, block] of [...css.matchAll(/(?:^:root|\[data-theme="dark"\])\s*\{([^}]+)\}/gm)].entries()) {
     const palette = tokens(block[1]);
     it(`keeps primary and secondary text readable in ${index ? "dark" : "light"} mode`, () => {
       for (const foreground of ["ink", "muted"]) {
@@ -27,13 +27,14 @@ describe("core UI text contrast", () => {
         }
       }
       expect(contrast(palette.accent, palette["accent-soft"])).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(index ? "#122139" : "#ffffff", palette.accent)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(palette["on-accent"], palette.accent)).toBeGreaterThanOrEqual(4.5);
     });
   }
-  it("keeps dark sidebar labels and selected links readable", () => {
-    const workspace = readFileSync(new URL("../styles/workspace.css", import.meta.url), "utf8");
-    const palette = tokens(workspace.match(/\.sidebar \{ --panel:[^}]+\}/)![0]);
-    expect(contrast(palette.muted, palette.panel)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(palette.accent, palette["accent-soft"])).toBeGreaterThanOrEqual(4.5);
+  it("keeps controls and semantic status text readable in both themes", () => {
+    for (const match of css.matchAll(/(?:^:root|\[data-theme="dark"\])\s*\{([^}]+)\}/gm)) {
+      const palette = tokens(match[1]);
+      expect(contrast(palette["border-strong"], palette.panel)).toBeGreaterThanOrEqual(3);
+      for (const status of ["green", "blue", "red", "amber"]) expect(contrast(palette[status], palette.panel)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

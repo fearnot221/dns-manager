@@ -5,7 +5,7 @@ import { Toaster } from "sonner";
 
 function Notifications() {
   const { resolvedTheme } = useTheme();
-  return <Toaster richColors position="bottom-right" theme={resolvedTheme === "dark" ? "dark" : "light"} />;
+  return <Toaster position="bottom-right" theme={resolvedTheme === "dark" ? "dark" : "light"} />;
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
