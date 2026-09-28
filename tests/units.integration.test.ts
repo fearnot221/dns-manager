@@ -22,7 +22,7 @@ import { describeRecords, saveInventory } from "@/lib/inventory/service";
 import { memberWorkspaces } from "@/lib/units/workspace";
 import { db } from "@/lib/db/client";
 import { powerdns } from "@/lib/powerdns/client";
-import { createUnit, listUnits, manageUnit, unitAccess, assignUnitManager } from "@/lib/units/service";
+import { createUnit, listUnits, manageUnit, unitAccess, assignUnitManager, editUnit } from "@/lib/units/service";
 import { inspectUnitRecord, requestUnitChange, unitDetail } from "@/lib/units/records";
 import { reviewUnitRequest } from "@/lib/units/review";
 import { saveApplication } from "@/lib/requests/save-application";
@@ -70,6 +70,46 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await manageAllowlist(creator, unitId, viewer.studentId!);
     await manageAllowlist(creator, unitId, editor.studentId!);
     await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "EDITOR" });
+  });
+  it("renames units and current ownership while preserving requests and enforcing unique names", async () => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    const original = await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } });
+    await editUnit(admin, unitId, { action: "rename", name: " Renamed-" + unitId + " " });
+    expect((await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } })).name).toBe("Renamed-" + unitId);
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).applicantUnit).toBe("Renamed-" + unitId);
+    expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).applicantUnit).toBe(original.applicantUnit);
+    const other = await createUnit(admin, "Other-" + unitId, creator.studentId!);
+    await expect(editUnit(admin, unitId, { action: "rename", name: other.unit.name })).rejects.toMatchObject({ status: 409 });
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+  });
+  it("deletes an unused unit with memberships and allowlist, retaining users and audit", async () => {
+    await editUnit(admin, unitId, { action: "delete" });
+    expect(await db.dnsUnit.findUnique({ where: { id: unitId } })).toBeNull();
+    expect(await db.unitMember.count({ where: { unitId } })).toBe(0);
+    expect(await db.unitAllowlist.count({ where: { unitId } })).toBe(0);
+    expect(await db.user.findUnique({ where: { id: creator.id } })).not.toBeNull();
+    expect(await db.auditLog.count({ where: { action: "DELETE_DNS_UNIT", userId: admin.id } })).toBe(1);
+    await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toMatchObject({ status: 404 });
+    expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
+  });
+  it("blocks deletion with DNS or historical requests without removing members", async () => {
+    const source = await sourceRecord();
+    await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toMatchObject({ status: 409 });
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    await reviewUnitRequest(admin, pending.id, "REJECT");
+    await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId: null } });
+    await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toMatchObject({ status: 409 });
+    expect(await db.unitMember.count({ where: { unitId } })).toBe(3);
+  });
+  it("rejects unit managers, zone admins, disabled and revoked system admins for unit edits", async () => {
+    for (const actor of [creator, { ...outsider, zoneRoles: { "example.com.": "ADMIN" as const } }]) {
+      for (const input of [{ action: "delete" as const }, { action: "rename" as const, name: "Forbidden" }]) await expect(editUnit(actor, unitId, input)).rejects.toMatchObject({ status: 403 });
+    }
+    await db.user.update({ where: { id: admin.id }, data: { disabled: true } });
+    await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toMatchObject({ status: 403 });
+    await db.user.update({ where: { id: admin.id }, data: { disabled: false, globalRole: "USER" } });
+    await expect(editUnit(admin, unitId, { action: "rename", name: "Forbidden" })).rejects.toMatchObject({ status: 403 });
   });
   it("lets a system admin update another admin role while protecting the verified owner", async () => {
     vi.mocked(requireActor).mockResolvedValue(admin);

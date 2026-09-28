@@ -230,3 +230,11 @@
 - 用途與備註預設兩行，降低最小高度並保留垂直拖曳縮放。
 - 本次工作樹驗證：`npm run build`（含 TypeScript）、`npm run lint`、`git diff --check` 通過；`UNIT_TEST_DATABASE_URL=… npm test` 共 56 個檔案、386 項測試通過。新增 migration `20260929170000_dns_application_notes` 已用 `DATABASE_URL=… npx prisma migrate deploy` 在隔離 PostgreSQL 驗證，未操作正式資料庫。
 - 未啟動 local demo，未進行瀏覽器視覺驗證；尚未推送。部署須套用新增 migration。
+
+### 2026-09-29 管理員修改與刪除單位
+
+- 全域 ADMIN／SUPER_ADMIN 可於單位管理修改名稱或確認刪除；單位管理員與網域管理員不具此權限。API 驗證來源、登入及輸入；交易鎖定使用者後重新確認目前角色與啟用狀態，再鎖定單位。
+- 改名同步更新該單位目前 DNS 歸屬資料的單位名称及版本；歷史申請保留原名稱。重複名稱回傳 409。
+- 刪除移除單位、成員資格及加入名單，保留使用者帳號及稽核紀錄。若仍有 DNS 歸屬、任何申請紀錄或舊清查任務關聯，回傳 409，不刪除關聯資料或修改 PowerDNS。未啟用單位亦可使用改名／刪除操作。
+- 本次工作樹驗證：`npm run build`（含 TypeScript）、`npm run lint`、`git diff --check` 通過；隔離 PostgreSQL 的 `UNIT_TEST_DATABASE_URL=… npm test` 共 56 個測試檔、391 項測試通過，包含角色撤銷、停用帳號、重名、資料關聯保護及成員清理。本次不需 migration。
+- 未啟動 local demo，未做瀏覽器視覺驗證、正式環境操作或推送。

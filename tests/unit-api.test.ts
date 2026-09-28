@@ -3,13 +3,13 @@ vi.mock("@/lib/units/allowlist", () => ({ manageAllowlist: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class AuthError extends Error {} }));
 vi.mock("@/lib/audit/service", () => ({ logAuditEvent: vi.fn(async () => undefined) }));
-vi.mock("@/lib/units/service", () => ({ createUnit: vi.fn(), listUnits: vi.fn(), manageUnit: vi.fn(), assignUnitManager: vi.fn() }));
+vi.mock("@/lib/units/service", () => ({ createUnit: vi.fn(), listUnits: vi.fn(), manageUnit: vi.fn(), assignUnitManager: vi.fn(), editUnit: vi.fn() }));
 vi.mock("@/lib/units/records", () => ({ unitDetail: vi.fn(), requestUnitChange: vi.fn(), inspectUnitRecord: vi.fn() }));
 vi.mock("@/lib/requests/dev-store", () => ({ isDevRequestStore: () => false }));
 vi.mock("@/lib/db/client", () => ({ db: { dnsRecordRequest: { findMany: vi.fn() } } }));
 import { requireActor, AuthError } from "@/lib/auth/session";
 import { manageAllowlist } from "@/lib/units/allowlist";
-import { createUnit, listUnits, manageUnit, assignUnitManager } from "@/lib/units/service";
+import { createUnit, listUnits, manageUnit, assignUnitManager, editUnit } from "@/lib/units/service";
 import { inspectUnitRecord, requestUnitChange } from "@/lib/units/records";
 import { GET, POST } from "@/app/api/units/route";
 import { PATCH } from "@/app/api/units/[id]/route";
@@ -134,4 +134,17 @@ describe("unit API boundaries", () => {
     expect(manageUnit).not.toHaveBeenCalled(); expect(assignUnitManager).not.toHaveBeenCalled();
   });
 
+});
+
+it("restricts unit rename and deletion to system admins and validates input", async () => {
+  for (const body of [{ action: "rename", name: "Lab" }, { action: "delete" }]) expect((await PATCH(req(body), ctx)).status).toBe(403);
+  expect(editUnit).not.toHaveBeenCalled();
+  vi.mocked(requireActor).mockResolvedValue({ id: "admin", email: "admin@example.com", globalRole: "ADMIN", zoneRoles: {} });
+  vi.mocked(editUnit).mockResolvedValue({ saved: true });
+  for (const body of [{ action: "rename", name: " " }, { action: "rename", name: "x".repeat(101) }, { action: "delete", force: true }]) expect((await PATCH(req(body), ctx)).status).toBe(400);
+  expect((await PATCH(req({ action: "delete" }, "https://evil.invalid"), ctx)).status).toBe(403);
+  expect(editUnit).not.toHaveBeenCalled();
+  expect((await PATCH(req({ action: "rename", name: " Lab " }), ctx)).status).toBe(200);
+  expect(editUnit).toHaveBeenLastCalledWith(expect.objectContaining({ id: "admin" }), "unit-1", { action: "rename", name: "Lab" });
+  expect((await PATCH(req({ action: "delete" }), ctx)).status).toBe(200);
 });

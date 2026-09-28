@@ -106,3 +106,34 @@ export async function manageUnit(actor: Actor, id: string, input: { action: "mem
     return { saved: true };
   });
 }
+
+export async function editUnit(actor: Actor, id: string, input: { action: "rename"; name: string } | { action: "delete" }) {
+  if (!isGlobalAdmin(actor)) throw new ApiError("只有系統管理員可以修改或刪除單位。", 403);
+  requireUnitDatabase();
+  if (input.action === "rename" && (!input.name.trim() || input.name.trim().length > 100)) throw new ApiError("單位名稱須為 1–100 字。", 400);
+  try {
+    return await db.$transaction(async (tx) => {
+      await lockActiveUser(tx, actor.id);
+      const current = await tx.user.findUniqueOrThrow({ where: { id: actor.id }, select: { globalRole: true } });
+      if (!["ADMIN", "SUPER_ADMIN"].includes(current.globalRole)) throw new ApiError("只有系統管理員可以修改或刪除單位。", 403);
+      await lockUnit(tx, id);
+      const before = await tx.dnsUnit.findUniqueOrThrow({ where: { id }, select: { id: true, name: true } });
+      if (input.action === "rename") {
+        const unit = await tx.dnsUnit.update({ where: { id }, data: { name: input.name.trim() }, select: { id: true, name: true } });
+        await tx.dnsRecordMetadata.updateMany({ where: { unitId: id }, data: { applicantUnit: unit.name, updatedBy: actor.email } });
+        await unitAudit(tx, actor, "RENAME_DNS_UNIT", before, unit);
+        return { saved: true };
+      }
+      const linked = await tx.dnsUnit.findUniqueOrThrow({ where: { id }, select: { _count: { select: { records: true, requests: true, inspectionTasks: true, members: true, allowlist: true } } } });
+      const counts = linked._count;
+      if (counts.records || counts.requests || counts.inspectionTasks) throw new ApiError("此單位仍有 DNS、申請紀錄或清查任務關聯，無法刪除。", 409);
+      await tx.dnsUnit.delete({ where: { id } });
+      await unitAudit(tx, actor, "DELETE_DNS_UNIT", { ...before, members: counts.members, allowlist: counts.allowlist }, null);
+      return { saved: true };
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new ApiError("此單位名稱已存在，請使用不同名稱。", 409);
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") throw new ApiError("此單位仍有資料關聯，無法刪除。", 409);
+    throw error;
+  }
+}
