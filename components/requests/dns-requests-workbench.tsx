@@ -18,7 +18,7 @@ const emptyRequests: DnsRequest[] = [];
 
 export function DnsRequestsWorkbench({ admin, actorId }: { admin: boolean; actorId: string }) {
   const workspace = useUnitWorkspace();
-  const canApply = workspace.active?.status === "APPROVED" && workspace.active.role !== "VIEWER";
+  const canApply = workspace.active?.status === "APPROVED";
   const { data, loading, error, reload: load } = useResource<{ requests: DnsRequest[] }>("/api/dns-requests");
   const [scope, setScope] = useState<RequestScope>("ALL");
   const available = useMemo(() => (data?.requests ?? emptyRequests).filter((item) => admin || !!workspace.active && item.unitId === workspace.active.id), [data, admin, workspace.active]);

@@ -15,7 +15,7 @@ export async function enrollAllowlistedUser(userId: string) {
       // Revocation and enrollment serialize on the same unit lock.
       const current = await tx.unitAllowlist.findUnique({ where: { unitId_studentId: { unitId: entry.unitId, studentId: user.studentId } }, include: { unit: { select: { status: true } } } });
       if (!current || current.userId || current.unit.status !== "APPROVED") continue;
-      await tx.unitMember.upsert({ where: { unitId_userId: { unitId: entry.unitId, userId } }, create: { unitId: entry.unitId, userId, role: "VIEWER" }, update: {} });
+      await tx.unitMember.upsert({ where: { unitId_userId: { unitId: entry.unitId, userId } }, create: { unitId: entry.unitId, userId, role: "EDITOR" }, update: {} });
       await tx.unitAllowlist.update({ where: { unitId_studentId: { unitId: entry.unitId, studentId: user.studentId } }, data: { userId } });
       await tx.auditLog.create({ data: { userId, userEmail: "", zone: "", action: "ENROLL_UNIT_ALLOWLIST", success: true, newValue: { unitId: entry.unitId, studentId: user.studentId } } });
     }

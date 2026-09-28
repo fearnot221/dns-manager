@@ -1,4 +1,5 @@
 "use client";
+import type { FormDrafts } from "@/lib/client/form-draft";
 import { PersonName } from "@/components/ui/person-name";
 import { useId, useMemo, useRef, useState } from "react";
 import { Plus, RefreshCw, Search, X } from "lucide-react";
@@ -13,6 +14,7 @@ import type { DialogState, HashedRRSet } from "@/components/records/model";
 import { Select } from "@/components/ui/select";
 
 export function InventoryWorkbench({ systemAdmin = false, canDeleteInspections = false, zoneName, onRecordsChanged }: { systemAdmin?: boolean; canDeleteInspections?: boolean; zoneName?: string; onRecordsChanged?: () => Promise<void> }) {
+  const [inspectionDrafts] = useState<FormDrafts>(() => new Map());
   const [domain, setDomain] = useState("");
   const tabsId = useId();
   const { data, loading, error, reload } = useResource<{ records?: InventoryRecord[]; rrsets?: HashedRRSet[]; permission?: string }>(zoneName ? `/api/zones/${encodeURIComponent(zoneName)}/records` : "/api/inventory");
@@ -50,6 +52,6 @@ export function InventoryWorkbench({ systemAdmin = false, canDeleteInspections =
     {error ? <ResourceError message={error} retry={reload} /> : loading ? <div className="card inventory-loading" role="status" aria-label="正在載入 DNS 清查紀錄"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div> : !groups.length ? <EmptyState title={records.length ? "沒有符合條件的 DNS 紀錄" : zoneName ? "這個網域尚無 DNS 紀錄" : "目前沒有可清查的 DNS 紀錄"} description={records.length ? "可清除搜尋或切換顯示條件。" : zoneName ? "可透過上方新增紀錄建立 DNS。" : "確認可管理的網域已有 DNS 紀錄後，再重新整理。"} action={!!records.length && <button type="button" className="button" onClick={() => { clearSearch(); setStatus("all"); setRecordType("ALL"); }}>顯示全部</button>} /> : groups.map(([key, records]) => <section className="card inventory-group" key={key}><h2>{key}<span>{records.length} 筆</span></h2>{records.map((record) => <article className={zoneName ? "inventory-row inventory-row-managed" : "inventory-row"} key={record.ownership.id}><div><strong>{record.recordName}</strong><code>{record.recordType} · {record.content} · TTL {record.ttl}s</code><span>{record.ownership.applicantName || "未填申請人"} · {record.ownership.applicantUnit || "未填單位"}</span><p>{record.ownership.purpose || "未填用途"}</p></div><div className="inspection-last">{record.ownership.inspections[0] ? <><strong>{new Date(record.ownership.inspections[0].inspectedAt).toLocaleDateString("zh-TW")}</strong><PersonName name={record.ownership.inspections[0].inspectorName} email={record.ownership.inspections[0].inspectorEmail} studentId={record.ownership.inspections[0].inspectorStudentId} /></> : <span>尚未清查</span>}{record.disabled && <span>DNS 已停用</span>}</div><div className="page-actions"><button className="button" aria-label={`清查 ${record.recordName} ${record.content}`} onClick={() => setDialog(record)}>清查</button>{recordActions(record)}</div></article>)}</section>)}
     </div>
     {mutation && zoneName && <RecordDialog zone={zoneName} dialog={mutation} onClose={() => setMutation(null)} onSaved={async () => { setMutation(null); await refreshRecords(); }} />}
-    {dialog && <OwnershipDialog canDeleteInspections={canDeleteInspections} systemAdmin={systemAdmin} record={dialog} inspection onClose={() => setDialog(null)} onSaved={async () => { setDialog(null); await reload(); }} />}
+    {dialog && <OwnershipDialog drafts={inspectionDrafts} canDeleteInspections={canDeleteInspections} systemAdmin={systemAdmin} record={dialog} inspection onClose={() => setDialog(null)} onSaved={async () => { setDialog(null); await reload(); }} />}
   </>;
 }

@@ -1,252 +1,174 @@
 # NCUEECESNMG DNS Manager
 
-A production-oriented PowerDNS Authoritative management platform built with Next.js, TypeScript, PostgreSQL, Prisma, Auth.js, Zod, and Tailwind CSS. It keeps the PowerDNS API key entirely server-side.
+以單位為核心的 PowerDNS Authoritative 管理系統。使用 Next.js 16 App Router、React 19、TypeScript、Auth.js、Prisma 6 與 PostgreSQL；介面使用共用 CSS tokens 與 Tailwind CSS 4。PowerDNS 憑證只由伺服器環境讀取，不傳送至瀏覽器。
 
-## Architecture
+本文件描述目前 repository 的程式與設定，包括隨本版本交付的 migration；不代表 GitHub main 已推送或正式 VM 已完成部署。
 
-### Portal 帳號呈現與最高權限
+## 文件導覽
 
-測試期間保留帳密與 Portal 登入；`AUTH_PASSWORD_LOGIN_ENABLED=true`（預設）允許已有密碼的測試帳號登入，測試完成可設為 `false` 關閉。local demo 仍保留測試登入。請於 Portal 應用設定授權 `identifier student-id email`。使用者管理以電子郵件為主，顯示名稱採 Portal identifier（帳密使用者採登入帳號），不使用暱稱或學號取代帳號。Portal 信箱另存 User.portalEmail，僅供顯示、不參與帳號連結或權限判斷；未授權時標示未提供，既有使用者重新登入後更新。管理頁可編輯最多 1000 字備註，備註不影響權限。
+| 文件 | 用途 |
+| --- | --- |
+| [介面與權限](docs/access-matrix.md) | 系統／網域／單位角色、申請、清查與復原邊界 |
+| [目前介面流程](docs/unit-ui-review.md) | 導覽、表單、草稿與操作行為 |
+| [整合狀態](docs/pending-integrations.md) | 已實作、未串接及正式驗收範圍 |
+| [Ubuntu VM 快速安裝](deploy/QUICKSTART.md) | 正式拓撲：獨立 Caddy + Ubuntu VM |
+| [部署與維運](deploy/README.md) | 手動部署、webhook、備份及替代 Nginx 拓撲 |
+| [Logto 登入](deploy/LOGTO.md) | SSO 設定、身份來源與維護工具 |
+| [歷史實作紀錄](docs/history/access-changes.md) | 過去變更與當時的驗證結果，不作現行操作指南 |
 
-登入已改接 Logto，前端仍顯示 NCU Portal。應用只要求 Logto 的 `UserScope.Identities`；OIDC 必要的 `openid` 仍保留。最高權限以 NCU connector identity 的 `details.identifier=115502532` 驗證，姓名由同一 identity 的 `details.rawData.username` 等顯示欄位同步，姓名下方顯示其 identifier；sub、name、備註和 email 不授權。詳見 [Logto 切換指南](deploy/LOGTO.md)。
-
-部署須先執行 Prisma migration（Docker 部署的 migrate 服務會執行），新增 User.studentId、User.note 與 User.portalEmail。既有 Portal 帳號下次登入會更新學號，無需刪除或重建帳號；歷史稽核原始資料不會被改寫。
-
-### 網域申請開放設定
-
-管理員在 Zone 清單的「使用者申請」欄位逐一開放或暫停申請。**尚未設定的網域預設暫停申請**，升級後請先開放需要提供申請的網域。申請表只顯示開放中的 PowerDNS 網域；送出時後端再次檢查，不接受未開放網域。暫停不會修改 DNS，也不影響既有紀錄或待審核申請。
-
-設定保存在既有 SystemSetting（本機 demo 使用本機檔案），依 PowerDNS 連線與 server ID 區分，不需資料庫 migration。管理員只能調整自己可管理的網域；變更包含操作者、時間、前後狀態的稽核紀錄，並防止舊頁面覆蓋較新的設定。網站沒有新增網域入口，新增網域 API 也已停用。
-
-The frontend is organized around a persistent authenticated workspace:
-
-- `app/(workspace)/layout.tsx`: shared session-aware shell; individual pages still check permissions.
-- `components/providers.tsx`: one theme provider and notification surface for login and workspace.
-- `components/records/`: workbench controls, table/list/group views, IP board, record dialog, and shared view types.
-- `components/requests/`: multi-record application form, request filters/cards, review dialog, and shared types.
-- `components/admin/`: inventory, user management, and PowerDNS connection settings.
-- `lib/inventory/`: per-record ownership and inspection history, scoped to the active PowerDNS connection.
-- `components/ui/dialog.tsx`: native modal with focus trapping, Escape, focus restoration, and pending-state protection.
-- `lib/client/`: typed API requests and cancellable resource loading with visible retry states.
-- `styles/`: design tokens, base rules, workspace, shared components, records, requests, and authentication. `app/globals.css` only imports these layers.
-
-URLs include `/login`, `/requests`, `/requests/new`, `/zones`, `/zones/[zone]`, `/inventory`, `/admin/users`, and `/admin/powerdns`. `/dashboard` remains a compatibility redirect. There are no new runtime dependencies.
+## 架構
 
 ```text
-Browser ──HTTPS──> Next.js UI + protected route handlers ──private network──> PowerDNS REST API
-                         │
-                         └──> PostgreSQL (users, permissions, audit log)
+Browser ──HTTPS──> 外部 Caddy ──私有網路──> VM gateway :8080
+                                           ├──> Next.js :3000（loopback）
+                                           │      ├──> PostgreSQL（內部 Docker network）
+                                           │      ├──> PowerDNS REST API（受限私有路徑）
+                                           │      └──> Logto OIDC
+                                           └──> /hooks/github → webhook :9000（loopback）
 ```
 
-Every API operation authenticates the caller, resolves effective direct/group permissions, validates and normalizes input, checks record policy, performs the PowerDNS change, and appends an audit event. Unauthorized zone lookups use the same not-found response as absent zones.
+- `app/(workspace)/`：共用登入殼層與各功能頁面；頁面及 API 各自檢查授權。
+- `app/api/`：驗證輸入、身份與來源的 route handlers。
+- `components/{admin,records,requests,units}/`：DNS 管理、申請審核、單位管理與清查表單。
+- `lib/{auth,units,requests,inventory,dns-changes,powerdns}/`：身份、單位權限、申請、歸屬清查、復原及 DNS 寫入。
+- `lib/client/`：API、資源載入、導覽及頁面內表單草稿。
+- `prisma/`：使用者、單位、申請、歸屬、清查、稽核及 migration。
+- `styles/`：字體、間距、色彩、控制項及響應式樣式；`app/globals.css` 匯入各層。
+- `deploy/`：VM 安裝、gateway、簽章 webhook 與部署工具。Compose 不建立 PowerDNS 伺服器。
 
-## Included
+## 功能與入口
 
-- Read-only administrator operation log at `/activity`, with filters, pagination, before/after details and request correlation
-- Collapsible sidebar groups and desktop navigation toggle
+| 路徑 | 功能 |
+| --- | --- |
+| `/dns` | 單位 DNS；成員清查及提出變更／刪除申請 |
+| `/requests/new` | 多筆 DNS 新增申請，固定目前單位 |
+| `/requests` | 申請紀錄／管理員申請審核 |
+| `/units` | 單位管理；系統管理員建立、改名、刪除及指定管理人 |
+| `/zones` | DNS 管理，整合網域資訊、紀錄維護、歸屬與清查 |
+| `/admin/application-policy` | 申請規則：類型及各網域是否開放申請 |
+| `/admin/dns-changes` | 最近 DNS 新增／修改／刪除紀錄與一鍵復原 |
+| `/admin/users` | 帳號、角色、停用狀態及備註 |
+| `/activity` | 唯讀操作紀錄，含篩選、分頁、前後差異 |
 
-- Open NCU Portal sign-in with automatic USER provisioning; administrator roles assigned manually by system administrators
-- Owner authorization requires a consistent Logto identity with `details.identifier=115502532`; email, sub and display claims grant no privileges. Global `ADMIN` / `USER` and zone `VIEWER`, `EDITOR`, `ADMIN` roles remain separate.
-- Per-value applicant, unit, extension and purpose; grouped inventory with server-stamped inspection history
-- User creation, name editing and suspension; system administrators can assign or revoke administrator privileges for non-owner accounts
-- Environment-only PowerDNS API configuration; no web credential input or database override
-- Direct and group-ready permission schema, expiry, resource patterns, and record-type policy fields
-- Backend-filtered zones and protected mutation endpoints
-- Zone listing/deletion API and responsive management UI; creating zones is disabled in the website and API
-- Correct multi-value RRsets using PowerDNS `REPLACE` and `DELETE`
-- SHA-256 optimistic concurrency hashes that reject stale edits
-- Validation for FQDN, A, AAAA, CNAME, MX, TXT, SRV, CAA, and TTL
-- SOA, apex NS, DS, and DNSKEY protection
-- Immutable success/failure audit events with before/after JSON and request context
-- Admin zone management, user-owned DNS requests, approval workflow, responsive layout, and light/dark theme
-- Mock PowerDNS mode, unit tests, migration, seed, and hardened Docker deployment
+`/inventory` 轉至 `/zones`，`/zones/[zone]` 轉至對應 domain 頁籤；保留的舊路徑不代表仍提供獨立頁面。PowerDNS 網頁設定、使用者訊息、清查通知／回覆管理與全站登入白名單已停用。
 
-## Local demo (no database or PowerDNS required)
+導覽為平鋪功能清單，僅多個實際單位成員資格才出現工作區切換。系統管理員側欄不顯示「單位 DNS／申請 DNS」，可於單位管理查看各單位使用者及 DNS；管理全站不等於自動加入所有單位。
+
+### 單位與權限
+
+- 只有全域 ADMIN／SUPER_ADMIN 可建立單位，須以學號指定已註冊且啟用的唯一管理人。建立後立即生效，不需單位審核；舊制未啟用單位不自動啟用。
+- 單位只有「管理員（ADMIN）」及「成員（EDITOR）」兩種角色。兩者都能清查及送出新增、修改、刪除申請；管理員另可新增使用者、調整角色及移出單位。保留最後一位可登入管理員。
+- 「使用者管理」以學號新增成員；尚未註冊者於登入後自動加入，預設成員。移除成員也撤銷其加入資格。沒有自行建立或加入單位的入口。
+- 系統管理員可改名；目前 DNS 歸屬名稱同步更新，歷史申請保留原名稱。刪除會移除成員資格與加入名單，但有 DNS、申請或清查任務關聯時拒絕刪除。
+- 單位角色不授予全域／網域管理或直接發布 DNS 的權限。網域 VIEWER／EDITOR／ADMIN 是另一套權限，未隨單位角色合併而改變。
+
+### 申請與審核
+
+未加入有效單位不能申請。全站申請規則固定 `UNIT_ONLY`；新網域預設暫停申請，由授權管理員在「申請規則」開放。送出時重新驗證單位、成員、網域與類型。
+
+新增申請必填姓名、有效電子郵件、分機（1–10 位數字），單位由目前工作區決定。每筆 DNS 用途必填、備註選填（各最多 1000 字）；文字欄位預設兩行並可垂直縮放。一份申請可跨多個開放網域，沒有應用層筆數上限；整批驗證與入庫，管理員逐筆審核。用途核准後帶入 DNS 清查資料；備註保留於申請及審核畫面。
+
+`POST /api/dns-requests` 接受：
+
+```json
+{
+  "unitId": "selected-unit-id",
+  "applicantName": "申請人",
+  "applicantEmail": "contact@example.com",
+  "applicantUnit": "目前單位名稱",
+  "applicantExtension": "1234",
+  "records": [{ "zoneName": "example.com.", "name": "www", "type": "A", "content": "192.0.2.10", "ttl": 300, "purpose": "實驗室網站", "notes": "選填補充說明" }]
+}
+```
+
+伺服器依 `unitId` 取得真實單位名稱，不信任自由輸入的名稱作授權。單位新增／修改／刪除申請只由系統管理員核准；歷史個人申請仍依原網域權限處理，但不接受新的個人申請。核准時再次檢查成員資格、DNS 連線、快照及相關資料版本。修改／刪除只處理指定解析值，保留其他值；新名稱／類型須另外申請。
+
+### DNS 管理、清查與復原
+
+`/zones` 保留清查列表，以 domain 頁籤區分正解與反解；`ee.ncu.edu.tw`、`ce.ncu.edu.tw` 優先。搜尋 `@` 對應根網域紀錄。清查與歸屬資料在同一個對話框，系統管理員可指派所屬單位；只有最高權限帳號能看到刪除清查紀錄按鈕。
+
+單位成員的清查同樣有完整聯絡資料、用途及備註。管理員與單位清查表單在同頁關閉後重開會保留輸入；成功儲存才清除。重整／離開頁面不保留，伺服器紀錄版本改變時不套用舊草稿。清查不修改 DNS 解析，歷史時間與經手人由伺服器記錄。
+
+`/admin/dns-changes` 僅系統管理員可用，列出本系統成功紀錄的 DNS 新增／修改／刪除操作。復原需具完整前後快照、相同連線來源且目前 DNS 未被後續修改；遵守受保護紀錄權限。復原只處理 DNS RRset，不回復單位歸屬、清查或申請狀態。直接在 PowerDNS 進行的外部變更不會自動匯入此紀錄。
+
+## 登入與帳號
+
+前端顯示「NCU Portal」，實際使用 Logto OIDC，issuer 與身份解析見 [Logto 指南](deploy/LOGTO.md)。只要求 `openid identities`，不以 email、姓名或 sub 授予管理權。未回傳有效聯絡信箱不會因此阻擋一般登入；申請表的必填電子郵件是獨立要求。
+
+最高權限來自本次 Logto 登入驗證的一致 NCU identity `details.identifier=115502532`。一般帳號首次建立為 USER；系統管理員可調整其他非 owner 帳號的 USER／ADMIN 身份。owner 角色與帳號狀態不可更動；移除帳號、委派網域權限及刪除清查紀錄限 owner。密碼登入不繼承 Logto owner 權限；歷史 SUPER_ADMIN 以一般 ADMIN 存取。
+
+帳號使用 Logto subject 關聯，不自動依 email 合併。姓名、identifier 與聯絡信箱取自同一份 identity details；`User.portalEmail` 僅作顯示。停用／移除帳號不得使用。Session 由伺服器執行 15 分鐘閒置期限，背景讀取不延長，逾時不自動提交草稿。帳密登入可用 `AUTH_PASSWORD_LOGIN_ENABLED=false` 關閉。
+
+## 開發與驗證
+
+需要 Node.js 22.13+、npm 與可連線的 PostgreSQL；正式 Compose 使用 PostgreSQL 17。不要把正式資料庫作為開發或測試目標。
 
 ```bash
 npm ci
-npm run db:generate
-npm run demo
-```
-
-Open `http://localhost:3000`. The first screen is the login page.
-
-| Role | Email | Password |
-| --- | --- | --- |
-| Demo owner | `owner@aegis.local` | `DemoOwner!2026` |
-| Admin | `admin@aegis.local` | `AegisAdmin!2026` |
-| User | `user@aegis.local` | `AegisUser!2026` |
-
-Admin can browse zones, use all six record views, and review requests. User has two separate navigation entries: 申請 DNS (`/requests/new`) opens the application form, and 我的 DNS (`/requests`) shows only their own records and review status. Successful submissions return to 我的 DNS. Sign out in the sidebar to switch accounts.
-
-The application starts with required applicant name, unit and extension (1–10 digits). Add or remove DNS rows with no application-level record-count limit; each row can select a different zone. Applicant details and a shared application ID are saved with every record. Each record is reviewed individually. Validation errors preserve all form inputs, and batch writes are all-or-nothing (including audit entries in PostgreSQL).
-
-`GET /api/dns-requests/zones` authenticates the user and returns only zone names from the backend PowerDNS client. It does not expose records or grant Zone management access. The form supports loading, retry and empty-list states, and the server checks zone availability again on submission. The demo uses the same flow with mock PowerDNS zones. Live mode uses server-only `PDNS_API_URL`, `PDNS_API_KEY`, `PDNS_SERVER_ID`, and `PDNS_MOCK=false`; no credentials are sent to the browser. POST `/api/dns-requests` now accepts `{ applicantName, applicantUnit, applicantExtension, records: [{ zoneName, name, type, content, ttl, purpose? }] }`.
-
-For an existing database, run `npm run db:migrate` before starting this version. The additive `20260912020000_dns_applications` and `20260912030000_dns_inventory` migrations preserve older records without inventing applicant information. Local demo needs no migration.
-
-`npm run demo` binds to loopback on port 3000, enables in-memory DNS and requests, and disables database/external OAuth connections for that process. It reads optional `.env.local` settings. `DEV_OWNER_PASSWORD`, `DEV_ADMIN_*` and `DEV_USER_*` customize credentials when the demo user store is first initialized. Existing accounts are not overwritten on restart. Login remains required.
-
-DNS and application changes reset on server restart. User accounts, ownership, inspection history and connection settings persist under the git-ignored `.local-demo/` directory with restricted filesystem permissions. Its encryption key must be backed up with the data. Theme and preferred record view are the only browser-stored preferences; account and inventory data stay server-side. Demo passwords are development-only and are never used to create production accounts.
-
-## Backend ownership and DNS inventory
-
-Record views show applicant, unit and purpose beside each individual DNS value; open the ownership button to edit name, email, unit, extension and purpose without changing DNS. Approval snapshots application details automatically. Legacy approved requests are used as a fallback only when the connection can be safely associated; missing information is shown as missing.
-
-`/inventory` displays the original inspection list in domain tabs, with search and filters for uninspected records or incomplete ownership within the selected domain. Each inspection appends the server time, authenticated account ID/name/email and an optional note. Clients cannot supply dates or impersonate inspectors. Editing ownership does not erase inspection history. Stale edits return HTTP 409. Historical rows remain stored if a DNS value disappears, but this screen only lists values currently in PowerDNS. This is an on-demand inventory workflow, not an automatically scheduled inspection.
-
-`/admin/users` manages account roles, status and notes. System administrators can assign or revoke USER/ADMIN roles for other non-owner accounts. Only the account with a verified NCU identity `details.identifier=115502532` may delegate zone permissions. The owner's role and status cannot be changed through the UI; notes remain editable. Names are synchronized from display fields inside the same identity details. Email, sub and display names do not authorize access. Other administrators are assigned manually through user management. Disabled accounts and current database roles are checked on protected requests. Unlinked historical `SUPER_ADMIN` accounts receive ordinary `ADMIN` access, not owner privileges.
-
-## Database-backed local setup
-
-Node.js 22.13+, PostgreSQL 15+, and PowerDNS Authoritative are expected. PowerDNS is optional in mock mode.
-
-```bash
 cp .env.example .env
-npm ci
-docker compose up -d postgres
+# 編輯 .env：填入你另行建立的本機資料庫及密鑰；可設 PDNS_MOCK=true。
+npm run db:generate
 npm run db:migrate
+# 只有首次初始化且已設定 OWNER_INITIAL_PASSWORD 時執行：
 npm run db:seed
+# 明確需要啟動本機服務時才執行：
 npm run dev
 ```
 
-Open `http://localhost:3000`. Configure the database, seed the protected owner and configure NCU Portal before signing in. For the self-contained password-login demo above, do not start PostgreSQL.
+Compose 的 PostgreSQL 不發布 host port，因此 host 上執行的 `npm run dev` 不可直接用預設 localhost URL 連入該容器；請另備本機資料庫，或使用完整 Compose 拓撲。
 
-## Environment variables
-
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `DATABASE_URL` | Production | PostgreSQL connection string |
-| `AUTH_SECRET` / `NEXTAUTH_SECRET` | Yes | The same random 32+ byte signing secret |
-| `NEXTAUTH_URL` | Yes | Public app origin |
-| `AUTH_LOGTO_ID`, `AUTH_LOGTO_SECRET` | Live login | Logto application credentials; owner identity uses verified `identities` details |
-| `OWNER_INITIAL_PASSWORD` | One-time seed | Unique 16+ character password for the protected owner |
-| `PDNS_API_URL`, `PDNS_API_KEY` | Live mode | Server-side PowerDNS credentials |
-| `PDNS_SERVER_ID` | No | Defaults to `localhost` |
-| `PDNS_MOCK` | Development | Enables the in-memory DNS server |
-| `SETTINGS_ENCRYPTION_KEY` | Legacy deployment compatibility | Retain the existing value when upgrading; web-saved API credentials are no longer read |
-| `DEV_OWNER_PASSWORD` | Local demo | Protected owner's initial demo password |
-| `DEV_ADMIN_EMAIL`, `DEV_ADMIN_PASSWORD` | Local demo | Administrator demo login |
-| `DEV_USER_EMAIL`, `DEV_USER_PASSWORD` | Local demo | User demo login |
-
-Generate secrets with `openssl rand -base64 32`. Never give a PowerDNS setting a `NEXT_PUBLIC_` prefix.
-
-## Operation log scope
-
-Application mutation APIs record a durable `MUTATION_STARTED` before execution, domain-specific details, and `MUTATION_COMPLETED` with HTTP status/duration. If the initial write fails, the mutation is blocked. An interrupted operation may have only a start event; check the target state before retrying, especially when PowerDNS succeeded but a later database write failed. Completion-write failures emit `AUDIT_COMPLETION_FAILED` to server stderr and an `X-Audit-Warning` response header. These are not distributed transactions with PowerDNS.
-
-Logs include DNS/Zone changes, requests/reviews, permissions, users, allowlist membership, ownership/inspection details, sign-in/sign-out and explicit test-user creation. Secret fields and known environment secrets are redacted; DNS record content and personal applicant data remain visible only to global administrators. Local demo writes real new events to `.local-demo/audit.json`; old mock examples are no longer shown. There is no web edit/delete log endpoint. VM env edits, direct SQL/PowerDNS changes, deployments and pre-existing changes are outside this application log and need infrastructure logs; no historical details are invented.
-
-## Login configuration
-
-Sessions have a server-enforced 15-minute inactivity deadline, stored per login in the existing `Session` table (local demo uses `.local-demo/idle-sessions.json`). Background reads do not extend it. The browser sends throttled activity notifications for keyboard/pointer/scroll interactions and warns during the final minute; inactive, sleeping or closed browsers cannot revive an expired session. Same-origin checks protect the activity endpoint. Sign-out removes the server session. Existing sessions must sign in again after upgrading; no database migration is needed. Unsaved forms are not automatically submitted on timeout.
-
-Anyone with a valid NCU Portal identity and verified contact email can sign in; no allowlist or advance user creation is needed. Register the callback:
-
-```text
-https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/logto
-```
-
-Configure AUTH_LOGTO_ID and AUTH_LOGTO_SECRET and `AUTH_URL`, then recreate the web container. Password login remains available for testing; set `AUTH_PASSWORD_LOGIN_ENABLED=false` to disable it. Google is not supported. New Portal accounts always default to `USER`, never to administrator based on email/domain or Portal role claims. System administrators can manually grant or revoke ADMIN through user management; existing roles and suspended-account checks remain enforced. The owner is verified by NCU identity `details.identifier`. Access to existing account data requires explicit operator linking; otherwise a new subject creates an independent USER account; they are never silently merged by email. New accounts store USER by default; the verified owner identifier receives effective SUPER_ADMIN access. The former allowlist page/API are retired. Old membership data and historical audit events are preserved, but have no effect on login.
-
-PowerDNS reads only `PDNS_API_URL` (ending in `/api/v1`), `PDNS_API_KEY` and `PDNS_SERVER_ID`. Move previously web-entered settings to the server environment before upgrading. Existing encrypted database settings are retained but ignored. Inventory metadata remains scoped to the API URL/server ID; keep those unchanged to retain its associations. Unscoped legacy applications are not used to infer ownership on live servers.
-
-## Database and first administrator
+Seed 只建立 `owner-bootstrap@accounts.invalid`，使用 16 字以上獨立密碼且拒絕覆寫已有初始帳號。此地址與資料庫 SUPER_ADMIN 值本身不提供已驗證的 Logto owner 權限；初始化密碼完成後從執行環境移除。
 
 ```bash
-npm run db:migrate
-npm run db:seed
-```
-
-The seed creates only `owner-bootstrap@accounts.invalid` with a scrypt password hash using `OWNER_INITIAL_PASSWORD` (16+ characters). It refuses to overwrite an existing owner account, including its password. Initialize the owner through this trusted operator command; do not expose a public bootstrap route. Remove the initial password from the runtime environment after seeding. No old-account linking or pre-existing SUPER_ADMIN role is required for verified identity `details.identifier=115502532` to access `/admin/users`; new account passwords require 12+ characters. Legacy seed variables are no longer used. For schema changes use `npm run db:migrate:dev -- --name descriptive_name` and commit the migration.
-
-## PowerDNS configuration
-
-Set `/etc/powerdns/pdns.conf`:
-
-```ini
-api=yes
-api-key=A-LONG-RANDOM-SECRET
-webserver=yes
-webserver-address=127.0.0.1
-webserver-port=8081
-```
-
-Restart PowerDNS and configure the matching app values. Do **not** expose port 8081 to the Internet. For a host process use `PDNS_API_URL=http://127.0.0.1:8081/api/v1`. Inside Docker, localhost is the web container; put PowerDNS on the private `dns_private` network and use `http://powerdns:8081/api/v1`, or use a firewall-restricted private address. Use TLS when traffic crosses hosts.
-
-Admins can use `/admin/powerdns` to enter the API URL, server ID and key. The read-only test lists zones without saving settings or modifying DNS. API URLs must end with `/api/v1`, contain no embedded credentials/query/fragment, and match a trusted origin. Redirects are rejected to prevent forwarding keys to another host. Maintain the allowlist and private-network egress controls as an operator; the browser cannot edit the allowlist.
-
-Saved keys use authenticated AES-256-GCM encryption and are never returned to the browser or included in audit events. A blank key preserves the current key only for the same URL and server ID; a different destination requires a new key. Back up `SETTINGS_ENCRYPTION_KEY` independently; replacing it without re-encrypting stored settings makes the saved key unreadable. Saved settings override environment credentials for subsequent live API calls. `PDNS_MOCK=true` always keeps DNS operations on demo data, even after saving settings; only an explicit connection test queries the entered server. Set `PDNS_MOCK=false` to use a real connection. See the [PowerDNS Authoritative API documentation](https://doc.powerdns.com/authoritative/http-api/index.html).
-
-## Docker deployment
-
-For the production **dnsmgr.ce.ncu.edu.tw** topology (Ubuntu 22.04/24.04 private VM, separate Caddy proxy), use the [one-command VM installer and setup guide](deploy/QUICKSTART.md). It generates secrets, initializes the owner, installs a private IP-restricted gateway and signed webhook receiver, and includes a one-time GitHub webhook registration helper. Main pushes build first, then run Compose **down / up without deleting data volumes**.
-
-For the current production Compose, NCU Portal and signed GitHub webhook setup, follow [the complete deployment guide](deploy/README.md). Keep production secrets outside the checkout using [deploy/app.env.example](deploy/app.env.example). The web image excludes local `.env` files and `.local-demo` data; a separate tools image runs migration and seed.
-
-```bash
-# First securely configure /etc/dns-manager/app.env using deploy/app.env.example.
-docker compose --env-file /etc/dns-manager/app.env up -d --build --wait
-docker compose --env-file /etc/dns-manager/app.env --profile maintenance run --rm --no-deps seed
-```
-
-The standalone image runs non-root with a read-only filesystem and writable temporary/cache paths. PostgreSQL stays on an internal Docker network. Web binds only to host loopback; terminate TLS at a trusted reverse proxy. PowerDNS is external and must be routed over a firewall-restricted private path. Compose does not provision a PowerDNS server. Startup requires HTTPS AUTH_URL, persistent session/encryption secrets and a database. Production never uses demo account credentials.
-
-The NCU Portal button uses Logto OIDC (ES384, PKCE, state and nonce). Configure AUTH_LOGTO_SECRET; AUTH_LOGTO_ID defaults to the registered application ID. The only requested Logto user scope is `identities`; owner authorization uses a consistent NCU identity `details.identifier`, not its name or Logto sub. Existing accounts require operator-verified binding, never automatic email merging. See [Logto deployment and migration](deploy/LOGTO.md). Local demo remains disabled; credentials remain available for testing.
-
-## Security notes
-
-- Backend authorization is authoritative; hidden UI controls are only a convenience.
-- Mutations use signed SameSite cookies plus same-origin enforcement in the app proxy.
-- Zod validates payloads; canonical names are encoded before entering PowerDNS paths.
-- User-facing PowerDNS errors are sanitized; secrets/tokens are omitted from logs.
-- RRset updates fetch current state and return HTTP 409 for stale hashes.
-- Editors cannot mutate SOA, NS, DS, or DNSKEY. Apex NS deletion requires Super Admin.
-- CSP, frame denial, MIME-sniffing prevention, referrer policy, and browser restrictions are set globally.
-- Use a secrets manager and rotate OAuth, DB, session, and PowerDNS secrets regularly.
-
-## Backup and recovery
-
-System administrators can use **匯出全部 DNS CSV** in the Zone management header. The download includes every record value from the configured PowerDNS server (forward and reverse zones, enabled and disabled records), plus ownership, inspection history and RRset comments. It ignores UI filters. Any fetch/audit failure aborts the download rather than producing a partial file. Exports are logged and never cached. UTF-8 BOM and CSV quoting support spreadsheet import; formula-like cell values receive a leading apostrophe for safety. This is a human-readable record export, not a restorable database/PowerDNS backup or an atomic cross-zone snapshot. Treat downloaded contact/ownership data as sensitive.
-
-Back up PostgreSQL, the settings encryption key, and the PowerDNS backend. PostgreSQL preserves authorization, ownership, inspection and audit data, not authoritative zones. Test restores. Audit rows are append-only at the application layer. The verified owner can delete individual inspection rows, with the deleted snapshot retained in the audit log; database operators can still modify storage, so add database retention or write-once exports to meet compliance needs.
-
-## Verification
-
-### Unit DNS and membership
-
-- `/dns` shows live DNS for the selected unit, `/requests` shows unit application history (or authorized administrative review), and `/units` is restricted to unit/global administrators. Navigation is flat; a workspace switcher appears only for multiple actual memberships.
-- Only global administrators create units and designate a registered manager by student ID. Creation is immediately effective; unit approval/rejection is retired. Legacy inactive units are not automatically activated. Unit administrators or global administrators add student IDs to each unit's allowlist. Registered active users join immediately; future users join on authenticated access. New members default to VIEWER; repeated additions preserve existing roles.
-- VIEWER reads shared DNS and application history and records unit DNS inspections. EDITOR submits create, update and deletion requests. Unit ADMIN also manages member roles and the unit allowlist. **Unit roles never grant zone permissions or DNS publication/review authority.** Only global system administrators approve unit requests.
-- Self-service passcode joining is retired. Removing an allowlist entry revokes its membership; removing a member or account revokes its allowlist entries. At least one active unit administrator must remain. Apply all migrations before starting the web image, including `20260929010000_unit_allowlist`. Existing memberships and roles remain intact; only unambiguous student IDs are backfilled. Legacy hashes remain stored but cannot be used.
-- Select an explicit shared unit in the DNS application form. A free-text applicant-unit name does not grant access. Historical personal DNS is not automatically shared. Unit changes target one existing record value; name, type, TTL, neighboring values and disabled flags are preserved. New names/types require a new application.
-- Shared DNS lists contain only explicitly linked, currently present records from the configured PowerDNS connection. Review rechecks membership, connection scope and the original RRset; conflicts must be rejected and resubmitted. Pending changes do not modify DNS.
-- Deploy migration `20260914050000_dns_units` before starting the new web image (`npm run db:migrate`, or the existing Compose migrate service). This migration adds tables/nullable columns; existing records are preserved and remain unshared. Unit features require PostgreSQL and do not enable or start local demo.
-- PostgreSQL and PowerDNS cannot commit atomically. Content-change retries recognize an exact already-applied result; ambiguous conflicts fail closed for operator review. Writes made directly in PowerDNS or other tools are not locked by this application—avoid simultaneous external writes to the same RRset.
-
-Opt-in integration tests use a **disposable localhost database named `dns_units_test`**, with fake in-process PowerDNS (no live DNS writes). Apply migrations to that database, then run:
-
-```bash
-UNIT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test' npx vitest run tests/units.integration.test.ts
-```
-
-The normal test command skips these database integration tests when the variable is absent.
-
-```bash
+npm run build  # 包含 prisma generate 與 TypeScript 檢查
 npm run lint
-npm run typecheck
 npm test
-npm run build
 ```
 
-## Troubleshooting
+`npm run typecheck` 可作較快的型別除錯，不需在相同來源 build 通過後重複執行。Build 及測試不要同時操作 Prisma client。單位資料庫整合測試預設跳過；要執行完整測試，先對**隔離 localhost、名稱為 dns_units_test 的資料庫**套用 migration，再執行：
 
-- **Unable to connect:** verify the private route, API URL/key, server ID, bind address, and firewall.
-- **No zones:** confirm a live zone/group permission or Super Admin role. Empty access is intentional.
-- **OAuth redirect mismatch:** copy the callback exactly; `NEXTAUTH_URL` must match the external origin.
-- **409 while editing:** reload and review the RRset because another operator changed it.
-- **Docker cannot reach `127.0.0.1:8081`:** use the PowerDNS service/private host address.
+```bash
+DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test' npm run db:migrate
+UNIT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test' npm test
+```
 
-## Extension points
+整合測試使用假的 PowerDNS，不寫入正式 DNS。GitHub Actions 另檢查部署腳本、Docker／Compose／gateway 與依賴；詳見 [CI workflow](.github/workflows/ci.yml)。CI 成功不等於正式 SSO、DNS 或 VM 已驗收。
 
-The schema includes groups, resource patterns, type allowlists, and protected-record rules. Next steps can add OIDC/SAML, full group/policy editors, DNSSEC key lifecycle, audit rollback UI, and richer HA telemetry.
+### 可選 local demo
+
+僅在明確需要時執行 `npm run demo`，以 loopback `http://localhost:3000` 啟動。它強制停用資料庫及外部 SSO，使用 mock DNS 和開發帳密；因此**無法驗證需要 PostgreSQL 的單位制申請、單位管理與 DNS 復原流程**。一般操作保持 local demo 關閉。
+
+Demo 帳號為 `owner@aegis.local`／`DemoOwner!2026`、`admin@aegis.local`／`AegisAdmin!2026`、`user@aegis.local`／`AegisUser!2026`，僅供本機開發。DNS 與記憶體申請於重啟重設，其他本機資料存於 git-ignored `.local-demo/`；不得當作正式備份或匯入正式帳號。
+
+## 正式設定與部署
+
+正式環境以 [deploy/app.env.example](deploy/app.env.example) 為範本，密鑰放在 checkout 外的 `/etc/dns-manager/app.env`。
+
+| 變數 | 用途 |
+| --- | --- |
+| `POSTGRES_PASSWORD` | Compose 資料庫密碼；Compose 組成 `DATABASE_URL` |
+| `DATABASE_URL` | 非 Compose 的 Prisma／應用資料庫連線 |
+| `AUTH_URL` | 對外 HTTPS origin；Compose 使用此名稱 |
+| `AUTH_SECRET` | 固定且足夠隨機的 session 簽章密鑰 |
+| `AUTH_LOGTO_ID`、`AUTH_LOGTO_SECRET` | Logto Traditional web 應用設定 |
+| `AUTH_PASSWORD_LOGIN_ENABLED` | 測試帳密登入開關，預設 true |
+| `PDNS_API_URL`、`PDNS_API_KEY`、`PDNS_SERVER_ID` | 伺服器 PowerDNS 設定；URL 以 `/api/v1` 結尾，server ID 預設 localhost |
+| `PDNS_MOCK` | 正式環境 false；true 使用記憶體 DNS |
+| `SETTINGS_ENCRYPTION_KEY` | Compose 保留的固定密鑰；保留升級相容性，舊網頁憑證不再使用 |
+| `OWNER_INITIAL_PASSWORD` | 僅首次 seed 使用 |
+
+不要使用 `NEXT_PUBLIC_` 儲存 PowerDNS 或登入憑證。`PDNS_API_URL` 不可含內嵌帳密、query 或 fragment。容器中的 localhost 是容器本身；PowerDNS 必須可由受限制的私有路徑連線。設定變更後重新建立容器，單純 restart 不載入新 env。
+
+依 [快速安裝](deploy/QUICKSTART.md) 設定外部 Caddy、VM gateway 及簽章 GitHub webhook。main push 會排隊部署最新 main：先 build，再 Compose down/up（不刪 volume），完成 migration 後啟動 web。這不是零停機或自動回退部署；webhook 202 只代表已接受排隊，需另確認 journal 的 `Healthy deployment`、commit 與 `/healthz`。
+
+升級需套用**全部** migration；包含 DNS 復原、單位建立立即生效、申請備註及兩種單位角色。單位角色 migration 將舊 VIEWER 轉成成員 EDITOR，網域角色不變。不得為了重跑 migration 刪除正式資料庫或 volume。
+
+## 安全、稽核與備份
+
+- API 授權及目前帳號狀態是安全邊界，側欄隱藏不是授權。
+- 同來源檢查、Zod 驗證、RRset hash／資料版本檢查保護寫入；衝突回傳 409。
+- 本系統 DNS 寫入使用協調鎖；外部 PowerDNS 寫入不受此鎖控制。PostgreSQL 與 PowerDNS 不是單一原子交易，失敗重試仍需核對狀態。
+- 稽核包含操作開始、領域事件與完成狀態；初始稽核寫入失敗會阻擋操作。完成紀錄失敗會發出伺服器記錄及 `X-Audit-Warning`。
+- 系統管理員可匯出全部 DNS CSV（含正反解、停用值、歸屬與清查）；匯出不受畫面篩選限制，不是原子快照或可直接還原的備份。
+- 備份 PostgreSQL、PowerDNS backend 與持久密鑰，並測試還原。應用稽核沒有修改／刪除入口；owner 刪除清查紀錄會留下稽核。
+- 不將 GitHub 推送、CI 通過或 mock 測試稱為正式 VM 健康驗證。

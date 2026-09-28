@@ -1,29 +1,19 @@
-# 功能進度與待提供的外部設定
+# 整合狀態與正式驗收範圍
 
-## 此次已實作
+本文件描述目前程式能力，不把尚未操作的正式服務稱為已驗收。產品功能及權限請見 [README](../README.md) 與 [權限表](access-matrix.md)。
 
-- 站內聯絡管理員：使用者傳送訊息、管理員回覆；一般使用者僅看自己的訊息。
-- 站內 DNS 清查通知：系統管理員在清查列表選擇紀錄及收件帳號；指定使用者確認仍在使用或回報問題。伺服器驗證 DNS 仍存在，保存回覆時間與登入帳號。管理員可撤回通知。回覆不直接修改 DNS。
-- 使用者管理以電子郵件為主，顯示姓名。Logto 讀取 UserInfo 的 `chinese-name`／`chineseName` 或映射後的標準 `name`，取得姓名後於下次登入更新；未取得姓名則退回帳號，不猜測姓名。內部登入識別依 Logto sub，電子郵件和姓名不授予權限。
-- 管理員設定開放申請的 DNS Types，以及不限資格／須加入單位／必須歸屬單位。設定會在新增申請及單位變更申請的後端驗證；單位 VIEWER 仍不能提出單位變更。設定不會自動取消既有待審案件。
-- 清查保留原清查列表，新增 Zone 相同的表格、列表、IP 棋盤及 Type／Name／Content 檢視。只列一般網域；非原清查列表可透過歸屬資訊開啟清查對話框。
-- 帳號移除限具有既有最高權限的身份執行，畫面角色統一標示管理員。保留歷史與 SSO 身份綁定，停用帳號、清除密碼、撤銷工作階段／單位／區域權限、取消待審申請與清查通知，不會刪除 DNS。移除的帳號不能重新登入或於後台啟用。若是單位最後一位管理員，必須先移交；移除後也會撤銷該帳號的單位學號白名單。
+| 項目 | 目前狀態 | 部署／驗收要求 |
+| --- | --- | --- |
+| Logto／NCU Portal | 已實作 OIDC `openid identities`、身份同步及登出 | VM 設定應用 Secret，實際帳號驗證登入、身份來源與停用狀態；見 [Logto 指南](../deploy/LOGTO.md) |
+| PowerDNS | 已實作環境設定、查詢、直接維護、申請核准與衝突保護 | 私有連線、API 憑證及 server ID；不使用網頁儲存設定 |
+| PostgreSQL | 已實作單位、申請、清查、稽核與 DNS 復原資料 | 升級套用全部 migration，先在隔離環境驗證並備份 |
+| GitHub webhook 部署 | 已實作簽章驗證、排隊、建置及 Compose 更新 | GitHub delivery 202 只代表排隊；另看 VM journal、commit 與 healthz |
+| SMTP／寄信 | 未實作 | 本版本沒有電子郵件通知；申請電子郵件是聯絡資料，不代表寄信功能 |
+| Google Sheets | 未實作 | 沒有工作表同步；未設定目標、方向、欄位或服務帳號，不假設可覆寫外部資料 |
+| DNS CSV | 已實作系統管理員匯出 | 為人工檢視資料，不能取代 PowerDNS／資料庫備份 |
 
-## 尚未串接：需要外部設定或範圍確認
+使用者訊息、清查通知與回覆管理已移除，不列為待補設定的現有功能。沒有背景清查排程或自動通知；若未來重新提出需求，須另行確認範圍。
 
-| 項目 | 需要提供或確認 |
-| --- | --- |
-| Mail server | SMTP 主機、連接埠、TLS 模式、寄件地址、登入方式、管理員通知收件者；密碼僅在 VM env 設定，勿貼在公開 repository。 |
-| 清查郵件通知 | 先完成 SMTP；確認由管理員選擇寄送或排程、寄送對象、提醒週期。現階段只有站內通知，沒有發送郵件。 |
-| Google Sheets | 目標試算表、工作表名稱、欄位對應、同步方向（匯出／匯入／雙向）、排程及服務帳號授權。不可假定允許覆寫既有資料。 |
-| Logto SSO | Endpoint、Application ID、secret 在 VM env、回呼 URL、email/name claims 與原 Portal 帳號遷移方式。必須確認受保護帳號對應的 Logto subject，不能單靠 email 自動升權。 |
+既有 Logto 帳號不按 email 自動合併，owner 依驗證後的 identifier 決定，不需猜測 owner subject 才能登入。需要修復既有資料帳號綁定時才使用明確核對身份的維護工具。
 
-上述項目尚未視為完成，沒有設定假的寄信、Sheets 或 Logto 成功回應。現有 Portal 與測試帳密登入保留。
-
-## 部署注意事項
-
-- 需要執行 Prisma migration `20260915000000_local_workflows`，加入訊息、清查任務與移除帳號欄位。
-- 使用者訊息、清查通知及移除帳號需要 PostgreSQL，不提供 local demo 假資料替代。
-- 上游 Portal connector 需允許 `chinese-name` scope 並映射到 Logto 的 `name`；正式環境的登入與姓名回傳仍須實機驗證。
-- 清查任務有資料庫層級的「同使用者／同紀錄僅一個待回覆通知」限制。
-- 自動測試使用一次性 PostgreSQL 和假的 PowerDNS；不代表正式 SMTP、Portal、Caddy 或 PowerDNS 已驗證。
+自動測試使用隔離 PostgreSQL 與 mock PowerDNS；文件更新、CI 通過和 GitHub 推送都不代表 SMTP、Sheets、正式 SSO、Caddy 或 PowerDNS 驗收成功。密鑰只能在部署環境設定，不能放入 repository。

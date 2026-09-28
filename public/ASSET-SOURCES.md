@@ -8,4 +8,4 @@
 - Downloaded: 2026-09-12. Original PNG retained without cropping, recoloring, or other modification.
 - Current identity and trademark guidance: https://www.ncu.edu.tw/p/412-1000-98.php?Lang=zh-tw
 
-The emblem belongs to National Central University. Included at the project owner's request for the local UI demo; inclusion does not establish permission or university endorsement. Confirm authorization with the university before public deployment or other use. The university's source page directs image-use requests to ncu7006@ncu.edu.tw.
+The emblem belongs to National Central University. Used by the application at the project owner's request; inclusion does not establish permission or university endorsement. Confirm authorization with the university before public deployment or other use. The university's source page directs image-use requests to ncu7006@ncu.edu.tw.

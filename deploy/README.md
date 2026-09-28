@@ -9,7 +9,7 @@
 - Linux server：Docker Engine、Compose v2.24+、Git、Node.js 22.13+、Nginx、`flock`（util-linux）。
 - 正式 DNS 與有效 TLS 憑證。外部僅開放 HTTPS；3000、9000 綁定 loopback，PostgreSQL 不開 host port。
 - Repository：`https://github.com/fearnot221/dns-manager.git`。建議 main 分支保護、PR review、CI 必須通過。能 push 正式分支的人等同能部署程式到 server。
-- Portal：OAuth2 的 Client ID、Secret，以及維運人員核對的最高使用者 Portal `identifier`。這不是猜測 Email 前綴。停用「可代理登入」。
+- Logto Traditional web：Application ID、Secret、回呼 URI 與 NCU connector `identities`；詳見 [Logto 指南](LOGTO.md)。最高權限使用已驗證的 identifier，不從 Email 推導。
 
 ## 2. 環境檔與第一次啟動
 
@@ -30,7 +30,7 @@ sudo install -d -m 0700 -o dnsdeploy -g dnsdeploy /var/lib/dns-manager-webhook
 - `AUTH_URL=https://你的正式網域`，無其他路徑。
 - `AUTH_LOGTO_ID`、`AUTH_LOGTO_SECRET`。最高權限識別來自已驗證的 UserInfo `identities[*].details.identifier`，不是 env。
 - `PDNS_MOCK=false`；只在 env 設定 `PDNS_API_URL`、`PDNS_API_KEY`、`PDNS_SERVER_ID`，網址以 `/api/v1` 結尾。網頁設定入口已移除，舊資料庫連線設定不再生效。沒有連線時 DNS 頁會顯示錯誤，不會切換到假資料。
-- Portal 不需白名單；驗證成功會自動建立一般使用者。管理員僅由最高使用者手動指派，停用帳號仍禁止使用。帳密登入保留以供測試，可設 `AUTH_PASSWORD_LOGIN_ENABLED=false` 關閉。測試帳號建立命令見 QUICKSTART。
+- Portal 不需白名單；驗證成功會自動建立一般使用者。系統管理員可手動指派其他非 owner 帳號為 ADMIN，停用帳號仍禁止使用。帳密登入保留以供測試，可設 `AUTH_PASSWORD_LOGIN_ENABLED=false` 關閉。測試帳號建立命令見 QUICKSTART。
 - `OWNER_INITIAL_PASSWORD`：初次建立最高帳號用，16 字元以上，與 demo 密碼不同。
 
 首次啟動（以能讀取 env 且有 Docker 權限的專用帳號執行）：
@@ -100,10 +100,14 @@ Repository → Settings → Webhooks → Add webhook：
 
 ## 6. 備份、更新與限制
 
+升級使用 repository 內完整 migration 序列，不只挑一份執行。目前版本包含 DNS 復原資料、申請備註、管理員直接建立單位，以及單位角色合併。`20260929190000_unit_member_roles` 將原單位 VIEWER 轉成成員 EDITOR（可送出申請），管理員仍為 ADMIN；網域角色不變。新 web 應在 migration 成功後才啟動。舊制未啟用單位不會自動變成啟用，單位審核入口也已移除。
+
+目前功能與權限以 [README](../README.md) 和 [權限表](../docs/access-matrix.md) 為準；舊 UI／驗證歷史不作升級指令。
+
 部署不會 seed、刪除 volume、prune 或自動回退資料庫。升版前備份 PostgreSQL、PowerDNS backend 與 SETTINGS_ENCRYPTION_KEY，先在 staging 驗證 migration。新 web healthcheck 失敗時不宣稱成功，須由維運部署相容修正版／依備份還原；資料庫 migration 不會自動逆轉。down/up 會暫停網站與資料庫，不是零停機部署。
 
 網站與 webhook receiver 分開管理：更新 receiver／host deploy script 需由維運檢查後重新 install 和 restart service。任何可改 Compose／Dockerfile 的正式分支寫入者都有能力影響主機，請啟用 GitHub 2FA、分支保護與審核。
 
-Local demo 繼續使用 `npm run demo`；它不使用真實 Portal、資料庫或 PowerDNS。Docker 使用獨立 PostgreSQL，不會匯入 `.local-demo`、demo 帳密或本機申請紀錄。
+Local demo 預設保持關閉，明確需要時才使用 `npm run demo`；它不使用真實 Portal、資料庫或 PowerDNS，也不能驗證單位制申請與 DNS 復原。Docker 使用獨立 PostgreSQL，不會匯入 `.local-demo`、demo 帳密或本機申請紀錄。
 
 參考：[GitHub webhook 簽章驗證](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)、[Compose 啟動順序](https://docs.docker.com/compose/how-tos/startup-order/)、[NCU Portal 介接](https://portal.ncu.edu.tw/about/howto)。

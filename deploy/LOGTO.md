@@ -9,7 +9,7 @@
 | Issuer | `https://authgate.ce.ncu.edu.tw/oidc` |
 | Discovery | `https://authgate.ce.ncu.edu.tw/oidc/.well-known/openid-configuration` |
 
-使用 discovery 取得授權、Token、UserInfo、JWKS 和登出端點。已唯讀驗證 discovery 宣告 ES384 與 S256 PKCE；仍須以實際帳號完成正式登入驗收。
+使用 discovery 取得授權、Token、UserInfo、JWKS 和登出端點。程式設定 ES384 與 S256 PKCE；此文件更新未重新驗證線上 discovery，部署仍須以實際帳號完成正式登入驗收。
 
 ## 伺服器設定
 
@@ -22,7 +22,7 @@ AUTH_LOGTO_SECRET=由你在伺服器填入
 AUTH_PASSWORD_LOGIN_ENABLED=true
 ```
 
-本專案只從 Logto UserInfo 的 `identities` 讀取 NCU Portal 資料。經驗證且一致的 identity `details.identifier=115502532` 直接取得最高權限，不要求特定 User ID、sub、email、舊帳號綁定或原有 SUPER_ADMIN 角色。`LOGTO_OWNER_SUB` 已停用；sub 僅作 OIDC 登入／資料關聯。只有本次登入 provider 為 Logto 時才採用已驗證 identifier；同一資料帳號改用密碼登入不會繼承此最高權限。其他管理員由最高權限帳號在使用者管理中人工指派，不能從姓名或 identity 內嵌角色取得權限。停用／移除帳號仍禁止登入。
+本專案只從 Logto UserInfo 的 `identities` 讀取 NCU Portal 資料。經驗證且一致的 identity `details.identifier=115502532` 直接取得最高權限，不要求特定 User ID、sub、email、舊帳號綁定或原有 SUPER_ADMIN 角色。`LOGTO_OWNER_SUB` 已停用；sub 僅作 OIDC 登入／資料關聯。只有本次登入 provider 為 Logto 時才採用已驗證 identifier；同一資料帳號改用密碼登入不會繼承此最高權限。其他管理員由系統管理員在帳號管理中人工指派，不能從姓名或 identity 內嵌角色取得權限。停用／移除帳號仍禁止登入。
 
 部署須先執行新增 `User.logtoName` 的 migration。新欄位不從歷史顯示姓名、學號或備註回填，只在成功驗證 Logto UserInfo 後寫入。既有最高管理員請重新登入一次；之前的 session 不會憑歷史欄位取得最高權限。帳密測試登入保持可用。
 
@@ -84,7 +84,7 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
 
 ## 重置所有使用者帳號
 
-`scripts/reset-all-users.ts` 是人工維護工具，不會在部署或 migration 自動執行。它會先提供 dry run；正式套用會撤銷全部 session 與 Logto 綁定、移除角色／網域／群組／單位權限、清除所有單位學號白名單，並把所有帳號（包含先前已移除的帳號）封存到 `/admin/users` 不再顯示。待審核 DNS 申請與待回覆清查會取消；已完成的 DNS 申請、站內訊息、清查及稽核歷史仍保留原 User 關聯，不會因直接刪除外鍵而遺失。
+`scripts/reset-all-users.ts` 是人工維護工具，不會在部署或 migration 自動執行。它會先提供 dry run；正式套用會撤銷全部 session 與 Logto 綁定、移除角色／網域／群組／單位權限、清除所有單位學號白名單，並把所有帳號（包含先前已移除的帳號）封存到 `/admin/users` 不再顯示。待審核 DNS 申請與舊制待回覆清查任務會取消；已完成的 DNS 申請、舊站內訊息、清查及稽核歷史仍保留原 User 關聯，不會因直接刪除外鍵而遺失。
 
 使用上方 `deploy_tag` 與 Compose 參數執行新版 tools image：
 

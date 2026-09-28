@@ -1,19 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { canSubmitUnitRequest, wouldRemoveLastAdmin } from "@/lib/units/policy";
+import { canSubmitUnitRequest, unitRoleLabels, wouldRemoveLastAdmin } from "@/lib/units/policy";
 import { replaceUnitValue, unitChangeState } from "@/lib/units/change";
 import { redactAudit } from "@/lib/audit/redact";
 import type { RRSet } from "@/lib/dns/types";
 
 describe("unit permissions and historical invitation secrecy", () => {
-  it("limits submission to editor and unit admin, never a viewer or nonmember", () => {
-    expect(canSubmitUnitRequest("VIEWER")).toBe(false);
+  it("allows members and admins to submit, but never nonmembers", () => {
     expect(canSubmitUnitRequest(null)).toBe(false);
     expect(canSubmitUnitRequest("EDITOR")).toBe(true);
     expect(canSubmitUnitRequest("ADMIN")).toBe(true);
   });
   it("preserves the last unit administrator", () => {
     expect(wouldRemoveLastAdmin("ADMIN", null, 1)).toBe(true);
-    expect(wouldRemoveLastAdmin("ADMIN", "VIEWER", 1)).toBe(true);
+    expect(wouldRemoveLastAdmin("ADMIN", "EDITOR", 1)).toBe(true);
     expect(wouldRemoveLastAdmin("ADMIN", "ADMIN", 1)).toBe(false);
     expect(wouldRemoveLastAdmin("ADMIN", "EDITOR", 2)).toBe(false);
   });
@@ -39,3 +38,5 @@ describe("unit DNS change isolation", () => {
     expect(() => replaceUnitValue(before, "192.0.2.9", "192.0.2.3")).toThrow();
   });
 });
+
+it("offers exactly the two unit roles", () => { expect(unitRoleLabels).toEqual({ EDITOR: "成員", ADMIN: "管理員" }); });

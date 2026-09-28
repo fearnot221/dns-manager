@@ -296,7 +296,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await assignUnitManager(admin, unitId, viewer.studentId!);
     expect(await unitAccess(viewer, unitId, "manage")).toBe("ADMIN");
     const other = await createUnit(admin, `other-manager-${crypto.randomUUID()}`, editor.studentId!);
-    await expect(manageUnit(outsider, other.unit.id, { action: "member", userId: editor.id, role: "VIEWER" })).rejects.toMatchObject({ status: 403 });
+    await expect(manageUnit(outsider, other.unit.id, { action: "member", userId: editor.id, role: "EDITOR" })).rejects.toMatchObject({ status: 403 });
     expect(await db.auditLog.count({ where: { userId: admin.id, action: "ASSIGN_UNIT_MANAGER" } })).toBe(3);
   });
   it("rejects invalid manager assignment without changing membership", async () => {
@@ -308,7 +308,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const duplicate = await account();
     await db.user.update({ where: { id: duplicate.id }, data: { studentId: viewer.studentId } });
     await expect(assignUnitManager(admin, unitId, viewer.studentId!)).rejects.toMatchObject({ status: 409 });
-    expect(await unitAccess(viewer, unitId, "view")).toBe("VIEWER");
+    expect(await unitAccess(viewer, unitId, "view")).toBe("EDITOR");
     expect(await db.unitMember.count({ where: { unitId } })).toBe(3);
     await expect(assignUnitManager(admin, `missing-${crypto.randomUUID()}`, editor.studentId!)).rejects.toMatchObject({ status: 404 });
   });
@@ -342,12 +342,12 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
   it("does not accept arbitrary unit ids or legacy personal policy settings", async () => {
     await db.systemSetting.create({ data: { key: "dns-application-policy", value: { allowedTypes: ["A"], ownership: "ANY" } } });
     expect((await readApplicationPolicy()).ownership).toBe("UNIT_ONLY");
-    for (const actor of [outsider, admin, viewer]) await expect(assertApplicationPolicy(actor, ["A"], unitId)).rejects.toMatchObject({ status: 403 });
+    for (const actor of [outsider, admin]) await expect(assertApplicationPolicy(actor, ["A"], unitId)).rejects.toMatchObject({ status: 403 });
     await expect(assertApplicationPolicy(editor, ["A"])).rejects.toMatchObject({ status: 403 });
   });
-  it("creates an admin, enrolls as viewer and hides outsider units", async () => {
+  it("creates an admin, enrolls as member and hides outsider units", async () => {
     expect(await unitAccess(creator, unitId, "manage")).toBe("ADMIN");
-    expect(await unitAccess(viewer, unitId, "view")).toBe("VIEWER");
+    expect(await unitAccess(viewer, unitId, "view")).toBe("EDITOR");
     expect(await listUnits(outsider)).toEqual([]);
     expect((await unitDetail(viewer, unitId)).allowlist).toEqual([]);
     expect((await unitDetail(creator, unitId)).allowlist).toHaveLength(3);
@@ -398,7 +398,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await enrollAllowlistedUser(outsider.id);
     await expect(unitAccess(outsider, unitId, "view")).rejects.toMatchObject({ status: 403 });
     await manageAllowlist(creator, unitId, outsider.studentId!);
-    expect(await unitAccess(outsider, unitId, "view")).toBe("VIEWER");
+    expect(await unitAccess(outsider, unitId, "view")).toBe("EDITOR");
     await manageAllowlist(creator, unitId, outsider.studentId!, true);
     await enrollAllowlistedUser(outsider.id);
     await expect(unitAccess(outsider, unitId, "view")).rejects.toMatchObject({ status: 403 });
@@ -410,9 +410,9 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const target = await account();
     await db.user.update({ where: { id: target.id }, data: { studentId } });
     await Promise.all([enrollAllowlistedUser(target.id), enrollAllowlistedUser(target.id)]);
-    expect(await unitAccess(target, unitId, "view")).toBe("VIEWER");
+    expect(await unitAccess(target, unitId, "view")).toBe("EDITOR");
     expect(await db.auditLog.count({ where: { userId: target.id, action: "ENROLL_UNIT_ALLOWLIST" } })).toBe(1);
-    await expect(assertApplicationPolicy(target, ["A"], unitId)).rejects.toMatchObject({ status: 403 });
+    await expect(assertApplicationPolicy(target, ["A"], unitId)).resolves.toBeUndefined();
   });
   it("denies outsider, editor, disabled and ambiguous identities and honors pending revocation", async () => {
     for (const actor of [viewer, editor, outsider]) await expect(manageAllowlist(actor, unitId, outsider.studentId!)).rejects.toMatchObject({ status: 403 });
@@ -454,15 +454,15 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
   it("serializes concurrent demotions and preserves one administrator", async () => {
     await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "ADMIN" });
     const results = await Promise.allSettled([
-      manageUnit(admin, unitId, { action: "member", userId: creator.id, role: "VIEWER" }),
-      manageUnit(admin, unitId, { action: "member", userId: editor.id, role: "VIEWER" }),
+      manageUnit(admin, unitId, { action: "member", userId: creator.id, role: "EDITOR" }),
+      manageUnit(admin, unitId, { action: "member", userId: editor.id, role: "EDITOR" }),
     ]);
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(await db.unitMember.count({ where: { unitId, role: "ADMIN" } })).toBe(1);
   });
-  it("rejects viewer and cross-unit change submissions without touching DNS", async () => {
+  it("allows member submissions and rejects cross-unit changes without touching DNS", async () => {
     const source = await sourceRecord();
-    await expect(requestUnitChange(viewer, unitId, changeInput(source))).rejects.toMatchObject({ status: 403 });
+    await expect(requestUnitChange(viewer, unitId, changeInput(source))).resolves.toHaveProperty("id");
     const other = await createUnit(admin, `other-${crypto.randomUUID()}`, editor.studentId!);
     await expect(requestUnitChange(editor, other.unit.id, changeInput(source))).rejects.toMatchObject({ status: 404 });
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
@@ -504,10 +504,10 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
     expect((await reviewUnitRequest(admin, pending.id, "REJECT", "DNS 已更新，請重新申請")).status).toBe("REJECTED");
   });
-  it("rechecks membership on approval after demotion", async () => {
+  it("rechecks membership on approval after removal", async () => {
     const source = await sourceRecord();
     const pending = await requestUnitChange(editor, unitId, changeInput(source));
-    await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "VIEWER" });
+    await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: null });
     await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 409 });
     await reviewUnitRequest(admin, pending.id, "REJECT");
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
@@ -523,8 +523,8 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
   it("creates shared DNS only after review; multiple values may be reviewed in any order", async () => {
     const input = { unitId, applicantName: "測試", applicantEmail: "contact@example.com", applicantUnit: "forged display name", applicantExtension: "1234", records: ["192.0.2.40", "192.0.2.41"].map((content) => ({ zoneName: zone.name, recordName: `new-${crypto.randomUUID().slice(0, 8)}.example.com.`, recordType: "A", content, ttl: 300, purpose: "unit application" })) };
     input.records[1].recordName = input.records[0].recordName;
-    await expect(saveApplication(viewer, input, httpRequest())).rejects.toMatchObject({ status: 403 });
-    const saved = await saveApplication(editor, input, httpRequest());
+    await expect(saveApplication(outsider, input, httpRequest())).rejects.toMatchObject({ status: 403 });
+    const saved = await saveApplication(viewer, input, httpRequest());
     const requests = await db.dnsRecordRequest.findMany({ where: { applicationId: saved.applicationId } });
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
     expect(requests[0].applicantUnit).not.toBe("forged display name");
@@ -564,11 +564,11 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const expectedHash = rrsetHash(zone.rrsets[0]);
     await inspectUnitRecord(viewer, unitId, { recordId: source.id, expectedHash, note: "已停用服務" });
     const input = { operation: "DELETE" as const, recordId: source.id, expectedHash, purpose: "服務退役" };
-    await expect(requestUnitChange(viewer, unitId, input)).rejects.toMatchObject({ status: 403 });
-    const pending = await requestUnitChange(editor, unitId, input);
+    await expect(requestUnitChange(outsider, unitId, input)).rejects.toMatchObject({ status: 403 });
+    const pending = await requestUnitChange(viewer, unitId, input);
     expect(await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).toMatchObject({ operation: "DELETE", content: "192.0.2.1", status: "PENDING" });
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
-    await expect(requestUnitChange(editor, unitId, input)).rejects.toMatchObject({ status: 409 });
+    await expect(requestUnitChange(viewer, unitId, input)).rejects.toMatchObject({ status: 409 });
     await expect(requestUnitChange(editor, unitId, { ...changeInput(source), expectedHash })).rejects.toMatchObject({ status: 409 });
     await expect(reviewUnitRequest(creator, pending.id, "APPROVE")).rejects.toMatchObject({ status: 403 });
     const results = await Promise.allSettled([reviewUnitRequest(admin, pending.id, "APPROVE"), reviewUnitRequest(admin, pending.id, "APPROVE")]);
@@ -579,11 +579,11 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect(await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).toMatchObject({ unitId: null });
     expect((await unitDetail(viewer, unitId)).records).toHaveLength(0);
   });
-  it.each(["stale", "demotion", "reassignment", "disabled", "cancelled"])("blocks deletion after %s and makes no DNS write", async (scenario) => {
+  it.each(["stale", "removal", "reassignment", "disabled", "cancelled"])("blocks deletion after %s and makes no DNS write", async (scenario) => {
     const source = await sourceRecord();
     const pending = await requestUnitChange(editor, unitId, { operation: "DELETE", recordId: source.id, expectedHash: source.expectedHash, purpose: "退役" });
     if (scenario === "stale") zone.rrsets[0].records.push({ content: "192.0.2.88", disabled: false });
-    if (scenario === "demotion") await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "VIEWER" });
+    if (scenario === "removal") await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: null });
     if (scenario === "reassignment") await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId: null } });
     if (scenario === "disabled") await db.user.update({ where: { id: editor.id }, data: { disabled: true } });
     if (scenario === "cancelled") await db.dnsRecordRequest.update({ where: { id: pending.id }, data: { status: "CANCELLED" } });
@@ -608,7 +608,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const source = await sourceRecord();
     const input = { operation: "DELETE" as const, recordId: source.id, expectedHash: source.expectedHash, purpose: "退役" };
     zone.rrsets[0].ttl = 600;
-    await expect(requestUnitChange(editor, unitId, input)).rejects.toMatchObject({ status: 409 });
+    await expect(requestUnitChange(viewer, unitId, input)).rejects.toMatchObject({ status: 409 });
     await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { recordType: "SOA" } });
     // A valid SOA identity cannot enter the supported application types.
     const metadata = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });

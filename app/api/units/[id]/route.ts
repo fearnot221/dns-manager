@@ -14,7 +14,7 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("delete") }).strict(),
   z.object({ action: z.literal("assign-manager"), studentId: z.string().trim().min(1).max(100) }).strict(),
   z.object({ action: z.literal("allowlist"), studentId: z.string().trim().min(1).max(100), remove: z.boolean().optional() }).strict(),
-  z.object({ action: z.literal("member"), userId: z.string().min(1).max(100), role: z.enum(["VIEWER", "EDITOR", "ADMIN"]).nullable() }).strict(),
+  z.object({ action: z.literal("member"), userId: z.string().min(1).max(100), role: z.enum(["EDITOR", "ADMIN"]).nullable() }).strict(),
 ]);
 type Context = { params: Promise<{ id: string }> };
 export async function GET(_request: Request, { params }: Context) {

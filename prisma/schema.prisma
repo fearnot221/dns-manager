@@ -290,7 +290,6 @@ model InspectionTask {
 }
 
 enum UnitRole {
-  VIEWER
   EDITOR
   ADMIN
 }
@@ -334,7 +333,7 @@ model UnitAllowlist {
 model UnitMember {
   unitId String
   userId String
-  role UnitRole @default(VIEWER)
+  role UnitRole @default(EDITOR)
   joinedAt DateTime @default(now())
   unit DnsUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -148,3 +148,13 @@ it("restricts unit rename and deletion to system admins and validates input", as
   expect(editUnit).toHaveBeenLastCalledWith(expect.objectContaining({ id: "admin" }), "unit-1", { action: "rename", name: "Lab" });
   expect((await PATCH(req({ action: "delete" }), ctx)).status).toBe(200);
 });
+
+it("accepts member/admin roles and removal but rejects the retired viewer role", async () => {
+  expect((await PATCH(req({ action: "member", userId: "member", role: "VIEWER" }), ctx)).status).toBe(400);
+  expect(manageUnit).not.toHaveBeenCalled();
+  vi.mocked(manageUnit).mockResolvedValue({ saved: true });
+  for (const role of ["EDITOR", "ADMIN", null]) {
+    expect((await PATCH(req({ action: "member", userId: "member", role }), ctx)).status).toBe(200);
+    expect(manageUnit).toHaveBeenLastCalledWith(expect.anything(), "unit-1", { action: "member", userId: "member", role });
+  }
+});

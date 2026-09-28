@@ -32,7 +32,7 @@ export async function manageAllowlist(actor: Actor, unitId: string, rawStudentId
       const userId = candidates[0]?.id ?? null;
       if (before?.userId && before.userId !== userId) throw new ApiError("此學號已對應其他帳號，請先移除原使用者再重新新增。", 409);
       await tx.unitAllowlist.upsert({ where, create: { unitId, studentId, userId }, update: { userId } });
-      if (userId) await tx.unitMember.upsert({ where: { unitId_userId: { unitId, userId } }, create: { unitId, userId, role: "VIEWER" }, update: {} });
+      if (userId) await tx.unitMember.upsert({ where: { unitId_userId: { unitId, userId } }, create: { unitId, userId, role: "EDITOR" }, update: {} });
     }
     await unitAudit(tx, actor, remove ? "REMOVE_UNIT_ALLOWLIST" : "ADD_UNIT_ALLOWLIST", before, { unitId, studentId, removed: remove });
     return { saved: true };

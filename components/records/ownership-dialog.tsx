@@ -1,4 +1,5 @@
 "use client";
+import { useFormDraft, type FormDrafts } from "@/lib/client/form-draft";
 import { useResource } from "@/lib/client/use-resource";
 import { Select } from "@/components/ui/select";
 import { ResourceError } from "@/components/ui/resource-error";
@@ -10,11 +11,12 @@ import { apiRequest, jsonRequest } from "@/lib/client/api";
 import { zoneCategory } from "@/lib/dns/zone-category";
 import type { InventoryRecord } from "@/lib/inventory/types";
 
-export function OwnershipDialog({ record, inspection = false, systemAdmin = false, canDeleteInspections = false, onClose, onSaved }: { record: InventoryRecord; inspection?: boolean; systemAdmin?: boolean; canDeleteInspections?: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
+export function OwnershipDialog({ drafts, record, inspection = false, systemAdmin = false, canDeleteInspections = false, onClose, onSaved }: { drafts?: FormDrafts; record: InventoryRecord; inspection?: boolean; systemAdmin?: boolean; canDeleteInspections?: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
   const [pending, setPending] = useState(false); const [error, setError] = useState(""); const sending = useRef(false);
   const [assigning, setAssigning] = useState(false);
   const errorId = useId();
   const owner = record.ownership;
+  const { attachForm, onChange: captureDraft, clear: clearDraft } = useFormDraft(drafts, JSON.stringify([owner.id, owner.updatedAt, record.zoneName, record.recordName, record.recordType, record.content]));
   const canAssignUnit = systemAdmin && zoneCategory(record.zoneName) === "forward";
   const errorRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
@@ -33,13 +35,14 @@ export function OwnershipDialog({ record, inspection = false, systemAdmin = fals
     const inspecting = inspection && (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "inspect-and-metadata";
     try {
       await apiRequest("/api/inventory", jsonRequest("PUT", { id: owner.id, zoneName: record.zoneName, recordName: record.recordName, recordType: record.recordType, content: record.content, expectedUpdatedAt: owner.updatedAt, mode: inspecting ? "inspect-and-metadata" : "metadata", note: inspecting ? data.get("note") : "", applicantName: data.get("applicantName"), applicantEmail: data.get("applicantEmail"), applicantUnit: data.get("applicantUnit"), applicantExtension: data.get("applicantExtension"), purpose: data.get("purpose") }));
+      clearDraft();
       toast.success(inspecting ? "已儲存歸屬資料並新增清查紀錄。" : "已儲存歸屬資料，DNS 解析內容未變更。"); await onSaved();
     } catch (error) { setError(error instanceof Error ? error.message : "儲存失敗，請重試。"); }
     finally { sending.current = false; setPending(false); }
   }
   if (assigning && inspection && canAssignUnit) return <UnitAssignmentDialog record={record} onClose={onClose} onBack={() => setAssigning(false)} onSaved={onSaved} />;
   return <Dialog title={inspection ? "DNS 清查" : "DNS 歸屬資料"} description="歸屬與清查資料獨立保存，不會改變 DNS 解析。" pending={pending} onClose={onClose}>
-    <form onSubmit={submit} aria-describedby={error ? errorId : undefined}><fieldset disabled={pending} className="dialog-fields"><div className="modal-body">
+    <form ref={attachForm} onChange={captureDraft} onSubmit={submit} aria-describedby={error ? errorId : undefined}><fieldset disabled={pending} className="dialog-fields"><div className="modal-body">
       <div className="review-record"><strong>{record.recordName}</strong><span>{record.recordType} · {record.zoneName}</span><code>{record.content}</code></div>
       {inspection && <div><p className="description">所屬單位：{owner.unitId ? owner.unitName || owner.applicantUnit : "尚未指派"}</p>{canAssignUnit && <button type="button" className="button" onClick={() => { setAssigning(true); setError(""); }}>指派單位</button>}</div>}
       <h3>歸屬資料</h3>

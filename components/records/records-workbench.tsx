@@ -1,4 +1,5 @@
 "use client";
+import type { FormDrafts } from "@/lib/client/form-draft";
 
 import { matchesDnsRecord } from "@/lib/dns/search";
 import { Plus, Search, XCircle } from "lucide-react";
@@ -30,6 +31,7 @@ export function RecordsWorkbench({ zoneName, systemAdmin = false, canDeleteInspe
   const [query, setQuery] = useState("");
   const [type, setType] = useState("ALL");
   const [view, setView] = useState<ViewMode>("table");
+  const [inspectionDrafts] = useState<FormDrafts>(() => new Map());
   const [ownership, setOwnership] = useState<InventoryRecord | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
 
@@ -118,7 +120,7 @@ export function RecordsWorkbench({ zoneName, systemAdmin = false, canDeleteInspe
           : view === "grid" ? <RecordGrid {...viewProps} />
           : <GroupedRecords {...viewProps} mode={view} />}
 
-      {ownership && <OwnershipDialog canDeleteInspections={canDeleteInspections} systemAdmin={systemAdmin} record={ownership} inspection={inspection} onClose={() => setOwnership(null)} onSaved={async () => { setOwnership(null); await load(); }} />}
+      {ownership && <OwnershipDialog drafts={inspectionDrafts} canDeleteInspections={canDeleteInspections} systemAdmin={systemAdmin} record={ownership} inspection={inspection} onClose={() => setOwnership(null)} onSaved={async () => { setOwnership(null); await load(); }} />}
       {dialog && <RecordDialog zone={zoneName} dialog={dialog} onClose={() => setDialog(null)} onSaved={async () => { setDialog(null); await load(); }} />}
     </>
   );
