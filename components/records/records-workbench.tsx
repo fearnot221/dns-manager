@@ -1,5 +1,6 @@
 "use client";
 
+import { matchesDnsRecord } from "@/lib/dns/search";
 import { Plus, Search, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -53,13 +54,11 @@ export function RecordsWorkbench({ zoneName, systemAdmin = false, canDeleteInspe
     [rrsets],
   );
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
     return rrsets.filter((rrset) => {
       if (type !== "ALL" && rrset.type !== type) return false;
-      const searchable = `${rrset.name} ${rrset.type} ${rrset.records.map((record) => record.content).join(" ")}`.toLowerCase();
-      return searchable.includes(needle);
+      return matchesDnsRecord(query, rrset.name, zoneName, [rrset.type, ...rrset.records.map((record) => record.content)]);
     });
-  }, [rrsets, query, type]);
+  }, [rrsets, query, type, zoneName]);
 
   const canCreate = ["EDITOR", "ADMIN", "SUPER_ADMIN"].includes(permission);
   const canMutate = (rrset: HashedRRSet) => canCreate && (permission !== "EDITOR" || !protectedTypes.has(rrset.type));

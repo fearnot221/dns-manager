@@ -20,3 +20,9 @@ it("sorts group labels naturally without mutating input records", () => {
   expect(groupInventory(input, "applicantUnit", "all", "").map(([label]) => label)).toEqual(["Lab 2", "Lab 10"]);
   expect(input).toEqual([record, other]);
 });
+it("finds only apex records for @ while retaining inspection filters", () => {
+  const apex = { ...record, recordName: "EXAMPLE.COM" };
+  const child = { ...record, ownership: { ...record.ownership, applicantEmail: "contact@example.com" } };
+  expect(groupInventory([apex, child], "zoneName", "all", " @ ")[0][1]).toEqual([apex]);
+  expect(groupInventory([apex, child], "zoneName", "reviewed", "@")).toEqual([]);
+});
