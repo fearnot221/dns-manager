@@ -140,9 +140,9 @@ export function DnsApplicationForm() {
 
   if (unitResource.loading) return <p role="status">正在確認單位與申請權限…</p>;
   if (unitResource.error) return <ResourceError message={unitResource.error} retry={unitResource.reload} />;
-  if (!selectedUnit) return <EmptyState title={workspace.active ? "此單位目前無法申請" : "尚未加入單位"} description={workspace.active ? "須為已核准單位的編輯者或管理員才能申請。請聯絡單位管理員確認權限。" : "請提供學號給單位管理員或系統管理員，由管理員將你加入單位並授予編輯權限。"} action={<Link className="button" href="/dns">查看單位 DNS</Link>} />;
+  if (!selectedUnit) return <EmptyState title={workspace.active ? "此單位目前無法申請" : "尚未加入單位"} description={workspace.active ? "須為已啟用單位的編輯者或管理員才能申請。請聯絡單位管理員確認權限。" : "請提供學號給單位管理員或系統管理員，由管理員將你加入單位並授予編輯權限。"} action={<Link className="button" href="/dns">查看單位 DNS</Link>} />;
 
-  return <>{policyResource.error && <ResourceError message="無法取得申請規則，暫時無法送出申請。" retry={policyResource.reload} />}<p className="record-results" role="status">{policyResource.error || (policyResource.loading ? "載入申請規則…" : "必須加入已核准的單位，並具備該單位編輯權限才能申請 DNS。")}</p><form className="card dns-application" onSubmit={submit} onChange={() => { dirty.current = true; }} aria-label="申請 DNS" aria-busy={pending}>
+  return <>{policyResource.error && <ResourceError message="無法取得申請規則，暫時無法送出申請。" retry={policyResource.reload} />}<p className="record-results" role="status">{policyResource.error || (policyResource.loading ? "載入申請規則…" : "必須加入已啟用的單位，並具備該單位編輯權限才能申請 DNS。")}</p><form className="card dns-application" onSubmit={submit} onChange={() => { dirty.current = true; }} aria-label="申請 DNS" aria-busy={pending}>
     <div className="modal-body">
       <fieldset className="application-section" disabled={pending}>
         <legend>申請人資料</legend>
@@ -150,10 +150,10 @@ export function DnsApplicationForm() {
         <div className="applicant-grid">
           <label>申請人姓名<input name="applicantName" autoComplete="name" required maxLength={100} placeholder="請填寫姓名" /></label>
           <label>申請單位<input value={selectedUnit?.name || "請先選擇單位"} readOnly /></label>
-          <label>申請人電子郵件（選填）<input name="applicantEmail" type="email" autoComplete="email" maxLength={320} placeholder="可聯絡的電子郵件" /></label>
+          <label>申請人電子郵件<input name="applicantEmail" type="email" required autoComplete="email" maxLength={320} placeholder="可聯絡的電子郵件" /></label>
           <label>單位分機<input name="applicantExtension" inputMode="numeric" autoComplete="tel-extension" required pattern="[0-9]{1,10}" maxLength={10} title="請填入 1–10 位數字" placeholder="例如 1234" /></label>
         </div>
-        <p className="application-help">姓名與分機為必填，聯絡資料同一份申請只需填一次。核准後會帶入 DNS 清查資料。</p>
+        <p className="application-help">姓名、電子郵件與分機為必填，聯絡資料同一份申請只需填一次。核准後會帶入 DNS 清查資料。</p>
       </fieldset>
 
       <section className="application-records" aria-labelledby="application-records-title">

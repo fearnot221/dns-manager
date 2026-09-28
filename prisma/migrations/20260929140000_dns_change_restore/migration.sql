@@ -1,0 +1,8 @@
+ALTER TABLE "AuditLog" ADD COLUMN "dnsScope" TEXT;
+CREATE TABLE "DnsChangeRestore" (
+  "auditId" TEXT NOT NULL PRIMARY KEY,
+  "requestedBy" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "completedAt" TIMESTAMP(3),
+  CONSTRAINT "DnsChangeRestore_auditId_fkey" FOREIGN KEY ("auditId") REFERENCES "AuditLog"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);

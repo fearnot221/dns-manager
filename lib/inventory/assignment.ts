@@ -6,7 +6,7 @@ import { isGlobalAdmin } from "@/lib/auth/owner";
 import type { Actor } from "@/lib/dns/types";
 import { powerdns } from "@/lib/powerdns/client";
 import { zoneCategory } from "@/lib/dns/zone-category";
-import { lockActiveUser, lockUnit, requireApprovedUnit, requireUnitDatabase } from "@/lib/units/service";
+import { lockActiveUser, lockUnit, requireActiveUnit, requireUnitDatabase } from "@/lib/units/service";
 import { connectionScope, recordId } from "./service";
 
 export type UnitAssignment = { id: string; zoneName: string; recordName: string; recordType: string; content: string; expectedUpdatedAt: string | null; unitId: string };
@@ -22,7 +22,7 @@ export async function assignRecordUnit(actor: Actor, input: UnitAssignment) {
       const initial = await tx.dnsRecordMetadata.findUnique({ where: { id: input.id } });
       // Share the unit locks used by request submission/review and serialize transfers.
       for (const id of [...new Set([input.unitId, ...(initial?.unitId ? [initial.unitId] : [])])].sort()) await lockUnit(tx, id);
-      await requireApprovedUnit(tx, input.unitId);
+      await requireActiveUnit(tx, input.unitId);
       await tx.$queryRaw`SELECT "id" FROM "DnsRecordMetadata" WHERE "id" = ${input.id} FOR UPDATE`;
       const current = await tx.dnsRecordMetadata.findUnique({ where: { id: input.id } });
       if ((current?.updatedAt.toISOString() ?? null) !== input.expectedUpdatedAt || current?.unitId !== initial?.unitId) throw new ApiError("歸屬資料已更新，請重新載入後再指派。", 409);

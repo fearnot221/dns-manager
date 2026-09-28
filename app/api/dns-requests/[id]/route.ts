@@ -1,3 +1,4 @@
+import { withDnsZoneLock } from "@/lib/dns-changes/lock";
 import { auditMutation } from "@/lib/audit/mutation";
 import type { RecordType, RRSet } from "@/lib/dns/types";
 import { captureApprovedRequest } from "@/lib/inventory/service";
@@ -13,7 +14,7 @@ import { findDevRequest, isDevRequestStore, reviewDevRequest } from "@/lib/reque
 import { reviewUnitRequest } from "@/lib/units/review";
 
 async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns-requests/[id]">) {
-  let actor;
+  let actor: Awaited<ReturnType<typeof requireActor>> | undefined;
   let recordRequest;
   try {
     actor = await requireActor();
@@ -28,6 +29,7 @@ async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns
     if (recordRequest!.status !== "PENDING") throw new ApiError("This request has already been reviewed", 409);
 
     if (decision.decision === "APPROVE") {
+      await withDnsZoneLock(recordRequest!.zoneName, async () => {
       const recordType = recordRequest!.recordType as RecordType;
       const zone = await powerdns.getZone(recordRequest!.zoneName);
       const current = zone.rrsets.find((rrset) => rrset.name === recordRequest!.recordName && rrset.type === recordType);
@@ -39,10 +41,11 @@ async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns
           recordRequest!.content,
         );
         await powerdns.replaceRRSet(recordRequest!.zoneName, next);
-        await logAuditEvent({ actor, zone: recordRequest!.zoneName, recordName: recordRequest!.recordName, recordType, action: "APPLY_APPROVED_DNS_RECORD", before: current, after: next, success: true, request });
+        await logAuditEvent({ actor: actor!, zone: recordRequest!.zoneName, recordName: recordRequest!.recordName, recordType, action: "APPLY_APPROVED_DNS_RECORD", before: current, after: next, success: true, request });
       }
       // Keep approval retryable if storing ownership fails after PowerDNS succeeds.
-      await captureApprovedRequest(actor, recordRequest!);
+      await captureApprovedRequest(actor!, recordRequest!);
+      });
     }
 
     const reviewed = isDevRequestStore()

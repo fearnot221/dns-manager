@@ -4,7 +4,7 @@ import { prepareApplication } from "@/lib/requests/application";
 import { createDevApplication, listDevRequests } from "@/lib/requests/dev-store";
 import type { Actor } from "@/lib/dns/types";
 
-const contact = { unitId: "unit-1", applicantName: "王小明", applicantUnit: "電子工程學系", applicantExtension: "01234" };
+const contact = { unitId: "unit-1", applicantName: "王小明", applicantEmail: "contact@example.com", applicantUnit: "電子工程學系", applicantExtension: "01234" };
 const record = { zoneName: "example.com", name: "lab", type: "A", content: "192.0.2.10", ttl: 300 };
 const zones = ["example.com.", "student.example.com."];
 const actor = (): Actor => ({ id: crypto.randomUUID(), email: "user@example.com", globalRole: "USER", zoneRoles: {} });
@@ -15,7 +15,9 @@ describe("multi-record DNS applications", () => {
     expect(input.applicantEmail).toBe("contact@example.com");
     expect(input.records[0].purpose).toBe("實驗室網站");
     expect(() => prepareApplication({ ...contact, applicantEmail: "invalid", records: [record] }, zones)).toThrow("申請人電子郵件");
-    expect(prepareApplication({ ...contact, applicantEmail: "", records: [record] }, zones).applicantEmail).toBe("");
+    for (const applicantEmail of [undefined, "", " "]) {
+      expect(() => prepareApplication({ ...contact, applicantEmail, records: [record] }, zones)).toThrow("申請人電子郵件");
+    }
   });
   it("normalizes every record and shares applicant details across different zones", () => {
     const input = prepareApplication({ ...contact, applicantName: " 王小明 ", records: [record, { ...record, zoneName: "student.example.com", type: "CNAME", content: "Target.Example.NET" }] }, zones);

@@ -6,21 +6,23 @@ import { powerdns } from "@/lib/powerdns/client";
 import { connectionScope, recordId } from "@/lib/inventory/service";
 import { isGlobalAdmin } from "@/lib/auth/owner";
 import { ApiError } from "@/lib/api/respond";
-import { lockActiveUser, lockUnit, requireUnitDatabase, unitAccess, unitAudit, requireApprovedUnit } from "./service";
+import { lockActiveUser, lockUnit, requireUnitDatabase, unitAccess, unitAudit, requireActiveUnit } from "./service";
 import { replaceUnitValue, deleteUnitValue } from "./change";
 import { normalizeRecordContent } from "@/lib/dns/names";
 import { rrsetHash } from "@/lib/dns/rrset";
 import { assertApplicationPolicy } from "@/lib/requests/policy";
 
+type UnitOwnershipInput = { expectedUpdatedAt: string; applicantName: string; applicantEmail: string; applicantExtension: string; purpose: string };
+
 export async function unitDetail(actor: Actor, unitId: string, mode: "dns" | "manage" = "dns") {
   requireUnitDatabase();
   const role = await unitAccess(actor, unitId, "view");
   if (mode === "manage" && role !== "ADMIN") throw new ApiError("只有單位管理員或系統管理員可以管理單位。", 403);
-  const unit = await db.dnsUnit.findUnique({ where: { id: unitId }, select: { id: true, name: true, status: true, reviewNote: true, members: { select: { userId: true, role: true, user: { select: { name: true, studentId: true, disabled: true } } } } } });
+  const unit = await db.dnsUnit.findUnique({ where: { id: unitId }, select: { id: true, name: true, status: true, members: { select: { userId: true, role: true, user: { select: { name: true, studentId: true, disabled: true } } } } } });
   if (!unit) throw new ApiError("找不到單位。", 404);
   const members = unit.members.map((m) => ({ userId: m.userId, role: m.role, label: m.user.name || m.user.studentId || "未提供姓名", studentId: m.user.studentId, disabled: m.user.disabled }));
   const allowlist = role === "ADMIN" ? await db.unitAllowlist.findMany({ where: { unitId }, select: { studentId: true, userId: true }, orderBy: { studentId: "asc" } }) : [];
-  const summary = { allowlist, unit: { id: unit.id, name: unit.name, status: unit.status, reviewNote: unit.reviewNote }, role, canReview: isGlobalAdmin(actor), canApply: unit.status === "APPROVED" && unit.members.some((m) => m.userId === actor.id && ["EDITOR", "ADMIN"].includes(m.role)), members };
+  const summary = { allowlist, unit: { id: unit.id, name: unit.name, status: unit.status }, role, systemAdmin: isGlobalAdmin(actor), canApply: unit.status === "APPROVED" && unit.members.some((m) => m.userId === actor.id && ["EDITOR", "ADMIN"].includes(m.role)), members };
   if (mode === "manage" && !isGlobalAdmin(actor) || unit.status !== "APPROVED") return { ...summary, records: [], recordsError: "" };
   const saved = await db.dnsRecordMetadata.findMany({ where: { unitId }, include: { inspections: { orderBy: { inspectedAt: "desc" }, select: { id: true, inspectedAt: true, inspectorName: true, note: true } } } });
   const scope = await connectionScope();
@@ -40,7 +42,7 @@ export async function unitDetail(actor: Actor, unitId: string, mode: "dns" | "ma
   return { ...summary, records, recordsError: unavailable.length ? `有 ${unavailable.length} 個網域暫時無法取得 DNS，清單可能不完整；成員管理不受影響。` : "" };
 }
 
-export async function requestUnitChange(actor: Actor, unitId: string, input: { recordId: string; purpose: string; expectedHash: string } & ({ operation?: "UPDATE"; content: string; ownership?: { expectedUpdatedAt: string; applicantName: string; applicantEmail: string; applicantExtension: string; purpose: string } } | { operation: "DELETE" })) {
+export async function requestUnitChange(actor: Actor, unitId: string, input: { recordId: string; purpose: string; expectedHash: string } & ({ operation?: "UPDATE"; content: string; ownership?: UnitOwnershipInput } | { operation: "DELETE" })) {
   requireUnitDatabase();
   return db.$transaction(async (tx) => {
     await lockActiveUser(tx, actor.id);
@@ -71,23 +73,32 @@ export async function requestUnitChange(actor: Actor, unitId: string, input: { r
   }, { timeout: 30000 });
 }
 
-/** Unit inspections append history only; they never edit ownership or publish DNS. */
-export async function inspectUnitRecord(actor: Actor, unitId: string, input: { recordId: string; expectedHash: string; note: string }) {
+/** Unit members can update contact/purpose fields and append history, never reassign units or publish DNS. */
+export async function inspectUnitRecord(actor: Actor, unitId: string, input: { recordId: string; expectedHash: string; note: string; ownership?: UnitOwnershipInput }) {
   requireUnitDatabase();
   return db.$transaction(async (tx) => {
     await lockActiveUser(tx, actor.id);
     await lockUnit(tx, unitId);
-    await requireApprovedUnit(tx, unitId);
+    await requireActiveUnit(tx, unitId);
     const member = await tx.unitMember.findUnique({ where: { unitId_userId: { unitId, userId: actor.id } } });
     if (!member) throw new ApiError("只有單位成員可以記錄清查。", 403);
+    await tx.$queryRaw`SELECT "id" FROM "DnsRecordMetadata" WHERE "id" = ${input.recordId} FOR UPDATE`;
     const source = await tx.dnsRecordMetadata.findUnique({ where: { id: input.recordId } });
     if (!source || source.unitId !== unitId) throw new ApiError("找不到此單位的 DNS 紀錄。", 404);
     if (source.id !== recordId(await connectionScope(), source)) throw new ApiError("DNS 連線已變更，請重新載入。", 409);
     const zone = await powerdns.getZone(source.zoneName);
     const current = zone.rrsets.find((r) => r.name === source.recordName && r.type === source.recordType);
     if (!current?.records.some((r) => r.content === source.content) || rrsetHash(current) !== input.expectedHash) throw new ApiError("DNS 紀錄已變更，請重新載入後再清查。", 409);
+    let fields;
+    if (input.ownership) {
+      const { expectedUpdatedAt, ...contact } = input.ownership;
+      if (source.updatedAt.toISOString() !== expectedUpdatedAt) throw new ApiError("清查資料已更新，請重新載入後再儲存。", 409);
+      const unit = await tx.dnsUnit.findUniqueOrThrow({ where: { id: unitId }, select: { name: true } });
+      fields = { ...contact, applicantUnit: unit.name };
+      await tx.dnsRecordMetadata.update({ where: { id: source.id }, data: { ...fields, updatedBy: actor.email } });
+    }
     const saved = await tx.dnsInspection.create({ data: { recordId: source.id, inspectorId: actor.id, inspectorEmail: actor.email, inspectorName: actor.name || actor.studentId || "單位成員", note: input.note } });
-    await unitAudit(tx, actor, "INSPECT_UNIT_DNS", null, { unitId, recordId: source.id, inspectionId: saved.id, note: input.note });
+    await unitAudit(tx, actor, "INSPECT_UNIT_DNS", input.ownership ? { applicantName: source.applicantName, applicantEmail: source.applicantEmail, applicantUnit: source.applicantUnit, applicantExtension: source.applicantExtension, purpose: source.purpose } : null, { ...fields, unitId, recordId: source.id, inspectionId: saved.id, note: input.note });
     return { id: saved.id };
   }, { timeout: 30000 });
 }

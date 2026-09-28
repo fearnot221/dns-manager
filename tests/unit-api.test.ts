@@ -3,7 +3,7 @@ vi.mock("@/lib/units/allowlist", () => ({ manageAllowlist: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class AuthError extends Error {} }));
 vi.mock("@/lib/audit/service", () => ({ logAuditEvent: vi.fn(async () => undefined) }));
-vi.mock("@/lib/units/service", () => ({ createUnit: vi.fn(), listUnits: vi.fn(), manageUnit: vi.fn(), reviewUnit: vi.fn(), assignUnitManager: vi.fn() }));
+vi.mock("@/lib/units/service", () => ({ createUnit: vi.fn(), listUnits: vi.fn(), manageUnit: vi.fn(), assignUnitManager: vi.fn() }));
 vi.mock("@/lib/units/records", () => ({ unitDetail: vi.fn(), requestUnitChange: vi.fn(), inspectUnitRecord: vi.fn() }));
 vi.mock("@/lib/requests/dev-store", () => ({ isDevRequestStore: () => false }));
 vi.mock("@/lib/db/client", () => ({ db: { dnsRecordRequest: { findMany: vi.fn() } } }));
@@ -117,6 +117,21 @@ describe("unit API boundaries", () => {
     vi.mocked(requestUnitChange).mockResolvedValue({ id: "r" });
     expect((await change(req(body), ctx)).status).toBe(201);
     expect(requestUnitChange).toHaveBeenCalledWith(expect.anything(), "unit-1", body);
+  });
+
+  it("validates complete inspection metadata without accepting unit reassignment", async () => {
+    const body = { recordId: "record", expectedHash: "a".repeat(64), note: "已確認", ownership: { expectedUpdatedAt: "2026-09-29T00:00:00.000Z", applicantName: "聯絡人", applicantEmail: "dns@example.com", applicantExtension: "1234", purpose: "網站" } };
+    for (const extra of [{ unitId: "other" }, { applicantUnit: "other" }, { applicantEmail: "invalid" }, { purpose: "a".repeat(1001) }]) expect((await inspect(req({ ...body, ownership: { ...body.ownership, ...extra } }), ctx)).status).toBe(400);
+    expect(inspectUnitRecord).not.toHaveBeenCalled();
+    vi.mocked(inspectUnitRecord).mockResolvedValue({ id: "i" });
+    expect((await inspect(req(body), ctx)).status).toBe(201);
+    expect(inspectUnitRecord).toHaveBeenCalledWith(expect.anything(), "unit-1", body);
+  });
+
+  it("rejects retired unit approval actions even for system admins", async () => {
+    vi.mocked(requireActor).mockResolvedValue({ id: "admin", email: "admin@example.com", globalRole: "ADMIN", zoneRoles: {} });
+    for (const decision of ["APPROVE", "REJECT"]) expect((await PATCH(req({ action: "review", decision }), ctx)).status).toBe(400);
+    expect(manageUnit).not.toHaveBeenCalled(); expect(assignUnitManager).not.toHaveBeenCalled();
   });
 
 });

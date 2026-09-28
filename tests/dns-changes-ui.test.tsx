@@ -1,0 +1,31 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeEach, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/client/use-resource", () => ({ useResource: vi.fn() }));
+vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn() }));
+vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`redirect:${url}`); } }));
+import { useResource } from "@/lib/client/use-resource";
+import { requireActor } from "@/lib/auth/session";
+import { DnsChangesWorkbench } from "@/components/admin/dns-changes-workbench";
+import DnsChangesPage from "@/app/(workspace)/admin/dns-changes/page";
+import { workspaceNavigation } from "@/lib/client/navigation";
+beforeEach(() => { vi.mocked(useResource).mockReturnValue({ loading: false, error: "", reload: vi.fn(), data: { events: [], total: 0 } } as never); });
+it("shows snapshots, restore eligibility and a persistent explanation of restore scope", () => {
+  const snapshot = { name: "host.example.com.", type: "A", ttl: 600, records: [{ content: "192.0.2.1", disabled: false }] };
+  const entries = ["", "已復原", "舊紀錄未記錄 DNS 連線來源"].map((reason, i) => ({ id: String(i), createdAt: "2026-09-29T00:00:00Z", zone: "example.com.", name: snapshot.name, type: "A", operation: "CREATE", before: null, after: snapshot, canRestore: !reason, reason }));
+  vi.mocked(useResource).mockReturnValue({ loading: false, error: "", reload: vi.fn(), data: { events: entries, total: 3 } } as never);
+  const html = renderToStaticMarkup(createElement(DnsChangesWorkbench));
+  expect(html).toContain("TTL 600s"); expect(html).toContain("192.0.2.1"); expect(html).toContain("查看變更前後");
+  expect(html).toContain('disabled="" aria-describedby="restore-note-1"');
+  expect(html).toContain('disabled="" aria-describedby="restore-note-2"');
+  expect(html).toContain("單位歸屬、清查歷史與申請審核狀態不變");
+});
+it("restricts both navigation and the server page to global administrators", async () => {
+  expect(workspaceNavigation(true, true)[0].items.some((item) => item.href === "/admin/dns-changes")).toBe(true);
+  expect(workspaceNavigation(true, false)[0].items.some((item) => item.href === "/admin/dns-changes")).toBe(false);
+  vi.mocked(requireActor).mockResolvedValue({ id: "u", email: "u@example.com", globalRole: "USER", zoneRoles: { "example.com.": "ADMIN" } });
+  await expect(DnsChangesPage()).rejects.toThrow("redirect:/requests");
+  vi.mocked(requireActor).mockResolvedValue({ id: "a", email: "a@example.com", globalRole: "ADMIN", zoneRoles: {} });
+  expect(renderToStaticMarkup(await DnsChangesPage())).toContain("DNS 變更紀錄");
+});

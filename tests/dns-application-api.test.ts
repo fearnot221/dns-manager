@@ -14,7 +14,7 @@ import { saveApplication } from "@/lib/requests/save-application";
 import { GET } from "@/app/api/dns-requests/zones/route";
 import { POST } from "@/app/api/dns-requests/route";
 
-const body = { unitId: "unit-1", applicantName: "測試申請人", applicantUnit: "測試單位", applicantExtension: "1234", records: [{ zoneName: "example.com", name: "test", type: "A", ttl: 300, content: "192.0.2.10" }] };
+const body = { unitId: "unit-1", applicantName: "測試申請人", applicantEmail: "contact@example.com", applicantUnit: "測試單位", applicantExtension: "1234", records: [{ zoneName: "example.com", name: "test", type: "A", ttl: 300, content: "192.0.2.10" }] };
 const request = (input: unknown) => new Request("http://localhost:3000/api/dns-requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
 
 beforeEach(() => {
@@ -63,6 +63,12 @@ describe("application API boundaries", () => {
   it("rejects missing contact fields and malformed JSON", async () => {
     expect((await POST(request({ records: body.records }))).status).toBe(400);
     expect((await POST(new Request("http://localhost:3000/api/dns-requests", { method: "POST", body: "{" }))).status).toBe(400);
+    expect(saveApplication).not.toHaveBeenCalled();
+  });
+  it.each([undefined, "", " ", "invalid"])("rejects invalid application email %s without saving", async (applicantEmail) => {
+    const response = await POST(request({ ...body, applicantEmail }));
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("申請人電子郵件");
     expect(saveApplication).not.toHaveBeenCalled();
   });
   it("rejects personal submissions before calling the save service", async () => {

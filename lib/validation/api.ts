@@ -19,7 +19,7 @@ export const requestOwnershipSchema = z.object({
 export const dnsApplicationSchema = z.object({
   unitId: z.string().trim().min(1).max(100),
   applicantName: z.string().trim().min(1, "請填寫申請人姓名").max(100),
-  applicantEmail: applicantEmailSchema.optional(),
+  applicantEmail: z.string().trim().pipe(z.email().max(320)),
   applicantUnit: z.string().trim().min(1, "請填寫申請單位").max(200),
   applicantExtension: z.string().trim().regex(/^[0-9]{1,10}$/, "單位分機請填入 1–10 位數字"),
   records: z.array(dnsRequestSchema).min(1, "請至少填寫一筆 DNS 紀錄"),

@@ -144,6 +144,8 @@ model GroupZonePermission {
 }
 
 model AuditLog {
+  dnsScope String?
+  dnsRestore DnsChangeRestore?
   id           String   @id @default(cuid())
   createdAt    DateTime @default(now())
   userId       String?
@@ -299,7 +301,7 @@ enum UnitStatus {
 }
 
 model DnsUnit {
-  status UnitStatus @default(PENDING)
+  status UnitStatus @default(APPROVED)
   reviewedBy String?
   reviewedAt DateTime?
   reviewNote String?
@@ -349,4 +351,12 @@ model DnsInspection {
   note          String   @db.Text
   record        DnsRecordMetadata @relation(fields: [recordId], references: [id], onDelete: Restrict)
   @@index([recordId, inspectedAt])
+}
+
+model DnsChangeRestore {
+  auditId String @id
+  audit AuditLog @relation(fields: [auditId], references: [id], onDelete: Restrict)
+  requestedBy String
+  createdAt DateTime @default(now())
+  completedAt DateTime?
 }

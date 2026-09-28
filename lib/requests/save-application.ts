@@ -12,7 +12,7 @@ import type { RRSet } from "@/lib/dns/types";
 import { assertApplicationPolicy } from "./policy";
 
 export async function saveApplication(actor: Actor, input: PreparedApplication, request: Request) {
-  if (!input.unitId) throw new ApplicationInputError("必須選擇已核准的單位才能申請 DNS。", 403);
+  if (!input.unitId) throw new ApplicationInputError("必須選擇已啟用的單位才能申請 DNS。", 403);
   const applicationId = crypto.randomUUID();
   if (isDevRequestStore()) throw new ApplicationInputError("單位申請需要資料庫。", 503);
   try {
@@ -30,7 +30,7 @@ export async function saveApplication(actor: Actor, input: PreparedApplication, 
       await lockUnit(tx, input.unitId);
       await assertApplicationPolicy(actor, input.records.map((r) => r.recordType), input.unitId, tx);
       const unit = await tx.dnsUnit.findUniqueOrThrow({ where: { id: input.unitId } });
-      input = { ...input, applicantUnit: unit.name, applicantEmail: input.applicantEmail ?? actor.portalEmail ?? "" };
+      input = { ...input, applicantUnit: unit.name };
       const userId = actor.id;
       const { records, ...applicant } = input;
       const existing = await tx.dnsRecordRequest.findMany({

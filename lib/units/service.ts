@@ -22,27 +22,14 @@ export async function lockUnit(tx: Prisma.TransactionClient, id: string) {
 }
 export async function unitAccess(actor: Actor, id: string, level: "view" | "edit" | "manage", tx: Prisma.TransactionClient = db) {
   const member = await tx.unitMember.findUnique({ where: { unitId_userId: { unitId: id, userId: actor.id } } });
-  if (level !== "view") await requireApprovedUnit(tx, id);
+  if (level !== "view") await requireActiveUnit(tx, id);
   if (isGlobalAdmin(actor) && level !== "edit") return "ADMIN" as const;
   if (!member || (level === "edit" && !canSubmitUnitRequest(member.role)) || (level === "manage" && member.role !== "ADMIN")) throw new ApiError("找不到可存取的單位，或單位角色不足。", 403);
   return member.role;
 }
-export async function requireApprovedUnit(tx: Prisma.TransactionClient, id: string) {
+export async function requireActiveUnit(tx: Prisma.TransactionClient, id: string) {
   const unit = await tx.dnsUnit.findUnique({ where: { id }, select: { status: true } });
-  if (unit?.status !== "APPROVED") throw new ApiError("單位尚未經系統管理員核准，無法使用。", 403);
-}
-export async function reviewUnit(actor: Actor, id: string, decision: "APPROVE" | "REJECT", note?: string) {
-  requireUnitDatabase();
-  if (!isGlobalAdmin(actor)) throw new ApiError("只有系統管理員可以審核單位。", 403);
-  return db.$transaction(async (tx) => {
-    await lockActiveUser(tx, actor.id);
-    await lockUnit(tx, id);
-    const before = await tx.dnsUnit.findUniqueOrThrow({ where: { id } });
-    if (before.status !== "PENDING") throw new ApiError("此單位已審核，請重新載入。", 409);
-    const unit = await tx.dnsUnit.update({ where: { id }, data: { status: decision === "APPROVE" ? "APPROVED" : "REJECTED", reviewedBy: actor.id, reviewedAt: new Date(), reviewNote: note || null }, select: { id: true, name: true, status: true, reviewNote: true } });
-    await unitAudit(tx, actor, "REVIEW_DNS_UNIT", { id, status: before.status }, unit);
-    return { unit };
-  });
+  if (unit?.status !== "APPROVED") throw new ApiError("此單位未啟用，無法使用。", 403);
 }
 export async function unitAudit(tx: Prisma.TransactionClient, actor: Actor, action: string, before: unknown, after: unknown) {
   await tx.auditLog.create({ data: { userId: actor.id, userEmail: actor.email, zone: "", action, success: true, oldValue: before == null ? Prisma.JsonNull : redactAudit(before) as Prisma.InputJsonValue, newValue: after == null ? Prisma.JsonNull : redactAudit(after) as Prisma.InputJsonValue } });
@@ -63,6 +50,8 @@ async function resolveUnitManager(tx: Prisma.TransactionClient, studentId: strin
 }
 async function lockManagerAndActor(tx: Prisma.TransactionClient, actor: Actor, userId: string, studentId: string) {
   for (const id of [...new Set([actor.id, userId])].sort()) await lockActiveUser(tx, id);
+  const currentActor = await tx.user.findUniqueOrThrow({ where: { id: actor.id }, select: { globalRole: true } });
+  if (!["ADMIN", "SUPER_ADMIN"].includes(currentActor.globalRole)) throw new ApiError("只有系統管理員可以建立單位或指定管理人。", 403);
   const user = await tx.user.findUnique({ where: { id: userId }, select: { studentId: true } });
   if (user?.studentId !== studentId.trim()) throw new ApiError("管理人的學號資料已更新，請重新確認。", 409);
 }
@@ -73,7 +62,7 @@ export async function createUnit(actor: Actor, name: string, managerStudentId: s
     const unit = await db.$transaction(async (tx) => {
       const managerId = await resolveUnitManager(tx, managerStudentId);
       await lockManagerAndActor(tx, actor, managerId, managerStudentId);
-      const unit = await tx.dnsUnit.create({ data: { name, status: "APPROVED", reviewedBy: actor.id, reviewedAt: new Date(), allowlist: { create: { studentId: managerStudentId.trim(), userId: managerId } }, members: { create: { userId: managerId, role: "ADMIN" } } }, select: { id: true, name: true, status: true } });
+      const unit = await tx.dnsUnit.create({ data: { name, status: "APPROVED", allowlist: { create: { studentId: managerStudentId.trim(), userId: managerId } }, members: { create: { userId: managerId, role: "ADMIN" } } }, select: { id: true, name: true, status: true } });
       await unitAudit(tx, actor, "CREATE_DNS_UNIT", null, { ...unit, creatorId: actor.id, managerId, managerStudentId: managerStudentId.trim() });
       return unit;
     });
