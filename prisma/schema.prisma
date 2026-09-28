@@ -218,6 +218,7 @@ model DnsRecordRequest {
   content     String           @db.Text
   ttl         Int
   purpose     String?          @db.Text
+  notes       String?          @db.Text
   status      DnsRequestStatus @default(PENDING)
   reviewerId  String?
   reviewNote  String?          @db.Text

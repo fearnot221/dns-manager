@@ -15,3 +15,9 @@ it("makes deletion explicit at approval instead of describing it as a replacemen
   expect(html).toContain("核准並刪除"); expect(html).toContain("刪除內容："); expect(html).toContain("服務退役");
   expect(html).not.toContain("新內容："); expect(html).not.toContain("只替換");
 });
+
+it("shows application notes in history and the admin review", () => {
+  const application = { ...item, operation: "CREATE" as const, sourceRecordId: null, notes: "申請補充說明" };
+  expect(renderToStaticMarkup(createElement(RequestCard, { item: application, admin: true, onReview: () => {} }))).toContain("申請補充說明");
+  expect(renderToStaticMarkup(createElement(ReviewDialog, { review: { item: application, decision: "APPROVE" }, onClose: () => {}, onSaved: async () => {} }))).toContain("備註：申請補充說明");
+});

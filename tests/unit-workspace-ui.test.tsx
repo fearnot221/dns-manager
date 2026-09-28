@@ -46,7 +46,10 @@ it("fixes the application to the selected unit instead of silently using another
   expect(emailInput).toContain('type="email"');
   expect(emailInput).toContain('required=""');
   expect(html).not.toContain("申請人電子郵件（選填）");
-  expect(html).toContain("服務名稱與實際用途"); expect(html).toContain("<textarea");
+  expect(html).toContain("服務名稱與實際用途");
+  expect(html).toMatch(/用途<textarea[^>]*rows="2"[^>]*required=""/);
+  expect(html).toMatch(/備註（選填）<textarea[^>]*rows="2"/);
+  expect(html).not.toContain("用途（選填）");
   expect(html).toContain("本次申請歸屬「測試單位」"); expect(html).not.toContain("另一單位");
   const other = inWorkspace(createElement(DnsApplicationForm), [{ ...unit, id: "not-eligible" }]);
   expect(other).toContain("此單位目前無法申請"); expect(other).not.toContain("送出 1 筆申請");

@@ -17,8 +17,8 @@ import { type UnitRole } from "@/lib/units/policy";
 import { Select } from "@/components/ui/select";
 
 import { policyViolation, type ApplicationPolicy } from "@/lib/requests/policy-model";
-type DraftRecord = { id: number; zoneName: string; name: string; type: RecordType; content: string; ttl: string; purpose: string };
-const blankRecord = (id: number, zoneName = ""): DraftRecord => ({ id, zoneName, name: "", type: "A", content: "", ttl: "300", purpose: "" });
+type DraftRecord = { id: number; zoneName: string; name: string; type: RecordType; content: string; ttl: string; purpose: string; notes: string };
+const blankRecord = (id: number, zoneName = ""): DraftRecord => ({ id, zoneName, name: "", type: "A", content: "", ttl: "300", purpose: "", notes: "" });
 const hints: Partial<Record<RecordType, string>> = { A: "192.0.2.10", AAAA: "2001:db8::1", CNAME: "target.example.com", MX: "10 mail.example.com", TXT: "v=spf1 include:_spf.example.com ~all", SRV: "10 5 443 service.example.com", CAA: "0 issue letsencrypt.org" };
 
 export function DnsApplicationForm() {
@@ -122,7 +122,7 @@ export function DnsApplicationForm() {
         applicantUnit: selectedUnit?.name || formData.get("applicantUnit"),
         ...(unitId ? { unitId } : {}),
         applicantExtension: formData.get("applicantExtension"),
-        records: records.map((record) => ({ zoneName: record.zoneName, name: record.name, type: record.type, content: record.content, purpose: record.purpose, ttl: Number(record.ttl) })),
+        records: records.map((record) => ({ zoneName: record.zoneName, name: record.name, type: record.type, content: record.content, purpose: record.purpose, notes: record.notes, ttl: Number(record.ttl) })),
       }));
       toast.success("已送出 " + result.count + " 筆 DNS 申請，等待管理員審核");
       dirty.current = false;
@@ -171,7 +171,8 @@ export function DnsApplicationForm() {
             <label>類型<Select aria-label="DNS 類型" value={record.type} onChange={(value) => update(record.id, { type: value as RecordType })} options={[...(!requestTypes.includes(record.type as typeof requestTypes[number]) ? [{ value: record.type, label: `${record.type}（未開放，請改選）`, disabled: true }] : []), ...requestTypes.map((type) => ({ value: type, label: type }))]} /></label>
             <label className="content-field">解析內容<input value={record.content} onChange={(event) => update(record.id, { content: event.target.value })} placeholder={hints[record.type]} required maxLength={65535} autoCapitalize="none" spellCheck={false} aria-label="解析內容" aria-describedby={`content-help-${record.id}`} /><small id={`content-help-${record.id}`}>{contentHelp(record.type)}</small></label>
             <label>TTL<Select aria-label="TTL" value={record.ttl} onChange={(value) => update(record.id, { ttl: value })} options={[{ value: "60", label: "1 分鐘" }, { value: "300", label: "5 分鐘" }, { value: "600", label: "10 分鐘" }, { value: "1800", label: "30 分鐘" }, { value: "3600", label: "1 小時" }]} /></label>
-            <label className="purpose-field">用途（選填）<textarea rows={3} value={record.purpose} onChange={(event) => update(record.id, { purpose: event.target.value })} placeholder="請說明此 DNS 的服務名稱與實際用途，供後續清查使用" maxLength={1000} /></label>
+            <label className="purpose-field">用途<textarea rows={2} required value={record.purpose} onChange={(event) => update(record.id, { purpose: event.target.value })} placeholder="請說明此 DNS 的服務名稱與實際用途，供後續清查使用" maxLength={1000} /></label>
+            <label className="purpose-field">備註（選填）<textarea rows={2} value={record.notes} onChange={(event) => update(record.id, { notes: event.target.value })} placeholder="其他需要補充的說明" maxLength={1000} /></label>
           </div>
           {errorRecordId === record.id && <p className="record-error" role="alert" tabIndex={-1} ref={errorTarget}>{error}。其餘資料已保留。</p>}
         </fieldset>)}

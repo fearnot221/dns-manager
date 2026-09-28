@@ -30,6 +30,7 @@ export function RequestCard({ item, admin, onReview }: { item: DnsRequest; admin
         {item.applicantEmail && <div><dt>申請人電子郵件</dt><dd>{item.applicantEmail}</dd></div>}
         {item.sourceRecordId && item.recordPurpose != null && <div><dt>DNS 用途</dt><dd>{item.recordPurpose || "—"}</dd></div>}
         {item.purpose && <div><dt>{item.sourceRecordId ? "申請原因" : "用途"}</dt><dd>{item.purpose}</dd></div>}
+        {item.notes && <div><dt>備註</dt><dd>{item.notes}</dd></div>}
         {item.reviewNote && <div className="review-note"><dt>審核回覆</dt><dd>{item.reviewNote}</dd></div>}
       </dl>
       {admin && item.canReview && <div className="request-review-actions"><button className="button" onClick={() => onReview("REJECT")}>不核准</button><button className="button primary" onClick={() => onReview("APPROVE")}>{deleting ? "審核刪除" : "核准此筆"}</button></div>}

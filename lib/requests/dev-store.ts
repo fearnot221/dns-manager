@@ -15,6 +15,7 @@ export type DevDnsRequest = {
   recordType: string;
   content: string;
   ttl: number;
+  notes?: string | null;
   purpose: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
   reviewerId: string | null;

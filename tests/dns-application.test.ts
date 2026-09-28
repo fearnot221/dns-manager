@@ -5,15 +5,16 @@ import { createDevApplication, listDevRequests } from "@/lib/requests/dev-store"
 import type { Actor } from "@/lib/dns/types";
 
 const contact = { unitId: "unit-1", applicantName: "王小明", applicantEmail: "contact@example.com", applicantUnit: "電子工程學系", applicantExtension: "01234" };
-const record = { zoneName: "example.com", name: "lab", type: "A", content: "192.0.2.10", ttl: 300 };
+const record = { zoneName: "example.com", name: "lab", type: "A", content: "192.0.2.10", ttl: 300, purpose: "實驗室網站" };
 const zones = ["example.com.", "student.example.com."];
 const actor = (): Actor => ({ id: crypto.randomUUID(), email: "user@example.com", globalRole: "USER", zoneRoles: {} });
 
 describe("multi-record DNS applications", () => {
   it("validates contact email and keeps record purpose for inventory", () => {
-    const input = prepareApplication({ ...contact, applicantEmail: " contact@example.com ", records: [{ ...record, purpose: " 實驗室網站 " }] }, zones);
+    const input = prepareApplication({ ...contact, applicantEmail: " contact@example.com ", records: [{ ...record, purpose: " 實驗室網站 ", notes: " 補充說明 " }] }, zones);
     expect(input.applicantEmail).toBe("contact@example.com");
     expect(input.records[0].purpose).toBe("實驗室網站");
+    expect(input.records[0].notes).toBe("補充說明");
     expect(() => prepareApplication({ ...contact, applicantEmail: "invalid", records: [record] }, zones)).toThrow("申請人電子郵件");
     for (const applicantEmail of [undefined, "", " "]) {
       expect(() => prepareApplication({ ...contact, applicantEmail, records: [record] }, zones)).toThrow("申請人電子郵件");
@@ -67,4 +68,12 @@ describe("multi-record DNS applications", () => {
     expect(listDevRequests({ ...actor(), zoneRoles: { "example.com.": "ADMIN" } }).some((item) => item.id === saved.id)).toBe(true);
     expect(listDevRequests({ ...actor(), zoneRoles: { "student.example.com.": "ADMIN" } }).some((item) => item.id === saved.id)).toBe(false);
   });
+});
+
+it.each([undefined, "", "   "])("requires a purpose for every record: %s", (purpose) => {
+  expect(() => prepareApplication({ ...contact, records: [record, { ...record, name: "other", purpose }] }, zones)).toThrow("第 2 筆：用途");
+});
+it("allows omitted or blank notes and rejects overlong notes", () => {
+  for (const notes of [undefined, "", "  "]) expect(prepareApplication({ ...contact, records: [{ ...record, notes }] }, zones).records[0].notes).toBeNull();
+  expect(() => prepareApplication({ ...contact, records: [{ ...record, notes: "x".repeat(1001) }] }, zones)).toThrow("備註");
 });

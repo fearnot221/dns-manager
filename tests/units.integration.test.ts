@@ -579,12 +579,13 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
   });
 
   it("carries application contact fields and individual purposes into approved inventory", async () => {
-    const input = { unitId, applicantName: "聯絡人", applicantEmail: "service@example.com", applicantUnit: "forged", applicantExtension: "1234", records: ["網站", "資料庫"].map((purpose, i) => ({ zoneName: zone.name, recordName: `contact-${i}-${crypto.randomUUID().slice(0, 8)}.example.com.`, recordType: "A", content: "192.0.2.50", ttl: 300, purpose })) };
+    const input = { unitId, applicantName: "聯絡人", applicantEmail: "service@example.com", applicantUnit: "forged", applicantExtension: "1234", records: ["網站", "資料庫"].map((purpose, i) => ({ zoneName: zone.name, recordName: `contact-${i}-${crypto.randomUUID().slice(0, 8)}.example.com.`, recordType: "A", content: "192.0.2.50", ttl: 300, purpose, notes: `補充-${i}` })) };
     const result = await saveApplication(editor, input, httpRequest());
     const requests = await db.dnsRecordRequest.findMany({ where: { applicationId: result.applicationId }, orderBy: { recordName: "asc" } });
     for (const request of requests) {
       expect(request).toMatchObject({ applicantName: "聯絡人", applicantEmail: "service@example.com", applicantExtension: "1234" });
       expect(request.applicantUnit).not.toBe("forged");
+      expect(request.notes).toBe(input.records.find((record) => record.recordName === request.recordName)?.notes);
       await reviewUnitRequest(admin, request.id, "APPROVE");
       const metadata = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: recordId("local-mock", request) } });
       expect(metadata).toMatchObject({ applicantName: "聯絡人", applicantEmail: "service@example.com", applicantExtension: "1234", applicantUnit: request.applicantUnit, purpose: request.purpose, unitId });

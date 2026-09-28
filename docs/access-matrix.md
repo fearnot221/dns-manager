@@ -222,3 +222,11 @@
 - 既有清查與修改申請的聯絡資料規則保持不變，不需資料庫 migration。
 - 本次工作樹驗證：`npm run build`（含 TypeScript）與 `npm run lint` 通過。以隔離 PostgreSQL 執行 `UNIT_TEST_DATABASE_URL=… npm test`，369 項通過；一項新增 UI 測試因假設 HTML 屬性順序而失敗，修正測試後 `npx vitest run tests/unit-workspace-ui.test.tsx` 全部 5 項通過，並通過該檔案 ESLint。合計 370 項測試均已通過；應用程式碼未再修改，重用 build 與其他測試結果。
 - `git diff --check` 通過。未啟動 local demo，未進行瀏覽器視覺驗證或正式環境操作；尚未推送。
+
+### 2026-09-29 申請用途與備註
+
+- 每筆新增 DNS 申請的用途改為必填，前端與 API 同時驗證，拒絕未提供、空字串及純空白用途。
+- 每筆申請新增選填備註（最多 1000 字），獨立保存至 `DnsRecordRequest.notes`，並顯示於申請紀錄與審核畫面。用途仍帶入清查資料，備註保留於申請。
+- 用途與備註預設兩行，降低最小高度並保留垂直拖曳縮放。
+- 本次工作樹驗證：`npm run build`（含 TypeScript）、`npm run lint`、`git diff --check` 通過；`UNIT_TEST_DATABASE_URL=… npm test` 共 56 個檔案、386 項測試通過。新增 migration `20260929170000_dns_application_notes` 已用 `DATABASE_URL=… npx prisma migrate deploy` 在隔離 PostgreSQL 驗證，未操作正式資料庫。
+- 未啟動 local demo，未進行瀏覽器視覺驗證；尚未推送。部署須套用新增 migration。

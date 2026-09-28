@@ -6,7 +6,7 @@ export class ApplicationInputError extends Error {
 }
 
 export type RequestRecordInput = {
-  zoneName: string; recordName: string; recordType: string; content: string; ttl: number; purpose: string | null;
+  zoneName: string; recordName: string; recordType: string; content: string; ttl: number; purpose: string | null; notes?: string | null;
 };
 
 export function requestRecordKey(record: Pick<RequestRecordInput, "zoneName" | "recordName" | "recordType" | "content">) {
@@ -19,7 +19,7 @@ export function prepareApplication(input: unknown, availableZones: readonly stri
   if (!result.success) {
     const issue = result.error.issues[0];
     const field = String(issue.path.at(-1) ?? "");
-    const labels: Record<string, string> = { unitId: "已啟用的單位", applicantName: "申請人姓名", applicantEmail: "申請人電子郵件", applicantUnit: "申請單位", applicantExtension: "單位分機", zoneName: "Zone 網域", name: "名稱", type: "紀錄類型", content: "內容", ttl: "TTL", purpose: "用途" };
+    const labels: Record<string, string> = { unitId: "已啟用的單位", applicantName: "申請人姓名", applicantEmail: "申請人電子郵件", applicantUnit: "申請單位", applicantExtension: "單位分機", zoneName: "Zone 網域", name: "名稱", type: "紀錄類型", content: "內容", ttl: "TTL", purpose: "用途", notes: "備註" };
     const prefix = issue.path[0] === "records" && typeof issue.path[1] === "number" ? `第 ${issue.path[1] + 1} 筆：` : "";
     throw new ApplicationInputError(`${prefix}${labels[field] ?? "申請資料"}格式不正確或未填寫。${issue.code === "custom" ? issue.message : ""}`);
   }
@@ -30,7 +30,7 @@ export function prepareApplication(input: unknown, availableZones: readonly stri
     try {
       const zoneName = normalizeZoneName(record.zoneName);
       if (!zones.has(zoneName)) throw new ApplicationInputError("此 Zone 已不存在或無法申請，請重新載入網域清單。");
-      const entry = { zoneName, recordName: normalizeDnsName(record.name, zoneName), recordType: record.type, content: normalizeRecordContent(record.type, record.content), ttl: validateTtl(record.ttl), purpose: record.purpose || null };
+      const entry = { zoneName, recordName: normalizeDnsName(record.name, zoneName), recordType: record.type, content: normalizeRecordContent(record.type, record.content), ttl: validateTtl(record.ttl), purpose: record.purpose, notes: record.notes || null };
       const key = requestRecordKey(entry);
       if (seen.has(key)) throw new ApplicationInputError("與本次申請中的其他紀錄重複，請移除重複項目。", 409);
       seen.add(key);

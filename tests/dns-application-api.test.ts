@@ -14,7 +14,7 @@ import { saveApplication } from "@/lib/requests/save-application";
 import { GET } from "@/app/api/dns-requests/zones/route";
 import { POST } from "@/app/api/dns-requests/route";
 
-const body = { unitId: "unit-1", applicantName: "測試申請人", applicantEmail: "contact@example.com", applicantUnit: "測試單位", applicantExtension: "1234", records: [{ zoneName: "example.com", name: "test", type: "A", ttl: 300, content: "192.0.2.10" }] };
+const body = { unitId: "unit-1", applicantName: "測試申請人", applicantEmail: "contact@example.com", applicantUnit: "測試單位", applicantExtension: "1234", records: [{ zoneName: "example.com", name: "test", type: "A", ttl: 300, content: "192.0.2.10", purpose: "實驗室網站" }] };
 const request = (input: unknown) => new Request("http://localhost:3000/api/dns-requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
 
 beforeEach(() => {
@@ -82,4 +82,16 @@ describe("application API boundaries", () => {
     expect(saveApplication).toHaveBeenCalledOnce();
     expect(vi.mocked(saveApplication).mock.calls[0][1].records[0].recordName).toBe("test.example.com.");
   });
+});
+
+it.each([undefined, "", " "])("rejects a missing purpose without saving: %s", async (purpose) => {
+  const response = await POST(request({ ...body, records: [{ ...body.records[0], purpose }] }));
+  expect(response.status).toBe(400);
+  expect(await response.text()).toContain("用途");
+  expect(saveApplication).not.toHaveBeenCalled();
+});
+it("passes optional notes independently from purpose", async () => {
+  const response = await POST(request({ ...body, records: [{ ...body.records[0], notes: " 補充說明 " }] }));
+  expect(response.status).toBe(201);
+  expect(vi.mocked(saveApplication).mock.calls[0][1].records[0]).toMatchObject({ purpose: "實驗室網站", notes: "補充說明" });
 });

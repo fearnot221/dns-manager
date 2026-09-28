@@ -119,3 +119,5 @@
 .request-contact-details dt { color: var(--muted); font-size: var(--text-caption); }
 .request-contact-details dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 @media (max-width: 480px) { .request-contact-details > div { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } }
+
+.dns-application .purpose-field textarea { min-height: var(--control-height); resize: vertical; }
