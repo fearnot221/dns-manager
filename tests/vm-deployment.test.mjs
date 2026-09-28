@@ -10,7 +10,7 @@ describe('Ubuntu installer release selection', () => {
   it('leaves the caller private directory before switching user and runs Compose from the checkout', async () => {
     const source = await readFile(new URL('../deploy/install-vm.sh', import.meta.url), 'utf8');
     const safeRoot = source.indexOf('\ncd /\n');
-    const checkout = source.indexOf('\ncd /opt/dns-manager\n');
+    const checkout = source.indexOf('\ncd /home/snmg/dns-manager\n');
     expect(safeRoot).toBeGreaterThan(0);
     expect(safeRoot).toBeLessThan(source.indexOf('runuser -u dnsdeploy'));
     expect(checkout).toBeGreaterThan(source.indexOf('git clone'));
@@ -158,5 +158,31 @@ describe('one-time GitHub webhook registration', () => {
     ]));
     await expect(registerWebhook('test-token', config, request)).rejects.toThrow('Multiple existing hooks');
     expect(request).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('remote project home layout', () => {
+  it('keeps configuration, service source and state under the project root', async () => {
+    const service = await readFile(new URL('../deploy/dns-manager-webhook.service', import.meta.url), 'utf8');
+    const env = await readFile(new URL('../deploy/webhook.env.example', import.meta.url), 'utf8');
+    const ingress = await readFile(new URL('../deploy/ingress-compose.yml', import.meta.url), 'utf8');
+    expect(service).toContain('EnvironmentFile=/home/snmg/config/webhook.env');
+    expect(service).toContain('ExecStart=/home/snmg/node/bin/node /home/snmg/deploy/webhook.mjs');
+    expect(service).toContain('StandardOutput=append:/home/snmg/state/webhook/service.log');
+    for (const line of env.split('\n').filter((line) => /^(WEBHOOK_STATE_DIR|DEPLOY_STATE_DIR|DEPLOY_SCRIPT|DEPLOY_DIR|DEPLOY_ENV_FILE)=/.test(line))) {
+      expect(line.split('=')[1]).toMatch(/^\/home\/snmg\//);
+    }
+    expect(ingress).toContain('/home/snmg/config/ingress.Caddyfile:/etc/caddy/Caddyfile:ro');
+  });
+  it('does not silently replace legacy PostgreSQL data or reset data directory ownership on rerun', async () => {
+    const compose = await readFile(new URL('../docker-compose.yml', import.meta.url), 'utf8');
+    const env = await readFile(new URL('../deploy/app.env.example', import.meta.url), 'utf8');
+    const installer = await readFile(new URL('../deploy/install-vm.sh', import.meta.url), 'utf8');
+    expect(compose).toContain('${POSTGRES_DATA_DIR:-postgres_data}:/var/lib/postgresql/data');
+    expect(env).toContain('POSTGRES_DATA_DIR=/home/snmg/data/postgres');
+    expect(installer).toContain('follow deploy/MIGRATION-HOME.md');
+    expect(installer).toContain('systemctl link /home/snmg/deploy/dns-manager-webhook.service');
+    expect(installer).toContain('if [[ ! -d /home/snmg/data/postgres ]]; then');
+    expect(installer).not.toMatch(/chown -R.*\/home\/snmg/);
   });
 });

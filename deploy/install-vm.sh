@@ -47,27 +47,42 @@ private_ipv4() {
 [[ -n ${CADDY_IP:-} ]] || read -r -p 'Caddy proxy private IPv4 source address: ' CADDY_IP </dev/tty
 private_ipv4 "$VM_IP" && private_ipv4 "$CADDY_IP" && [[ $VM_IP != "$CADDY_IP" ]] || { echo 'Use distinct RFC1918 private IPv4 addresses, without CIDR/ports.'; exit 1; }
 ip -4 -o addr show | awk '{split($4,a,"/"); print a[1]}' | grep -Fxq "$VM_IP" || { echo 'VM_IP is not assigned to this VM.'; exit 1; }
-if [[ ! -f /etc/dns-manager/managed-install ]]; then
-  for install_target in /etc/dns-manager /opt/dns-manager /opt/dns-manager-deploy /opt/dns-manager-node /var/lib/dns-manager-webhook; do
+# Legacy installations must be migrated offline, never silently attach an empty database.
+for legacy_path in /etc/dns-manager /opt/dns-manager /opt/dns-manager-deploy /opt/dns-manager-node /var/lib/dns-manager-webhook; do
+  [[ ! -e $legacy_path && ! -L $legacy_path ]] || { echo "Legacy installation at $legacy_path; follow deploy/MIGRATION-HOME.md before installing."; exit 1; }
+done
+if [[ -e /home/snmg || -L /home/snmg ]]; then
+  [[ -d /home/snmg && ! -L /home/snmg && $(stat -c %u /home/snmg) == 0 ]] || { echo '/home/snmg must be a real root-owned project directory, not a user home or symlink.'; exit 1; }
+  (( (8#$(stat -c %a /home/snmg) & 8#022) == 0 )) || { echo '/home/snmg must not be group/world writable.'; exit 1; }
+else
+  install -d -m 0755 -o root -g root /home/snmg
+fi
+if [[ ! -f /home/snmg/config/managed-install ]]; then
+  for install_target in /home/snmg/config /home/snmg/dns-manager /home/snmg/deploy /home/snmg/node /home/snmg/state /home/snmg/data /home/snmg/service-home; do
     [[ ! -e $install_target && ! -L $install_target ]] || { echo "Existing $install_target: refusing to overwrite a manual installation."; exit 1; }
   done
   ! getent passwd dnsdeploy >/dev/null || { echo 'Existing dnsdeploy account: review manual installation first.'; exit 1; }
 fi
-echo 'Installing into /opt/dns-manager; HTTPS domain: dnsmgr.ce.ncu.edu.tw.'
+echo 'Installing into /home/snmg/dns-manager; HTTPS domain: dnsmgr.ce.ncu.edu.tw.'
 echo 'No firewall/SSH changes. Allow only the Caddy source IP to VM TCP 8080 in your network firewall.'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y ca-certificates curl git openssl xz-utils util-linux
 getent group dnsdeploy >/dev/null || groupadd --system dnsdeploy
-id dnsdeploy >/dev/null 2>&1 || useradd --system --gid dnsdeploy --create-home --home-dir /var/lib/dnsdeploy --shell /usr/sbin/nologin dnsdeploy
-install -d -m 0750 -o root -g dnsdeploy /etc/dns-manager
-touch /etc/dns-manager/managed-install
-install -d -m 0700 -o dnsdeploy -g dnsdeploy /var/lib/dns-manager-webhook
+id dnsdeploy >/dev/null 2>&1 || useradd --system --gid dnsdeploy --create-home --home-dir /home/snmg/service-home --shell /usr/sbin/nologin dnsdeploy
+install -d -m 0755 -o root -g root /home/snmg/state /home/snmg/data
+if [[ ! -d /home/snmg/data/postgres ]]; then
+  install -d -m 0700 -o root -g root /home/snmg/data/postgres
+fi
+install -d -m 0700 -o dnsdeploy -g dnsdeploy /home/snmg/state/tmp
+install -d -m 0750 -o root -g dnsdeploy /home/snmg/config
+touch /home/snmg/config/managed-install
+install -d -m 0700 -o dnsdeploy -g dnsdeploy /home/snmg/state/webhook
 # Serialize reruns against webhook deployments before touching the checkout or host scripts.
-touch /var/lib/dns-manager-webhook/deploy.lock
-chown dnsdeploy:dnsdeploy /var/lib/dns-manager-webhook/deploy.lock
-chmod 0600 /var/lib/dns-manager-webhook/deploy.lock
-exec 9>/var/lib/dns-manager-webhook/deploy.lock
+touch /home/snmg/state/webhook/deploy.lock
+chown dnsdeploy:dnsdeploy /home/snmg/state/webhook/deploy.lock
+chmod 0600 /home/snmg/state/webhook/deploy.lock
+exec 9>/home/snmg/state/webhook/deploy.lock
 flock -w 1800 9
 
 # Do not replace another Docker installation or silently uninstall conflicting packages.
@@ -97,36 +112,36 @@ systemctl enable --now docker
 usermod -aG docker dnsdeploy
 
 # Official Node distribution, checked against its HTTPS SHA256 manifest; no curl | bash.
-if [[ ! -x /opt/dns-manager-node/bin/node ]]; then
-  installer_tmp=$(mktemp -d /tmp/dns-manager-install.XXXXXXXX)
-  trap '[[ ${installer_tmp:-} == /tmp/dns-manager-install.* ]] && rm -r -- "$installer_tmp"' EXIT
+if [[ ! -x /home/snmg/node/bin/node ]]; then
+  installer_tmp=$(mktemp -d /home/snmg/state/tmp/dns-manager-install.XXXXXXXX)
+  trap '[[ ${installer_tmp:-} == /home/snmg/state/tmp/dns-manager-install.* ]] && rm -r -- "$installer_tmp"' EXIT
   curl --proto '=https' --tlsv1.2 -fsSL https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt -o "$installer_tmp/SHASUMS256.txt"
   node_archive=$(awk -v arch="$node_arch" '$2 ~ ("^node-v22\\.[0-9]+\\.[0-9]+-linux-" arch "\\.tar\\.xz$") {print $2}' "$installer_tmp/SHASUMS256.txt")
   [[ $node_archive =~ ^node-v22\.[0-9]+\.[0-9]+-linux-(x64|arm64)\.tar\.xz$ ]] || { echo 'Unexpected Node release manifest.'; exit 1; }
   curl --proto '=https' --tlsv1.2 -fsSL "https://nodejs.org/dist/latest-v22.x/$node_archive" -o "$installer_tmp/$node_archive"
   awk -v archive="$node_archive" '$2 == archive' "$installer_tmp/SHASUMS256.txt" > "$installer_tmp/selected.sha256"
   (cd "$installer_tmp" && sha256sum --check selected.sha256)
-  install -d -m 0755 /opt/dns-manager-node
-  tar -xJf "$installer_tmp/$node_archive" -C /opt/dns-manager-node --strip-components=1 --no-same-owner --same-permissions
+  install -d -m 0755 /home/snmg/node
+  tar -xJf "$installer_tmp/$node_archive" -C /home/snmg/node --strip-components=1 --no-same-owner --same-permissions
 fi
-node_bin=/opt/dns-manager-node/bin/node
+node_bin=/home/snmg/node/bin/node
 runuser -u dnsdeploy -- "$node_bin" -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 13)) process.exit(1)'
 
-if [[ ! -d /opt/dns-manager/.git ]]; then
-  install -d -m 0755 -o dnsdeploy -g dnsdeploy /opt/dns-manager
-  runuser -u dnsdeploy -- git clone --branch main --single-branch https://github.com/fearnot221/dns-manager.git /opt/dns-manager
+if [[ ! -d /home/snmg/dns-manager/.git ]]; then
+  install -d -m 0755 -o dnsdeploy -g dnsdeploy /home/snmg/dns-manager
+  runuser -u dnsdeploy -- git clone --branch main --single-branch https://github.com/fearnot221/dns-manager.git /home/snmg/dns-manager
 else
-  [[ $(runuser -u dnsdeploy -- git -C /opt/dns-manager remote get-url origin) == https://github.com/fearnot221/dns-manager.git ]] || { echo 'Unexpected repository.'; exit 1; }
-  [[ $(runuser -u dnsdeploy -- git -C /opt/dns-manager branch --show-current) == main ]] || { echo 'Expected main branch.'; exit 1; }
-  [[ -z $(runuser -u dnsdeploy -- git -C /opt/dns-manager status --porcelain) ]] || { echo 'Dirty checkout: preserve changes before rerun.'; exit 1; }
-  runuser -u dnsdeploy -- git -C /opt/dns-manager pull --ff-only origin main
+  [[ $(runuser -u dnsdeploy -- git -C /home/snmg/dns-manager remote get-url origin) == https://github.com/fearnot221/dns-manager.git ]] || { echo 'Unexpected repository.'; exit 1; }
+  [[ $(runuser -u dnsdeploy -- git -C /home/snmg/dns-manager branch --show-current) == main ]] || { echo 'Expected main branch.'; exit 1; }
+  [[ -z $(runuser -u dnsdeploy -- git -C /home/snmg/dns-manager status --porcelain) ]] || { echo 'Dirty checkout: preserve changes before rerun.'; exit 1; }
+  runuser -u dnsdeploy -- git -C /home/snmg/dns-manager pull --ff-only origin main
 fi
 # Compose schema loading inspects cwd even when -f and --env-file are absolute.
-cd /opt/dns-manager
+cd /home/snmg/dns-manager
 
-if [[ ! -f /etc/dns-manager/app.env ]]; then
+if [[ ! -f /home/snmg/config/app.env ]]; then
   owner_password=$(openssl rand -hex 24)
-  printf '%s\n' "$owner_password" > /etc/dns-manager/initial-owner-password
+  printf '%s\n' "$owner_password" > /home/snmg/config/initial-owner-password
   while IFS= read -r line; do
     case "$line" in
       POSTGRES_PASSWORD=*) printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 32)" ;;
@@ -136,36 +151,38 @@ if [[ ! -f /etc/dns-manager/app.env ]]; then
       OWNER_INITIAL_PASSWORD=*) printf 'OWNER_INITIAL_PASSWORD=%s\n' "$owner_password" ;;
       *) printf '%s\n' "$line" ;;
     esac
-  done < /opt/dns-manager/deploy/app.env.example > /etc/dns-manager/app.env.new
-  chown root:dnsdeploy /etc/dns-manager/app.env.new
-  chmod 0640 /etc/dns-manager/app.env.new
-  mv /etc/dns-manager/app.env.new /etc/dns-manager/app.env
+  done < /home/snmg/dns-manager/deploy/app.env.example > /home/snmg/config/app.env.new
+  chown root:dnsdeploy /home/snmg/config/app.env.new
+  chmod 0640 /home/snmg/config/app.env.new
+  mv /home/snmg/config/app.env.new /home/snmg/config/app.env
   unset owner_password
 fi
-if [[ ! -f /etc/dns-manager/webhook.env ]]; then
+if [[ ! -f /home/snmg/config/webhook.env ]]; then
   while IFS= read -r line; do
     case "$line" in
       WEBHOOK_SECRET=*) printf 'WEBHOOK_SECRET=%s\n' "$(openssl rand -hex 32)" ;;
       DEPLOY_REPOSITORY=*) echo 'DEPLOY_REPOSITORY=fearnot221/dns-manager' ;;
       *) printf '%s\n' "$line" ;;
     esac
-  done < /opt/dns-manager/deploy/webhook.env.example > /etc/dns-manager/webhook.env.new
-  chown root:dnsdeploy /etc/dns-manager/webhook.env.new
-  chmod 0640 /etc/dns-manager/webhook.env.new
-  mv /etc/dns-manager/webhook.env.new /etc/dns-manager/webhook.env
+  done < /home/snmg/dns-manager/deploy/webhook.env.example > /home/snmg/config/webhook.env.new
+  chown root:dnsdeploy /home/snmg/config/webhook.env.new
+  chmod 0640 /home/snmg/config/webhook.env.new
+  mv /home/snmg/config/webhook.env.new /home/snmg/config/webhook.env
 fi
 
-install -d -m 0700 -o dnsdeploy -g dnsdeploy /var/lib/dns-manager-webhook
-install -d -m 0755 /opt/dns-manager-deploy
+install -d -m 0700 -o dnsdeploy -g dnsdeploy /home/snmg/state/webhook
+install -d -m 0755 /home/snmg/deploy
 for deploy_file in deploy.sh webhook.mjs register-webhook.sh register-webhook.mjs update-now.sh; do
-  install -m 0755 -o root -g root "/opt/dns-manager/deploy/$deploy_file" "/opt/dns-manager-deploy/$deploy_file"
+  install -m 0755 -o root -g root "/home/snmg/dns-manager/deploy/$deploy_file" "/home/snmg/deploy/$deploy_file"
 done
-install -m 0644 /opt/dns-manager/deploy/dns-manager-webhook.service /etc/systemd/system/dns-manager-webhook.service
-install -d -m 0755 /etc/systemd/system/dns-manager-webhook.service.d
-printf '[Service]\nExecStart=\nExecStart=/opt/dns-manager-node/bin/node /opt/dns-manager-deploy/webhook.mjs\n' > /etc/systemd/system/dns-manager-webhook.service.d/node.conf
-chmod 0644 /etc/systemd/system/dns-manager-webhook.service.d/node.conf
+install -m 0644 /home/snmg/dns-manager/deploy/dns-manager-webhook.service /home/snmg/deploy/dns-manager-webhook.service
+# Only the systemd registration link is outside the project directory.
+if [[ -e /etc/systemd/system/dns-manager-webhook.service || -L /etc/systemd/system/dns-manager-webhook.service ]]; then
+  [[ $(readlink /etc/systemd/system/dns-manager-webhook.service) == /home/snmg/deploy/dns-manager-webhook.service ]] || { echo 'Existing webhook service must be migrated first.'; exit 1; }
+fi
+systemctl link /home/snmg/deploy/dns-manager-webhook.service
 
-compose=(runuser -u dnsdeploy -- docker compose --project-name dns-manager --env-file /etc/dns-manager/app.env -f /opt/dns-manager/docker-compose.yml)
+compose=(runuser -u dnsdeploy -- docker compose --project-name dns-manager --env-file /home/snmg/config/app.env -f /home/snmg/dns-manager/docker-compose.yml)
 "${compose[@]}" config --quiet
 "${compose[@]}" build --pull web migrate
 "${compose[@]}" up -d --wait --wait-timeout 180
@@ -178,16 +195,16 @@ fi
 # Keep the initial password only in the root-readable handoff file, not subsequent container envs.
 "$node_bin" --input-type=module <<'NODE'
 import { readFileSync, writeFileSync } from 'node:fs';
-const file = '/etc/dns-manager/app.env';
+const file = '/home/snmg/config/app.env';
 writeFileSync(file, readFileSync(file, 'utf8').replace(/^OWNER_INITIAL_PASSWORD=.*$/m, 'OWNER_INITIAL_PASSWORD='));
 NODE
 curl -fsS http://127.0.0.1:3000/healthz >/dev/null
 
-sed -e "s/VM_PRIVATE_IP/$VM_IP/g" -e "s/CADDY_PRIVATE_IP/$CADDY_IP/g" /opt/dns-manager/deploy/ingress.Caddyfile.template > /etc/dns-manager/ingress.Caddyfile
-chmod 0644 /etc/dns-manager/ingress.Caddyfile
-install -m 0644 /opt/dns-manager/deploy/ingress-compose.yml /etc/dns-manager/ingress-compose.yml
-sed "s/VM_PRIVATE_IP/$VM_IP/g" /opt/dns-manager/deploy/Caddyfile.example > /etc/dns-manager/Caddyfile.external
-gateway=(docker compose --project-name dns-manager-ingress -f /etc/dns-manager/ingress-compose.yml)
+sed -e "s/VM_PRIVATE_IP/$VM_IP/g" -e "s/CADDY_PRIVATE_IP/$CADDY_IP/g" /home/snmg/dns-manager/deploy/ingress.Caddyfile.template > /home/snmg/config/ingress.Caddyfile
+chmod 0644 /home/snmg/config/ingress.Caddyfile
+install -m 0644 /home/snmg/dns-manager/deploy/ingress-compose.yml /home/snmg/config/ingress-compose.yml
+sed "s/VM_PRIVATE_IP/$VM_IP/g" /home/snmg/dns-manager/deploy/Caddyfile.example > /home/snmg/config/Caddyfile.external
+gateway=(docker compose --project-name dns-manager-ingress -f /home/snmg/config/ingress-compose.yml)
 "${gateway[@]}" pull
 "${gateway[@]}" run --rm --no-deps ingress caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 "${gateway[@]}" up -d --force-recreate
@@ -199,14 +216,14 @@ systemctl is-active --quiet dns-manager-webhook
 
 echo
 echo 'VM installation complete. External proxy / Portal / GitHub registration still require setup:'
-echo '1. Merge /etc/dns-manager/Caddyfile.external into your EXISTING external Caddy config; validate/reload there.'
+echo '1. Merge /home/snmg/config/Caddyfile.external into your EXISTING external Caddy config; validate/reload there.'
 echo "   Permit Caddy $CADDY_IP -> VM $VM_IP TCP 8080; the gateway rejects other source IPs."
 echo '2. Once https://dnsmgr.ce.ncu.edu.tw/login works, run:'
-echo '   sudo /opt/dns-manager-deploy/register-webhook.sh'
+echo '   sudo /home/snmg/deploy/register-webhook.sh'
 echo '3. Owner: verified NCU identity details.identifier=115502532, independent of stored role; Portal users sign up automatically as USER. Assign admins manually.'
 echo '   Password login is temporarily enabled; set AUTH_PASSWORD_LOGIN_ENABLED=false after testing.'
-echo '4. Set Portal/PowerDNS credentials in /etc/dns-manager/app.env; then run:'
-echo '   sudo /opt/dns-manager-deploy/update-now.sh'
+echo '4. Set Portal/PowerDNS credentials in /home/snmg/config/app.env; then run:'
+echo '   sudo /home/snmg/deploy/update-now.sh'
 echo 'Portal callback: https://dnsmgr.ce.ncu.edu.tw/api/auth/callback/logto'
-echo 'Deployment log: sudo journalctl -u dns-manager-webhook -f'
+echo 'Deployment log: sudo tail -f /home/snmg/state/webhook/service.log'
 echo 'A main push triggers fetch/build -> compose down (no -v) -> compose up -> healthcheck.'

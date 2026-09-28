@@ -1,174 +1,186 @@
 # NCUEECESNMG DNS Manager
 
-以單位為核心的 PowerDNS Authoritative 管理系統。使用 Next.js 16 App Router、React 19、TypeScript、Auth.js、Prisma 6 與 PostgreSQL；介面使用共用 CSS tokens 與 Tailwind CSS 4。PowerDNS 憑證只由伺服器環境讀取，不傳送至瀏覽器。
+以單位為核心的 PowerDNS Authoritative 管理系統，整合 DNS 申請、審核、歸屬清查與變更復原。成員透過申請維護單位 DNS，管理員集中管理網域與權限，操作保留稽核紀錄。
 
-本文件描述目前 repository 的程式與設定，包括隨本版本交付的 migration；不代表 GitHub main 已推送或正式 VM 已完成部署。
+**技術組成：** Next.js 16 · React 19 · TypeScript · Auth.js · Prisma 6 · PostgreSQL · PowerDNS
 
-## 文件導覽
+[功能與權限](#功能與權限) · [遠端部署](#遠端部署) · [開發與驗證](#開發與驗證) · [文件](#文件) · [MIT License](LICENSE)
 
-| 文件 | 用途 |
+## 功能與權限
+
+| 功能 | 說明 |
 | --- | --- |
-| [介面與權限](docs/access-matrix.md) | 系統／網域／單位角色、申請、清查與復原邊界 |
-| [目前介面流程](docs/unit-ui-review.md) | 導覽、表單、草稿與操作行為 |
-| [整合狀態](docs/pending-integrations.md) | 已實作、未串接及正式驗收範圍 |
-| [Ubuntu VM 快速安裝](deploy/QUICKSTART.md) | 正式拓撲：獨立 Caddy + Ubuntu VM |
-| [部署與維運](deploy/README.md) | 手動部署、webhook、備份及替代 Nginx 拓撲 |
-| [Logto 登入](deploy/LOGTO.md) | SSO 設定、身份來源與維護工具 |
-| [歷史實作紀錄](docs/history/access-changes.md) | 過去變更與當時的驗證結果，不作現行操作指南 |
+| 單位管理 | 系統管理員建立、改名、刪除單位，透過學號指定管理人；建立後立即生效 |
+| 使用者管理 | 單位管理員以學號加入使用者，調整角色或移出單位；尚未註冊者於登入後加入 |
+| DNS 申請 | 多筆、跨開放網域申請；每筆用途必填、備註選填，由系統管理員逐筆審核 |
+| DNS 管理 | 整合網域、紀錄維護與清查；domain 頁籤涵蓋正解／反解，支援以 `@` 搜尋根網域 |
+| DNS 清查 | 聯絡資料、用途、歸屬與清查歷史在同一表單；關閉後於同頁重開可繼續填寫 |
+| 變更復原 | 查看本系統新增、修改、刪除 DNS 的紀錄；條件符合時可一鍵復原 |
+| 稽核與匯出 | 操作前後差異、申請歷程，以及含歸屬與清查資料的全部 DNS CSV 匯出 |
 
-## 架構
+### 單位角色
+
+| 角色 | 清查與送出申請 | 管理單位使用者 |
+| --- | --- | --- |
+| 成員 | ✓ | — |
+| 管理員 | ✓ | ✓ |
+
+未加入有效單位不能申請 DNS。單位角色不授予直接修改 PowerDNS 或審核申請的權限；單位申請由**系統管理員**核准。系統、網域與單位權限各自獨立，完整規則見 [權限表](docs/access-matrix.md)。
+
+申請必填姓名、有效電子郵件、分機及每筆 DNS 用途，所屬單位由目前工作區決定。送出與核准時都會重新驗證資格及 DNS 狀態。移除成員會撤銷加入資格，並保護最後一位可登入管理員。
+
+### 主要入口
+
+| 路徑 | 頁面 |
+| --- | --- |
+| `/dns` | 單位 DNS |
+| `/requests/new` | 申請 DNS |
+| `/requests` | 申請紀錄／申請審核 |
+| `/units` | 單位管理 |
+| `/zones` | DNS 管理與清查 |
+| `/admin/application-policy` | 申請規則與網域開放設定 |
+| `/admin/dns-changes` | DNS 變更紀錄與復原 |
+| `/admin/users` | 帳號管理 |
+| `/activity` | 操作紀錄 |
+
+側欄依權限顯示功能；只有多個實際單位成員資格才顯示工作區切換。系統管理員可在單位管理查看各單位使用者及 DNS。舊 `/inventory` 與 `/zones/[zone]` 入口轉至整合的 DNS 管理頁。
+
+## 遠端部署
+
+正式環境採用 **Ubuntu VM + Docker Compose + 獨立 Caddy**。PowerDNS 為外部服務，Compose 提供網站、migration 與 PostgreSQL，不建立 PowerDNS 伺服器。
 
 ```text
-Browser ──HTTPS──> 外部 Caddy ──私有網路──> VM gateway :8080
-                                           ├──> Next.js :3000（loopback）
-                                           │      ├──> PostgreSQL（內部 Docker network）
-                                           │      ├──> PowerDNS REST API（受限私有路徑）
-                                           │      └──> Logto OIDC
-                                           └──> /hooks/github → webhook :9000（loopback）
+瀏覽器 ── HTTPS ── 外部 Caddy ── 私有網路 ── VM gateway :8080
+                                            ├─ Next.js :3000
+                                            │    ├─ PostgreSQL
+                                            │    ├─ PowerDNS REST API
+                                            │    └─ Logto OIDC
+                                            └─ /hooks/github → webhook :9000
 ```
 
-- `app/(workspace)/`：共用登入殼層與各功能頁面；頁面及 API 各自檢查授權。
-- `app/api/`：驗證輸入、身份與來源的 route handlers。
-- `components/{admin,records,requests,units}/`：DNS 管理、申請審核、單位管理與清查表單。
-- `lib/{auth,units,requests,inventory,dns-changes,powerdns}/`：身份、單位權限、申請、歸屬清查、復原及 DNS 寫入。
-- `lib/client/`：API、資源載入、導覽及頁面內表單草稿。
-- `prisma/`：使用者、單位、申請、歸屬、清查、稽核及 migration。
-- `styles/`：字體、間距、色彩、控制項及響應式樣式；`app/globals.css` 匯入各層。
-- `deploy/`：VM 安裝、gateway、簽章 webhook 與部署工具。Compose 不建立 PowerDNS 伺服器。
+網站與 webhook 僅綁定 VM loopback；PostgreSQL 不發布 host port。Gateway 限制外部 Caddy 的來源 IP，PowerDNS API 經受限制的私有路徑存取。
 
-## 功能與入口
+### 安裝與搬遷
 
-| 路徑 | 功能 |
+- **新 server：** 使用 [Ubuntu VM 快速安裝指南](deploy/QUICKSTART.md)。
+- **既有 server：** 先閱讀 [搬遷至 /home/snmg](deploy/MIGRATION-HOME.md)，安排備份及停機，再切換資料路徑。
+- **日常維運：** 見 [部署、webhook 與備份指南](deploy/README.md)。
+
+新版部署將專案檔案集中於遠端 `/home/snmg`，不要求搬動本機開發目錄：
+
+```text
+/home/snmg/
+├── dns-manager/       # Git checkout
+├── config/            # 環境變數、密鑰與 gateway 設定
+├── deploy/            # 部署工具及 systemd service 本體
+├── node/              # Webhook 使用的 Node runtime
+├── data/postgres/     # PostgreSQL 資料
+├── state/             # 部署佇列、鎖、日誌與暫存
+└── service-home/      # 部署帳號的 home
+```
+
+Docker／Ubuntu 系統資料維持原位；systemd 在系統目錄保留服務註冊連結。舊安裝未設定 `POSTGRES_DATA_DIR` 時繼續使用原 named volume，**Git push 不會自動搬遷資料**，不可直接改指向空白資料夾。
+
+### 設定與更新
+
+環境設定範本為 [deploy/app.env.example](deploy/app.env.example)，正式密鑰放在 `/home/snmg/config/app.env`，不放進 Git。
+
+| 設定 | 用途 |
 | --- | --- |
-| `/dns` | 單位 DNS；成員清查及提出變更／刪除申請 |
-| `/requests/new` | 多筆 DNS 新增申請，固定目前單位 |
-| `/requests` | 申請紀錄／管理員申請審核 |
-| `/units` | 單位管理；系統管理員建立、改名、刪除及指定管理人 |
-| `/zones` | DNS 管理，整合網域資訊、紀錄維護、歸屬與清查 |
-| `/admin/application-policy` | 申請規則：類型及各網域是否開放申請 |
-| `/admin/dns-changes` | 最近 DNS 新增／修改／刪除紀錄與一鍵復原 |
-| `/admin/users` | 帳號、角色、停用狀態及備註 |
-| `/activity` | 唯讀操作紀錄，含篩選、分頁、前後差異 |
+| `POSTGRES_PASSWORD`、`POSTGRES_DATA_DIR` | Compose 資料庫密碼及儲存位置 |
+| `AUTH_URL`、`AUTH_SECRET` | 對外 HTTPS 網址與固定 session 密鑰 |
+| `AUTH_LOGTO_ID`、`AUTH_LOGTO_SECRET` | Logto 登入設定 |
+| `PDNS_API_URL`、`PDNS_API_KEY`、`PDNS_SERVER_ID` | 僅伺服器使用的 PowerDNS 連線；URL 以 `/api/v1` 結尾 |
+| `PDNS_MOCK` | 正式環境設為 `false` |
+| `AUTH_PASSWORD_LOGIN_ENABLED` | 測試帳密登入開關 |
+| `SETTINGS_ENCRYPTION_KEY` | 保留既有持久密鑰，升級時不任意更換 |
+| `OWNER_INITIAL_PASSWORD` | 僅首次初始化帳號使用 |
 
-`/inventory` 轉至 `/zones`，`/zones/[zone]` 轉至對應 domain 頁籤；保留的舊路徑不代表仍提供獨立頁面。PowerDNS 網頁設定、使用者訊息、清查通知／回覆管理與全站登入白名單已停用。
+完成 webhook 設定後，main push 會觸發建置，再以 Compose down/up 更新，保留資料並先執行 migration。部署會短暫中斷服務，不會自動回退資料庫。Webhook 回應 `202` 只代表排隊成功；需確認 `/home/snmg/state/webhook/service.log` 中的 `Healthy deployment`、成功 commit 與 `/healthz`。
 
-導覽為平鋪功能清單，僅多個實際單位成員資格才出現工作區切換。系統管理員側欄不顯示「單位 DNS／申請 DNS」，可於單位管理查看各單位使用者及 DNS；管理全站不等於自動加入所有單位。
+## 登入與資料保護
 
-### 單位與權限
+前端顯示「NCU Portal」，實際使用 Logto OIDC。帳號依驗證後的身份關聯，不依電子郵件自動合併或升權。一般帳號預設 USER，最高權限取決於經驗證的 NCU identifier；設定與身份規則見 [Logto 指南](deploy/LOGTO.md)。Session 採伺服器端 15 分鐘閒置期限。
 
-- 只有全域 ADMIN／SUPER_ADMIN 可建立單位，須以學號指定已註冊且啟用的唯一管理人。建立後立即生效，不需單位審核；舊制未啟用單位不自動啟用。
-- 單位只有「管理員（ADMIN）」及「成員（EDITOR）」兩種角色。兩者都能清查及送出新增、修改、刪除申請；管理員另可新增使用者、調整角色及移出單位。保留最後一位可登入管理員。
-- 「使用者管理」以學號新增成員；尚未註冊者於登入後自動加入，預設成員。移除成員也撤銷其加入資格。沒有自行建立或加入單位的入口。
-- 系統管理員可改名；目前 DNS 歸屬名稱同步更新，歷史申請保留原名稱。刪除會移除成員資格與加入名單，但有 DNS、申請或清查任務關聯時拒絕刪除。
-- 單位角色不授予全域／網域管理或直接發布 DNS 的權限。網域 VIEWER／EDITOR／ADMIN 是另一套權限，未隨單位角色合併而改變。
-
-### 申請與審核
-
-未加入有效單位不能申請。全站申請規則固定 `UNIT_ONLY`；新網域預設暫停申請，由授權管理員在「申請規則」開放。送出時重新驗證單位、成員、網域與類型。
-
-新增申請必填姓名、有效電子郵件、分機（1–10 位數字），單位由目前工作區決定。每筆 DNS 用途必填、備註選填（各最多 1000 字）；文字欄位預設兩行並可垂直縮放。一份申請可跨多個開放網域，沒有應用層筆數上限；整批驗證與入庫，管理員逐筆審核。用途核准後帶入 DNS 清查資料；備註保留於申請及審核畫面。
-
-`POST /api/dns-requests` 接受：
-
-```json
-{
-  "unitId": "selected-unit-id",
-  "applicantName": "申請人",
-  "applicantEmail": "contact@example.com",
-  "applicantUnit": "目前單位名稱",
-  "applicantExtension": "1234",
-  "records": [{ "zoneName": "example.com.", "name": "www", "type": "A", "content": "192.0.2.10", "ttl": 300, "purpose": "實驗室網站", "notes": "選填補充說明" }]
-}
-```
-
-伺服器依 `unitId` 取得真實單位名稱，不信任自由輸入的名稱作授權。單位新增／修改／刪除申請只由系統管理員核准；歷史個人申請仍依原網域權限處理，但不接受新的個人申請。核准時再次檢查成員資格、DNS 連線、快照及相關資料版本。修改／刪除只處理指定解析值，保留其他值；新名稱／類型須另外申請。
-
-### DNS 管理、清查與復原
-
-`/zones` 保留清查列表，以 domain 頁籤區分正解與反解；`ee.ncu.edu.tw`、`ce.ncu.edu.tw` 優先。搜尋 `@` 對應根網域紀錄。清查與歸屬資料在同一個對話框，系統管理員可指派所屬單位；只有最高權限帳號能看到刪除清查紀錄按鈕。
-
-單位成員的清查同樣有完整聯絡資料、用途及備註。管理員與單位清查表單在同頁關閉後重開會保留輸入；成功儲存才清除。重整／離開頁面不保留，伺服器紀錄版本改變時不套用舊草稿。清查不修改 DNS 解析，歷史時間與經手人由伺服器記錄。
-
-`/admin/dns-changes` 僅系統管理員可用，列出本系統成功紀錄的 DNS 新增／修改／刪除操作。復原需具完整前後快照、相同連線來源且目前 DNS 未被後續修改；遵守受保護紀錄權限。復原只處理 DNS RRset，不回復單位歸屬、清查或申請狀態。直接在 PowerDNS 進行的外部變更不會自動匯入此紀錄。
-
-## 登入與帳號
-
-前端顯示「NCU Portal」，實際使用 Logto OIDC，issuer 與身份解析見 [Logto 指南](deploy/LOGTO.md)。只要求 `openid identities`，不以 email、姓名或 sub 授予管理權。未回傳有效聯絡信箱不會因此阻擋一般登入；申請表的必填電子郵件是獨立要求。
-
-最高權限來自本次 Logto 登入驗證的一致 NCU identity `details.identifier=115502532`。一般帳號首次建立為 USER；系統管理員可調整其他非 owner 帳號的 USER／ADMIN 身份。owner 角色與帳號狀態不可更動；移除帳號、委派網域權限及刪除清查紀錄限 owner。密碼登入不繼承 Logto owner 權限；歷史 SUPER_ADMIN 以一般 ADMIN 存取。
-
-帳號使用 Logto subject 關聯，不自動依 email 合併。姓名、identifier 與聯絡信箱取自同一份 identity details；`User.portalEmail` 僅作顯示。停用／移除帳號不得使用。Session 由伺服器執行 15 分鐘閒置期限，背景讀取不延長，逾時不自動提交草稿。帳密登入可用 `AUTH_PASSWORD_LOGIN_ENABLED=false` 關閉。
+- **後端授權：** API 檢查目前帳號、角色及單位資格；隱藏按鈕不取代權限檢查。
+- **衝突保護：** DNS 快照與資料版本不一致時拒絕覆蓋；PostgreSQL 與 PowerDNS 不屬於同一原子交易。
+- **清查草稿：** 只保存在目前頁面，儲存成功後清除；重整、離開頁面或紀錄版本改變後不還原舊草稿。
+- **復原範圍：** 僅處理 DNS RRset，不回復單位歸屬、清查或申請狀態；缺少完整快照或已有後續變更時不可復原。
+- **備份：** 分別備份 PostgreSQL、PowerDNS backend 與持久密鑰。CSV 匯出與變更復原不能取代完整備份。
 
 ## 開發與驗證
 
-需要 Node.js 22.13+、npm 與可連線的 PostgreSQL；正式 Compose 使用 PostgreSQL 17。不要把正式資料庫作為開發或測試目標。
+需要 **Node.js 22.13+、npm、獨立開發用 PostgreSQL**。正式 Compose 使用 PostgreSQL 17；開發可設 `PDNS_MOCK=true` 使用模擬 DNS。
+
+### 本機設定
 
 ```bash
 npm ci
 cp .env.example .env
-# 編輯 .env：填入你另行建立的本機資料庫及密鑰；可設 PDNS_MOCK=true。
-npm run db:generate
-npm run db:migrate
-# 只有首次初始化且已設定 OWNER_INITIAL_PASSWORD 時執行：
-npm run db:seed
-# 明確需要啟動本機服務時才執行：
-npm run dev
 ```
 
-Compose 的 PostgreSQL 不發布 host port，因此 host 上執行的 `npm run dev` 不可直接用預設 localhost URL 連入該容器；請另備本機資料庫，或使用完整 Compose 拓撲。
-
-Seed 只建立 `owner-bootstrap@accounts.invalid`，使用 16 字以上獨立密碼且拒絕覆寫已有初始帳號。此地址與資料庫 SUPER_ADMIN 值本身不提供已驗證的 Logto owner 權限；初始化密碼完成後從執行環境移除。
+編輯 `.env`，填入本機資料庫連線及開發密鑰，再執行：
 
 ```bash
-npm run build  # 包含 prisma generate 與 TypeScript 檢查
+npm run db:generate
+npm run db:migrate
+```
+
+首次初始化帳號時，設定獨立的 `OWNER_INITIAL_PASSWORD`（至少 16 字元）後執行 `npm run db:seed`。Seed 拒絕覆寫既有初始帳號；完成後移除該環境變數。此帳密帳號不等於已驗證的 Logto 最高權限身份。
+
+需要啟動本機網站時執行 `npm run dev`。Compose 的 PostgreSQL 未發布 host port，host 上的開發程式須連接另行準備的資料庫，不能直接使用 Compose 容器內的位址。
+
+### 檢查指令
+
+```bash
+npm run build   # 產生 Prisma Client，並包含 TypeScript 檢查
 npm run lint
 npm test
 ```
 
-`npm run typecheck` 可作較快的型別除錯，不需在相同來源 build 通過後重複執行。Build 及測試不要同時操作 Prisma client。單位資料庫整合測試預設跳過；要執行完整測試，先對**隔離 localhost、名稱為 dns_units_test 的資料庫**套用 migration，再執行：
+`npm run typecheck` 可用於快速型別除錯。Build 與測試應依序執行，避免同時操作 Prisma Client。
+
+資料庫整合測試預設跳過。完整測試須使用 **localhost、名稱為 `dns_units_test` 的隔離資料庫**：
 
 ```bash
 DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test' npm run db:migrate
 UNIT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test' npm test
 ```
 
-整合測試使用假的 PowerDNS，不寫入正式 DNS。GitHub Actions 另檢查部署腳本、Docker／Compose／gateway 與依賴；詳見 [CI workflow](.github/workflows/ci.yml)。CI 成功不等於正式 SSO、DNS 或 VM 已驗收。
+整合測試使用假的 PowerDNS，不修改正式 DNS。[GitHub Actions](.github/workflows/ci.yml) 另驗證部署腳本、Docker、Compose 與 gateway；CI 通過不代表正式 VM 或 SSO 已驗收。
 
 ### 可選 local demo
 
-僅在明確需要時執行 `npm run demo`，以 loopback `http://localhost:3000` 啟動。它強制停用資料庫及外部 SSO，使用 mock DNS 和開發帳密；因此**無法驗證需要 PostgreSQL 的單位制申請、單位管理與 DNS 復原流程**。一般操作保持 local demo 關閉。
+`npm run demo` 在 `http://localhost:3000` 啟動純本機展示，停用資料庫及外部 SSO。它無法驗證需要 PostgreSQL 的單位制申請、單位管理與 DNS 復原；一般作業維持關閉。
 
-Demo 帳號為 `owner@aegis.local`／`DemoOwner!2026`、`admin@aegis.local`／`AegisAdmin!2026`、`user@aegis.local`／`AegisUser!2026`，僅供本機開發。DNS 與記憶體申請於重啟重設，其他本機資料存於 git-ignored `.local-demo/`；不得當作正式備份或匯入正式帳號。
-
-## 正式設定與部署
-
-正式環境以 [deploy/app.env.example](deploy/app.env.example) 為範本，密鑰放在 checkout 外的 `/etc/dns-manager/app.env`。
-
-| 變數 | 用途 |
+| Demo 帳號 | 開發密碼 |
 | --- | --- |
-| `POSTGRES_PASSWORD` | Compose 資料庫密碼；Compose 組成 `DATABASE_URL` |
-| `DATABASE_URL` | 非 Compose 的 Prisma／應用資料庫連線 |
-| `AUTH_URL` | 對外 HTTPS origin；Compose 使用此名稱 |
-| `AUTH_SECRET` | 固定且足夠隨機的 session 簽章密鑰 |
-| `AUTH_LOGTO_ID`、`AUTH_LOGTO_SECRET` | Logto Traditional web 應用設定 |
-| `AUTH_PASSWORD_LOGIN_ENABLED` | 測試帳密登入開關，預設 true |
-| `PDNS_API_URL`、`PDNS_API_KEY`、`PDNS_SERVER_ID` | 伺服器 PowerDNS 設定；URL 以 `/api/v1` 結尾，server ID 預設 localhost |
-| `PDNS_MOCK` | 正式環境 false；true 使用記憶體 DNS |
-| `SETTINGS_ENCRYPTION_KEY` | Compose 保留的固定密鑰；保留升級相容性，舊網頁憑證不再使用 |
-| `OWNER_INITIAL_PASSWORD` | 僅首次 seed 使用 |
+| `owner@aegis.local` | `DemoOwner!2026` |
+| `admin@aegis.local` | `AegisAdmin!2026` |
+| `user@aegis.local` | `AegisUser!2026` |
 
-不要使用 `NEXT_PUBLIC_` 儲存 PowerDNS 或登入憑證。`PDNS_API_URL` 不可含內嵌帳密、query 或 fragment。容器中的 localhost 是容器本身；PowerDNS 必須可由受限制的私有路徑連線。設定變更後重新建立容器，單純 restart 不載入新 env。
+以上僅供本機開發，不用於正式帳號。Demo DNS 於重啟重設，其他本機資料存於 git-ignored `.local-demo/`。
 
-依 [快速安裝](deploy/QUICKSTART.md) 設定外部 Caddy、VM gateway 及簽章 GitHub webhook。main push 會排隊部署最新 main：先 build，再 Compose down/up（不刪 volume），完成 migration 後啟動 web。這不是零停機或自動回退部署；webhook 202 只代表已接受排隊，需另確認 journal 的 `Healthy deployment`、commit 與 `/healthz`。
+## 專案結構
 
-升級需套用**全部** migration；包含 DNS 復原、單位建立立即生效、申請備註及兩種單位角色。單位角色 migration 將舊 VIEWER 轉成成員 EDITOR，網域角色不變。不得為了重跑 migration 刪除正式資料庫或 volume。
+| 目錄 | 職責 |
+| --- | --- |
+| `app/` | App Router 頁面、登入殼層與 API |
+| `components/` | DNS、申請、單位與管理介面，共用控制項 |
+| `lib/` | 身份授權、申請與清查流程、PowerDNS client、復原及前端工具 |
+| `prisma/` | 資料模型、migration 與初始帳號 seed |
+| `styles/` | 共用 tokens、主題與響應式樣式 |
+| `tests/` | 規則、API、元件及隔離資料庫測試 |
+| `deploy/` | 遠端安裝、部署、webhook 與搬遷指南 |
 
-## 安全、稽核與備份
+## 文件
 
-- API 授權及目前帳號狀態是安全邊界，側欄隱藏不是授權。
-- 同來源檢查、Zod 驗證、RRset hash／資料版本檢查保護寫入；衝突回傳 409。
-- 本系統 DNS 寫入使用協調鎖；外部 PowerDNS 寫入不受此鎖控制。PostgreSQL 與 PowerDNS 不是單一原子交易，失敗重試仍需核對狀態。
-- 稽核包含操作開始、領域事件與完成狀態；初始稽核寫入失敗會阻擋操作。完成紀錄失敗會發出伺服器記錄及 `X-Audit-Warning`。
-- 系統管理員可匯出全部 DNS CSV（含正反解、停用值、歸屬與清查）；匯出不受畫面篩選限制，不是原子快照或可直接還原的備份。
-- 備份 PostgreSQL、PowerDNS backend 與持久密鑰，並測試還原。應用稽核沒有修改／刪除入口；owner 刪除清查紀錄會留下稽核。
-- 不將 GitHub 推送、CI 通過或 mock 測試稱為正式 VM 健康驗證。
+- [介面與權限](docs/access-matrix.md)：角色、申請、清查、復原及已停用功能。
+- [介面流程](docs/unit-ui-review.md)：導覽、表單、草稿與操作行為。
+- [整合狀態](docs/pending-integrations.md)：外部服務能力與驗收範圍。
+- [部署指南](deploy/README.md) · [快速安裝](deploy/QUICKSTART.md) · [目錄搬遷](deploy/MIGRATION-HOME.md) · [Logto 設定](deploy/LOGTO.md)。
+- [歷史實作紀錄](docs/history/access-changes.md)：保留當時的變更與測試，不作現行部署指令。
+
+## 授權
+
+本專案原始碼採用 [MIT License](LICENSE)。第三方套件及國立中央大學校徽依其原有授權與使用條件；MIT 授權不包含校徽或商標使用權，詳見 [素材來源](public/ASSET-SOURCES.md)。

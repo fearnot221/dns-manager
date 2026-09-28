@@ -13,7 +13,7 @@
 
 ## 伺服器設定
 
-在 `/etc/dns-manager/app.env` 填入（Secret 不進 Git、不貼到對話、不使用 NEXT_PUBLIC 前綴）：
+在 `/home/snmg/config/app.env` 填入（Secret 不進 Git、不貼到對話、不使用 NEXT_PUBLIC 前綴）：
 
 ```dotenv
 AUTH_URL=https://dnsmgr.ce.ncu.edu.tw
@@ -40,10 +40,10 @@ AUTH_PASSWORD_LOGIN_ENABLED=true
 
 若舊資料遺失 Account 關聯，但已存在由相同 Logto issuer＋sub 雜湊產生的內部 email，系統會恢復該精確帳號的 Logto 關聯。這項自動恢復不使用 Portal email、姓名或 identifier 猜測帳號；停用／移除帳號仍拒絕登入。
 
-新版 tools image 建好後，在 VM 的 Bash 使用下列共用指令（不依賴 `/opt/dns-manager/.git`）：
+新版 tools image 建好後，在 VM 的 Bash 使用下列共用指令（不依賴 `/home/snmg/dns-manager/.git`）：
 
 ```bash
-cd /opt/dns-manager
+cd /home/snmg/dns-manager
 web_image="$(sudo docker inspect --format '{{.Config.Image}}' dns-manager-web-1)"
 if [[ ! "$web_image" =~ ^dns-manager-web:([a-f0-9]{40})$ ]]; then
   echo '請先確認目前部署的 commit 標籤'; exit 1
@@ -51,8 +51,8 @@ fi
 deploy_tag="${BASH_REMATCH[1]}"
 run_link() {
   sudo env DEPLOY_TAG="$deploy_tag" docker compose \
-    --project-name dns-manager --env-file /etc/dns-manager/app.env \
-    -f /opt/dns-manager/docker-compose.yml run --rm --no-deps migrate \
+    --project-name dns-manager --env-file /home/snmg/config/app.env \
+    -f /home/snmg/dns-manager/docker-compose.yml run --rm --no-deps migrate \
     ./node_modules/.bin/tsx scripts/link-logto-user.ts "$@"
 }
 run_link --list
@@ -91,14 +91,14 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
 ```bash
 # 先檢查影響筆數，不修改資料
 sudo env DEPLOY_TAG="$deploy_tag" docker compose \
-  --project-name dns-manager --env-file /etc/dns-manager/app.env \
-  -f /opt/dns-manager/docker-compose.yml run --rm --no-deps migrate \
+  --project-name dns-manager --env-file /home/snmg/config/app.env \
+  -f /home/snmg/dns-manager/docker-compose.yml run --rm --no-deps migrate \
   ./node_modules/.bin/tsx scripts/reset-all-users.ts
 
 # 先備份資料庫，核對 dry run 後才正式重置
 sudo env DEPLOY_TAG="$deploy_tag" docker compose \
-  --project-name dns-manager --env-file /etc/dns-manager/app.env \
-  -f /opt/dns-manager/docker-compose.yml run --rm --no-deps migrate \
+  --project-name dns-manager --env-file /home/snmg/config/app.env \
+  -f /home/snmg/dns-manager/docker-compose.yml run --rm --no-deps migrate \
   ./node_modules/.bin/tsx scripts/reset-all-users.ts \
   --apply --confirm RESET-ALL-USERS
 ```

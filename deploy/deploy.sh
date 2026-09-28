@@ -28,7 +28,7 @@ compose=(docker compose --project-name dns-manager --env-file "$DEPLOY_ENV_FILE"
 "${compose[@]}" config --quiet
 # Build before downtime. Never stop the current release if lint/test/build fails.
 "${compose[@]}" build --pull web migrate
-# Intentionally restart the whole application stack as requested. Preserve named volumes.
+# Intentionally restart the whole application stack as requested. Preserve named volumes and bind-mounted data.
 # The separate ingress container and host webhook service remain available.
 "${compose[@]}" down --timeout 30
 if ! "${compose[@]}" up -d --wait --wait-timeout 180; then

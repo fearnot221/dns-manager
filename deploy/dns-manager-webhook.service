@@ -2,18 +2,22 @@
 Description=DNS Manager signed GitHub deployment webhook
 After=network-online.target docker.service
 Wants=network-online.target
+RequiresMountsFor=/home/snmg
 
 [Service]
 Type=simple
 User=dnsdeploy
 Group=dnsdeploy
 SupplementaryGroups=docker
-WorkingDirectory=/opt/dns-manager-deploy
-EnvironmentFile=/etc/dns-manager/webhook.env
-ExecStart=/usr/bin/node /opt/dns-manager-deploy/webhook.mjs
+WorkingDirectory=/home/snmg/deploy
+EnvironmentFile=/home/snmg/config/webhook.env
+ExecStart=/home/snmg/node/bin/node /home/snmg/deploy/webhook.mjs
 Restart=on-failure
 RestartSec=5
 UMask=0077
+StandardOutput=append:/home/snmg/state/webhook/service.log
+StandardError=append:/home/snmg/state/webhook/service.log
+Environment=TMPDIR=/home/snmg/state/tmp
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

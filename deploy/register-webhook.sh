@@ -7,7 +7,7 @@ echo 'The token is used once, is not saved, and can be revoked immediately after
 IFS= read -r -s -p 'GitHub token: ' registration_token </dev/tty
 echo
 [[ -n "$registration_token" ]] || exit 1
-if printf '%s' "$registration_token" | /opt/dns-manager-node/bin/node /opt/dns-manager-deploy/register-webhook.mjs; then
+if printf '%s' "$registration_token" | /home/snmg/node/bin/node /home/snmg/deploy/register-webhook.mjs; then
   unset registration_token
 else
   registration_status=$?

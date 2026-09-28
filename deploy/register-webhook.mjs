@@ -80,8 +80,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     for await (const part of process.stdin) parts.push(part);
     const token = Buffer.concat(parts).toString('utf8').trim();
     secrets.push(token);
-    console.error('[webhook] Reading /etc/dns-manager/webhook.env');
-    const config = parseEnv(await readFile('/etc/dns-manager/webhook.env', 'utf8'));
+    console.error('[webhook] Reading /home/snmg/config/webhook.env');
+    const config = parseEnv(await readFile('/home/snmg/config/webhook.env', 'utf8'));
     secrets.push(config.WEBHOOK_SECRET);
     const id = await registerWebhook(token, config, fetch, (message) => console.error(message));
     console.info(`GitHub push webhook registered (ID ${id}). Push main, then check the server journal for Healthy deployment.`);

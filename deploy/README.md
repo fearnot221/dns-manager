@@ -13,16 +13,20 @@
 
 ## 2. 環境檔與第一次啟動
 
-以下目錄是預設範例。建立專用 `dnsdeploy` 系統帳號及同名 group，設定其 home；加入 docker group。由它擁有 checkout 與 webhook state 目錄。`/opt/dns-manager-deploy` 的程式應由 root 擁有，部署帳號唯讀；不要讓 webhook 自動改寫自己的程式。
+舊安裝須先依 [目錄搬遷指南](MIGRATION-HOME.md) 停機搬遷，不能只修改 env 的資料庫路徑。以下目錄是新版固定配置。建立專用 `dnsdeploy` 系統帳號及同名 group，設定其 home；加入 docker group。由它擁有 checkout 與 webhook state 目錄。`/home/snmg/deploy` 的程式應由 root 擁有，部署帳號唯讀；不要讓 webhook 自動改寫自己的程式。
 
 ```bash
-git clone https://github.com/fearnot221/dns-manager.git /opt/dns-manager
-sudo install -d -m 0750 -o root -g dnsdeploy /etc/dns-manager
-sudo install -m 0640 -o root -g dnsdeploy /opt/dns-manager/deploy/app.env.example /etc/dns-manager/app.env
-sudo install -d -m 0700 -o dnsdeploy -g dnsdeploy /var/lib/dns-manager-webhook
+sudo install -d -m 0755 -o root -g root /home/snmg /home/snmg/state /home/snmg/data
+sudo install -d -m 0700 -o root -g root /home/snmg/data/postgres
+sudo install -d -m 0700 -o dnsdeploy -g dnsdeploy /home/snmg/state/tmp /home/snmg/service-home
+sudo install -d -m 0755 -o dnsdeploy -g dnsdeploy /home/snmg/dns-manager
+sudo -u dnsdeploy git clone https://github.com/fearnot221/dns-manager.git /home/snmg/dns-manager
+sudo install -d -m 0750 -o root -g dnsdeploy /home/snmg/config
+sudo install -m 0640 -o root -g dnsdeploy /home/snmg/dns-manager/deploy/app.env.example /home/snmg/config/app.env
+sudo install -d -m 0700 -o dnsdeploy -g dnsdeploy /home/snmg/state/webhook
 ```
 
-用安全的編輯器填入 `/etc/dns-manager/app.env`，不要把內容貼進 chat 或 commit：
+用安全的編輯器填入 `/home/snmg/config/app.env`，不要把內容貼進 chat 或 commit：
 
 - `POSTGRES_PASSWORD`：獨立執行 `openssl rand -hex 32`，使用 hex 避免 URI 特殊字元。
 - `AUTH_SECRET`：另一個 `openssl rand -hex 32`；部署間必須固定，否則所有 session 失效。
@@ -36,11 +40,11 @@ sudo install -d -m 0700 -o dnsdeploy -g dnsdeploy /var/lib/dns-manager-webhook
 首次啟動（以能讀取 env 且有 Docker 權限的專用帳號執行）：
 
 ```bash
-cd /opt/dns-manager
-docker compose --env-file /etc/dns-manager/app.env config --quiet
-docker compose --env-file /etc/dns-manager/app.env up -d --build --wait
-docker compose --env-file /etc/dns-manager/app.env --profile maintenance run --rm --no-deps seed
-docker compose --env-file /etc/dns-manager/app.env ps
+cd /home/snmg/dns-manager
+docker compose --env-file /home/snmg/config/app.env config --quiet
+docker compose --env-file /home/snmg/config/app.env up -d --build --wait
+docker compose --env-file /home/snmg/config/app.env --profile maintenance run --rm --no-deps seed
+docker compose --env-file /home/snmg/config/app.env ps
 ```
 
 `up` 先等待 PostgreSQL 健康，再完成所有 migration，最後啟動 web。Seed 僅執行一次，已有最高帳號時會拒絕覆寫。成功後刪除 env 中的 `OWNER_INITIAL_PASSWORD` 值。不使用 `docker compose down -v`，那會刪除資料庫 volume。
@@ -62,21 +66,22 @@ PowerDNS 如果在 host 上，容器中的 `127.0.0.1` 不會連到 host；使�
 ## 4. 安裝 webhook 接收程式
 
 ```bash
-sudo install -d -m 0755 /opt/dns-manager-deploy
-sudo install -m 0644 /opt/dns-manager/deploy/webhook.mjs /opt/dns-manager-deploy/webhook.mjs
-sudo install -m 0755 /opt/dns-manager/deploy/deploy.sh /opt/dns-manager-deploy/deploy.sh
-sudo install -m 0640 -o root -g dnsdeploy /opt/dns-manager/deploy/webhook.env.example /etc/dns-manager/webhook.env
-sudo install -m 0644 /opt/dns-manager/deploy/dns-manager-webhook.service /etc/systemd/system/dns-manager-webhook.service
+sudo install -d -m 0755 /home/snmg/deploy
+sudo install -m 0644 /home/snmg/dns-manager/deploy/webhook.mjs /home/snmg/deploy/webhook.mjs
+sudo install -m 0755 /home/snmg/dns-manager/deploy/deploy.sh /home/snmg/deploy/deploy.sh
+sudo install -m 0640 -o root -g dnsdeploy /home/snmg/dns-manager/deploy/webhook.env.example /home/snmg/config/webhook.env
+sudo install -m 0644 /home/snmg/dns-manager/deploy/dns-manager-webhook.service /home/snmg/deploy/dns-manager-webhook.service
+sudo systemctl link /home/snmg/deploy/dns-manager-webhook.service
 ```
 
-編輯 webhook.env：`DEPLOY_REPOSITORY=fearnot221/dns-manager`、`DEPLOY_BRANCH=main`、確認絕對路徑，`WEBHOOK_SECRET` 用新的 `openssl rand -hex 32`。不要與 OAuth／session secret 共用。確認 service 中 Node 路徑（`command -v node`）及帳號符合主機設定。
+編輯 webhook.env：`DEPLOY_REPOSITORY=fearnot221/dns-manager`、`DEPLOY_BRANCH=main`、確認絕對路徑，`WEBHOOK_SECRET` 用新的 `openssl rand -hex 32`。不要與 OAuth／session secret 共用。先依快速安裝指南將 Node 22 放到 `/home/snmg/node`，並確認 service 中的絕對路徑及帳號符合主機設定。
 
-先用相同帳號、相同 DEPLOY_* 環境變數手動執行 `/bin/bash /opt/dns-manager-deploy/deploy.sh` 驗證，再啟用：
+先用相同帳號、相同 DEPLOY_* 環境變數手動執行 `/bin/bash /home/snmg/deploy/deploy.sh` 驗證，再啟用：
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now dns-manager-webhook
-sudo journalctl -u dns-manager-webhook -f
+sudo tail -f /home/snmg/state/webhook/service.log
 ```
 
 公開 repo 的 HTTPS fetch 不需 token。若改成私人 repo，需另外配置唯讀 deploy key、驗證 GitHub SSH host key；程式不會接受新的 SSH host key 或互動式密碼。

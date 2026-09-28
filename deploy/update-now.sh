@@ -4,5 +4,7 @@ set -Eeuo pipefail
 # systemd parses EnvironmentFile without evaluating shell substitutions.
 exec systemd-run --quiet --wait --pipe --collect --uid=dnsdeploy --gid=dnsdeploy \
   --property=SupplementaryGroups=docker \
-  --property=EnvironmentFile=/etc/dns-manager/webhook.env \
-  /bin/bash /opt/dns-manager-deploy/deploy.sh
+  --property=WorkingDirectory=/home/snmg/dns-manager \
+  --setenv=TMPDIR=/home/snmg/state/tmp \
+  --property=EnvironmentFile=/home/snmg/config/webhook.env \
+  /bin/bash /home/snmg/deploy/deploy.sh

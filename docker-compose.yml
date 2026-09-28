@@ -23,7 +23,9 @@ services:
       POSTGRES_DB: aegis_dns
       POSTGRES_USER: aegis
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-    volumes: [postgres_data:/var/lib/postgresql/data]
+    # New VM installs bind PostgreSQL beneath /home/snmg. The fallback preserves
+    # existing named-volume deployments until an explicit offline migration.
+    volumes: ["${POSTGRES_DATA_DIR:-postgres_data}:/var/lib/postgresql/data"]
     healthcheck:
       test: [CMD-SHELL, "pg_isready -U aegis -d aegis_dns"]
       interval: 5s
