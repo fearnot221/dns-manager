@@ -7,6 +7,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Dialog } from "@/components/ui/dialog";
 import { apiRequest, jsonRequest } from "@/lib/client/api";
+import { zoneCategory } from "@/lib/dns/zone-category";
 import type { InventoryRecord } from "@/lib/inventory/types";
 
 export function OwnershipDialog({ record, inspection = false, systemAdmin = false, canDeleteInspections = false, onClose, onSaved }: { record: InventoryRecord; inspection?: boolean; systemAdmin?: boolean; canDeleteInspections?: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
@@ -14,6 +15,7 @@ export function OwnershipDialog({ record, inspection = false, systemAdmin = fals
   const [assigning, setAssigning] = useState(false);
   const errorId = useId();
   const owner = record.ownership;
+  const canAssignUnit = systemAdmin && zoneCategory(record.zoneName) === "forward";
   const errorRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   async function removeInspection(id: string) {
@@ -35,11 +37,11 @@ export function OwnershipDialog({ record, inspection = false, systemAdmin = fals
     } catch (error) { setError(error instanceof Error ? error.message : "儲存失敗，請重試。"); }
     finally { sending.current = false; setPending(false); }
   }
-  if (assigning && inspection && systemAdmin) return <UnitAssignmentDialog record={record} onClose={onClose} onBack={() => setAssigning(false)} onSaved={onSaved} />;
+  if (assigning && inspection && canAssignUnit) return <UnitAssignmentDialog record={record} onClose={onClose} onBack={() => setAssigning(false)} onSaved={onSaved} />;
   return <Dialog title={inspection ? "DNS 清查" : "DNS 歸屬資料"} description="歸屬與清查資料獨立保存，不會改變 DNS 解析。" pending={pending} onClose={onClose}>
     <form onSubmit={submit} aria-describedby={error ? errorId : undefined}><fieldset disabled={pending} className="dialog-fields"><div className="modal-body">
       <div className="review-record"><strong>{record.recordName}</strong><span>{record.recordType} · {record.zoneName}</span><code>{record.content}</code></div>
-      {inspection && <div><p className="description">所屬單位：{owner.unitId ? owner.unitName || owner.applicantUnit : "尚未指派"}</p>{systemAdmin && <button type="button" className="button" onClick={() => { setAssigning(true); setError(""); }}>指派單位</button>}</div>}
+      {inspection && <div><p className="description">所屬單位：{owner.unitId ? owner.unitName || owner.applicantUnit : "尚未指派"}</p>{canAssignUnit && <button type="button" className="button" onClick={() => { setAssigning(true); setError(""); }}>指派單位</button>}</div>}
       <h3>歸屬資料</h3>
       <div className="field-grid four"><label>申請人姓名<input name="applicantName" defaultValue={owner.applicantName} maxLength={100} /></label><label>申請人電子郵件<input name="applicantEmail" type="email" defaultValue={owner.applicantEmail} /></label><label>申請單位<input name="applicantUnit" defaultValue={owner.applicantUnit} maxLength={200} /></label><label>單位分機<input name="applicantExtension" defaultValue={owner.applicantExtension} maxLength={30} /></label></div>
       <label>用途<textarea name="purpose" defaultValue={owner.purpose} maxLength={1000} rows={3} /></label>

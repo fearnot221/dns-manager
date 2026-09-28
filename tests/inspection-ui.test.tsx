@@ -56,3 +56,13 @@ it("uses domain tabs and the original inspection rows without view or grouping c
   expect(html).toContain('class="inventory-row"'); expect(html).toContain("lab.example.com.");
   expect(html).not.toContain("hidden.other.com."); expect(html).not.toContain("檢視模式"); expect(html).not.toContain("清查分組");
 });
+
+it.each(["2.0.192.in-addr.arpa.", "8.b.d.0.1.0.0.2.ip6.arpa."])("shows a reverse domain tab and functional inspection fields: %s", (zoneName) => {
+  const record = { ...records[0], zoneName, recordName: `1.${zoneName}`, recordType: "PTR", content: "host.example.com." };
+  vi.mocked(useResource).mockReturnValue({ data: { records: [record] }, loading: false, error: "", reload: vi.fn() } as never);
+  const html = renderToStaticMarkup(createElement(InventoryWorkbench));
+  expect(html).toContain(`${zoneName}</button>`); expect(html).toContain(`清查 ${record.recordName} ${record.content}`);
+  const dialog = renderToStaticMarkup(createElement(OwnershipDialog, { record, inspection: true, systemAdmin: true, onClose: vi.fn(), onSaved: vi.fn(async () => {}) }));
+  expect(dialog).toContain('name="note"'); expect(dialog).toContain("儲存並記錄清查");
+  expect(dialog).not.toContain("指派單位");
+});

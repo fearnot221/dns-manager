@@ -144,3 +144,10 @@
 - 帳號移除按鈕改用獨立 `canRemoveUsers` 權限，不因 `canAssignAdmin` 放寬而開放移除帳號；移除及 Zone 權限委派保持 owner 限制。
 - 對應本次清查 UI、角色 API／共用授權與帳號管理 UI：修正測試型別後 `npm run build` 通過；`npm run lint` 通過；`UNIT_TEST_DATABASE_URL=postgresql://dns_test@127.0.0.1:55439/dns_units_test npm test` 共 49 個測試檔、308 項測試通過；`git diff --check` 通過。包括隔離 PostgreSQL 的升降權、已驗證 owner 保護、拒絕授予最高身分，以及清查 domain 範圍的靜態呈現測試。
 - 無 migration 或正式資料操作。隔離 PostgreSQL 已停止；local demo 未啟動，未做瀏覽器視覺驗證；尚未推送。
+
+## 反解網域清查（2026-09-29）
+
+- DNS 清查總覽納入具管理權限的一般、IPv4 in-addr.arpa 與 IPv6 ip6.arpa 網域，沿用各 domain 頁籤與列表；可儲存歸屬並記錄反解清查。原本排除反解的清查限制已取消。
+- 沿用網域權限、連線身分及更新版本比對，不寫入 PowerDNS。單位指派仍限一般網域，反解清查對話框不顯示無法使用的指派入口。
+- 對應本次清查服務、總覽說明、反解對話框與測試的工作樹：`npm run build`、`npm run lint` 通過；`UNIT_TEST_DATABASE_URL=postgresql://dns_test@127.0.0.1:55439/dns_units_test npm test` 共 49 個測試檔、312 項測試通過；`git diff --check` 通過。包含 IPv4／IPv6 清查頁籤、限定管理網域、兩種清查儲存模式及隔離 PostgreSQL 持久化。
+- 未啟動 local demo，未做瀏覽器視覺驗證；隔離測試資料庫已停止。無 migration／正式資料操作，尚未推送。

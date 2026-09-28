@@ -30,15 +30,32 @@ beforeEach(() => {
 });
 const current = async () => (await describeRecords(actor, identity.zoneName, zone.rrsets))[0].ownership;
 describe("DNS ownership and inspection", () => {
-  it("only fetches forward zones for inventory, leaving reverse zones out of the results", async () => {
-    vi.mocked(powerdns.listZones).mockResolvedValue([zone, { ...zone, name: "2.0.192.in-addr.arpa." }, { ...zone, name: "8.B.D.0.1.0.0.2.IP6.ARPA." }]);
+  it("includes authorized forward, IPv4 and IPv6 zones in inventory", async () => {
+    const names = ["example.com.", "2.0.192.in-addr.arpa.", "8.B.D.0.1.0.0.2.IP6.ARPA."];
+    vi.mocked(powerdns.listZones).mockResolvedValue(names.map((name) => ({ ...zone, name })));
     const response = await GET();
     expect(response.status).toBe(200);
-    expect(powerdns.getZone).toHaveBeenCalledExactlyOnceWith("example.com.");
+    expect((await response.json()).records.map((record: { zoneName: string }) => record.zoneName)).toEqual(names);
+    expect(powerdns.getZone).toHaveBeenCalledTimes(3);
+    vi.mocked(powerdns.getZone).mockClear();
+    vi.mocked(requireActor).mockResolvedValue({ ...actor, globalRole: "USER", zoneRoles: { [names[1]]: "ADMIN" } });
+    expect((await (await GET()).json()).records.map((record: { zoneName: string }) => record.zoneName)).toEqual([names[1]]);
+    expect(powerdns.getZone).toHaveBeenCalledExactlyOnceWith(names[1]);
   });
-  it.each(["inspect", "inspect-and-metadata"] as const)("rejects reverse-zone inspections in %s mode", async (mode) => {
-    await expect(saveInventory(actor, { ...input, zoneName: "2.0.192.in-addr.arpa.", mode })).rejects.toMatchObject({ status: 400 });
-    expect(powerdns.getZone).not.toHaveBeenCalled();
+  it.each(["2.0.192.in-addr.arpa.", "8.b.d.0.1.0.0.2.ip6.arpa."])("records reverse inspections without changing DNS: %s", async (zoneName) => {
+    const reverse = { ...input, zoneName, recordName: `1.${zoneName}`, recordType: "PTR", content: "host.example.com." };
+    reverse.id = recordId("local-mock", reverse);
+    zone = { ...zone, name: zoneName, rrsets: [{ name: reverse.recordName, type: "PTR", ttl: 300, records: [{ content: reverse.content, disabled: false }] }] };
+    const before = structuredClone(zone);
+    for (const mode of ["inspect", "inspect-and-metadata"] as const) {
+      const current = (await describeRecords(actor, zoneName, zone.rrsets))[0].ownership;
+      await saveInventory(actor, { ...reverse, mode, note: "反解清查", expectedUpdatedAt: current.updatedAt });
+    }
+    const saved = (await describeRecords(actor, zoneName, zone.rrsets))[0].ownership;
+    expect(saved.inspections).toHaveLength(2); expect(saved.applicantName).toBe(input.applicantName);
+    expect(saved.inspections[0]).toMatchObject({ note: "反解清查", inspectorId: actor.id });
+    await expect(saveInventory({ ...actor, globalRole: "USER", zoneRoles: { "example.com.": "ADMIN" } }, { ...reverse, mode: "inspect" })).rejects.toMatchObject({ status: 404 });
+    expect(zone).toEqual(before);
   });
   it("stores metadata without changing DNS and keeps blank edits authoritative", async () => {
     await saveInventory(actor, input); const first = await current();

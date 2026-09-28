@@ -79,6 +79,16 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect((await db.user.findUniqueOrThrow({ where: { id: outsider.id } })).globalRole).toBe("SUPER_ADMIN");
     expect((await patch(viewer.id, { globalRole: "SUPER_ADMIN" })).status).toBe(400);
   });
+  it.each(["2.0.192.in-addr.arpa.", "8.b.d.0.1.0.0.2.ip6.arpa."])("persists reverse inspection history in PostgreSQL: %s", async (zoneName) => {
+    const identity = { zoneName, recordName: `${crypto.randomUUID()}.${zoneName}`, recordType: "PTR", content: "host.example.com." };
+    zone = { ...zone, name: zoneName, rrsets: [{ name: identity.recordName, type: "PTR", ttl: 300, records: [{ content: identity.content, disabled: false }] }] };
+    const id = recordId("local-mock", identity);
+    await saveInventory(admin, { ...identity, id, expectedUpdatedAt: null, mode: "inspect-and-metadata", applicantName: "反解管理人", applicantEmail: "", applicantUnit: "", applicantExtension: "", purpose: "反解", note: "確認" });
+    const saved = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id }, include: { inspections: true } });
+    expect(saved).toMatchObject({ ...identity, applicantName: "反解管理人", purpose: "反解" });
+    expect(saved.inspections).toHaveLength(1); expect(saved.inspections[0]).toMatchObject({ note: "確認", inspectorId: admin.id });
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+  });
   it("atomically saves ownership and inspection while preserving the assigned unit and existing history", async () => {
     const source = await sourceRecord();
     const before = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
