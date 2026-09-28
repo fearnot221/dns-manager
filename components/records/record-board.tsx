@@ -9,7 +9,7 @@ import { boardColumns, displayName, ipSuffix, type HashedRRSet, type RecordViewP
 
 type BoardEntry = { rrset: HashedRRSet; record: PdnsRecord };
 
-export function RecordGrid({ rrsets, zone, canMutate, copy, open, openOwnership }: RecordViewProps) {
+export function RecordGrid({ rrsets, zone, canMutate, copy, open, openOwnership, inspection }: RecordViewProps) {
   const rowTypes = RECORD_TYPES.filter((recordType) => rrsets.some((rrset) => rrset.type === recordType));
   return <div className="board-view">
     <div className="board-guide">
@@ -41,7 +41,7 @@ export function RecordGrid({ rrsets, zone, canMutate, copy, open, openOwnership 
                     <strong>{displayName(rrset.name, zone)}</strong><code>{record.content}</code>{record.disabled && <span className="disabled-count">已停用</span>}
                   </button>
                   {canMutate(rrset) && <button className="board-edit" onClick={() => open({ mode: "edit", rrset })} aria-label={`編輯 ${displayName(rrset.name, zone)} ${rrset.type}`}><Pencil size={12} /></button>}
-                  <div className="board-ownership"><OwnershipSummary zone={zone} rrset={rrset} record={record} open={openOwnership} /></div>
+                  <div className="board-ownership"><OwnershipSummary zone={zone} rrset={rrset} record={record} open={openOwnership} inspection={inspection} /></div>
                 </div>)}
               </td>;
             })}

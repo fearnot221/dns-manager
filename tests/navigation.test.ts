@@ -4,7 +4,7 @@ import { isNavActive, workspaceNavigation } from "@/lib/client/navigation";
 describe("workspace navigation", () => {
   const items = (admin: boolean, systemAdmin: boolean) => workspaceNavigation(admin, systemAdmin).flatMap((group) => group.items);
   it("keeps personal workflows available without exposing management links", () => {
-    expect(items(false, false).map((item) => item.href)).toEqual(["/requests/new", "/requests", "/units", "/inspections", "/contact"]);
+    expect(items(false, false).map((item) => item.href)).toEqual(["/requests/new", "/requests", "/units"]);
     expect(items(false, false).find((item) => item.href === "/requests")?.label).toBe("我的 DNS");
   });
   it("separates zone management from global administration", () => {
@@ -26,10 +26,12 @@ describe("workspace navigation", () => {
     expect(new Set(groups.map((group) => group.id)).size).toBe(groups.length);
     expect(new Set(routes).size).toBe(routes.length);
   });
-  it("uses management inbox labels only for system admins", () => {
-    expect(items(false, false).find((item) => item.href === "/contact")?.label).toBe("聯絡管理員");
-    expect(items(true, false).find((item) => item.href === "/contact")?.label).toBe("聯絡管理員");
-    expect(items(true, true).find((item) => item.href === "/contact")?.label).toBe("使用者訊息");
-    expect(items(true, true).find((item) => item.href === "/inspections")?.label).toBe("清查回覆管理");
+  it("removes messaging and inspection notification links for every role", () => {
+    for (const [admin, systemAdmin] of [[false, false], [true, false], [true, true]]) {
+      const navigation = workspaceNavigation(admin, systemAdmin);
+      expect(navigation.some((group) => group.id === "collaboration")).toBe(false);
+      expect(items(admin, systemAdmin).map((item) => item.href)).not.toContain("/contact");
+      expect(items(admin, systemAdmin).map((item) => item.href)).not.toContain("/inspections");
+    }
   });
 });

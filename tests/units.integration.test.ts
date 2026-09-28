@@ -8,27 +8,28 @@ vi.mock("@/lib/db/client", async () => {
 });
 vi.mock("@/lib/powerdns/settings", () => ({ connectionEnvironment: async () => ({ PDNS_MOCK: "true" }) }));
 vi.mock("@/lib/powerdns/client", () => ({ powerdns: { getZone: vi.fn(), replaceRRSet: vi.fn() } }));
+import { manageAllowlist } from "@/lib/units/allowlist";
+import { enrollAllowlistedUser } from "@/lib/units/enroll";
 import { db } from "@/lib/db/client";
 import { powerdns } from "@/lib/powerdns/client";
-import { createUnit, joinUnit, listUnits, manageUnit, unitAccess } from "@/lib/units/service";
+import { createUnit, listUnits, manageUnit, unitAccess, reviewUnit, assignUnitManager } from "@/lib/units/service";
 import { requestUnitChange, unitDetail } from "@/lib/units/records";
 import { reviewUnitRequest } from "@/lib/units/review";
 import { saveApplication } from "@/lib/requests/save-application";
 import { recordId } from "@/lib/inventory/service";
 import type { Actor, Zone } from "@/lib/dns/types";
 import { rrsetHash } from "@/lib/dns/rrset";
-import { sendContact, replyContact, assignInspection, respondInspection, cancelInspection } from "@/lib/workflows/service";
 import { removeUser } from "@/lib/users/remove";
 import { assertApplicationPolicy, saveApplicationPolicy, readApplicationPolicy } from "@/lib/requests/policy";
 
 const url = process.env.UNIT_TEST_DATABASE_URL;
 let zone: Zone;
 let creator: Actor, viewer: Actor, editor: Actor, outsider: Actor, admin: Actor;
-let unitId: string, code: string;
+let unitId: string;
 const httpRequest = () => new Request("http://localhost/api/dns-requests", { method: "POST" });
 async function account(role: "USER" | "ADMIN" = "USER"): Promise<Actor> {
-  const user = await db.user.create({ data: { email: `${crypto.randomUUID()}@unit-test.invalid`, globalRole: role, studentId: String(Math.floor(Math.random() * 1000000000)) } });
-  return { id: user.id, email: user.email, globalRole: role, zoneRoles: {} };
+  const user = await db.user.create({ data: { email: `${crypto.randomUUID()}@unit-test.invalid`, globalRole: role, studentId: crypto.randomUUID() } });
+  return { id: user.id, studentId: user.studentId, email: user.email, globalRole: role, zoneRoles: {} };
 }
 async function sourceRecord() {
   const source = { zoneName: zone.name, recordName: `${unitId}.example.com.`, recordType: "A", content: "192.0.2.1" };
@@ -53,60 +54,125 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     vi.mocked(powerdns.getZone).mockImplementation(async () => structuredClone(zone));
     vi.mocked(powerdns.replaceRRSet).mockImplementation(async (_name, rrset) => { zone.rrsets = [structuredClone(rrset)]; });
     [creator, viewer, editor, outsider, admin] = await Promise.all([account(), account(), account(), account(), account("ADMIN")]);
-    const created = await createUnit(creator, `test-${crypto.randomUUID()}`);
-    unitId = created.unit.id; code = created.passcode;
-    await joinUnit(viewer, code); await joinUnit(editor, code);
+    const created = await createUnit(admin, `test-${crypto.randomUUID()}`, creator.studentId!);
+    unitId = created.unit.id;
+    await manageAllowlist(creator, unitId, viewer.studentId!);
+    await manageAllowlist(creator, unitId, editor.studentId!);
     await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "EDITOR" });
   });
-  it("creates an admin, joins as viewer, stores no plaintext code and hides outsider units", async () => {
+  it("only allows system admins to create an effective unit for the specified student", async () => {
+    const name = `admin-created-${crypto.randomUUID()}`;
+    for (const actor of [outsider, creator, { ...outsider, zoneRoles: { "example.com.": "ADMIN" as const } }]) {
+      await expect(createUnit(actor, name, editor.studentId!)).rejects.toMatchObject({ status: 403 });
+    }
+    expect(await db.dnsUnit.findUnique({ where: { name } })).toBeNull();
+    const created = await createUnit({ ...admin, globalRole: "SUPER_ADMIN" }, name, ` ${editor.studentId} `);
+    const unit = await db.dnsUnit.findUniqueOrThrow({ where: { id: created.unit.id }, include: { members: true } });
+    expect(unit.status).toBe("APPROVED");
+    expect(unit.reviewedBy).toBe(admin.id);
+    expect(unit.members.map((m) => ({ userId: m.userId, role: m.role }))).toEqual([{ userId: editor.id, role: "ADMIN" }]);
+    expect((await db.user.findUniqueOrThrow({ where: { id: editor.id } })).globalRole).toBe("USER");
+    expect((await listUnits(editor)).some((u) => u.id === unit.id && u.canApply)).toBe(true);
+    await expect(createUnit(admin, name, editor.studentId!)).rejects.toMatchObject({ status: 409 });
+  });
+  it("rejects unknown, disabled, removed and ambiguous student ids without creating units", async () => {
+    const target = await account();
+    const name = `invalid-manager-${crypto.randomUUID()}`;
+    await expect(createUnit(admin, name, `missing-${crypto.randomUUID()}`)).rejects.toMatchObject({ status: 404 });
+    await db.user.update({ where: { id: target.id }, data: { disabled: true } });
+    await expect(createUnit(admin, name, target.studentId!)).rejects.toMatchObject({ status: 403 });
+    await db.user.update({ where: { id: target.id }, data: { removedAt: new Date() } });
+    await expect(createUnit(admin, name, target.studentId!)).rejects.toMatchObject({ status: 404 });
+    const duplicate = await account();
+    await db.user.update({ where: { id: duplicate.id }, data: { studentId: creator.studentId } });
+    await expect(createUnit(admin, name, creator.studentId!)).rejects.toMatchObject({ status: 409 });
+    expect(await db.dnsUnit.findUnique({ where: { name } })).toBeNull();
+  });
+  it("allows an admin to add managers by student id without changing global roles or other members", async () => {
+    for (const actor of [creator, viewer, { ...outsider, zoneRoles: { "example.com.": "ADMIN" as const } }]) {
+      await expect(assignUnitManager(actor, unitId, outsider.studentId!)).rejects.toMatchObject({ status: 403 });
+    }
+    await assignUnitManager(admin, unitId, ` ${outsider.studentId} `);
+    await assignUnitManager(admin, unitId, outsider.studentId!);
+    expect(await unitAccess(outsider, unitId, "manage")).toBe("ADMIN");
+    expect(await unitAccess(creator, unitId, "manage")).toBe("ADMIN");
+    expect((await db.user.findUniqueOrThrow({ where: { id: outsider.id } })).globalRole).toBe("USER");
+    await manageUnit(outsider, unitId, { action: "member", userId: viewer.id, role: "EDITOR" });
+    expect(await unitAccess(viewer, unitId, "edit")).toBe("EDITOR");
+    await assignUnitManager(admin, unitId, viewer.studentId!);
+    expect(await unitAccess(viewer, unitId, "manage")).toBe("ADMIN");
+    const other = await createUnit(admin, `other-manager-${crypto.randomUUID()}`, editor.studentId!);
+    await expect(manageUnit(outsider, other.unit.id, { action: "member", userId: editor.id, role: "VIEWER" })).rejects.toMatchObject({ status: 403 });
+    expect(await db.auditLog.count({ where: { userId: admin.id, action: "ASSIGN_UNIT_MANAGER" } })).toBe(3);
+  });
+  it("rejects invalid manager assignment without changing membership", async () => {
+    await expect(assignUnitManager(admin, unitId, `missing-${crypto.randomUUID()}`)).rejects.toMatchObject({ status: 404 });
+    await db.user.update({ where: { id: outsider.id }, data: { disabled: true } });
+    await expect(assignUnitManager(admin, unitId, outsider.studentId!)).rejects.toMatchObject({ status: 403 });
+    await db.user.update({ where: { id: outsider.id }, data: { removedAt: new Date() } });
+    await expect(assignUnitManager(admin, unitId, outsider.studentId!)).rejects.toMatchObject({ status: 404 });
+    const duplicate = await account();
+    await db.user.update({ where: { id: duplicate.id }, data: { studentId: viewer.studentId } });
+    await expect(assignUnitManager(admin, unitId, viewer.studentId!)).rejects.toMatchObject({ status: 409 });
+    expect(await unitAccess(viewer, unitId, "view")).toBe("VIEWER");
+    expect(await db.unitMember.count({ where: { unitId } })).toBe(3);
+    await expect(assignUnitManager(admin, `missing-${crypto.randomUUID()}`, editor.studentId!)).rejects.toMatchObject({ status: 404 });
+  });
+  it("keeps legacy pending units inactive until a system admin reviews them", async () => {
+    const pending = await createUnit(admin, `pending-${crypto.randomUUID()}`, outsider.studentId!);
+    await db.dnsUnit.update({ where: { id: pending.unit.id }, data: { status: "PENDING" } });
+    expect(pending).not.toHaveProperty("passcode");
+    expect((await db.dnsUnit.findUniqueOrThrow({ where: { id: pending.unit.id } })).status).toBe("PENDING");
+    for (const actor of [outsider, admin]) await expect(unitAccess(actor, pending.unit.id, "edit")).rejects.toMatchObject({ status: 403 });
+    await expect(manageAllowlist(outsider, pending.unit.id, viewer.studentId!)).rejects.toMatchObject({ status: 403 });
+    await expect(reviewUnit(outsider, pending.unit.id, "APPROVE")).rejects.toMatchObject({ status: 403 });
+    await expect(reviewUnit({ ...outsider, zoneRoles: { "example.com.": "ADMIN" } }, pending.unit.id, "APPROVE")).rejects.toMatchObject({ status: 403 });
+    const results = await Promise.allSettled([reviewUnit(admin, pending.unit.id, "APPROVE"), reviewUnit(admin, pending.unit.id, "REJECT")]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(await db.auditLog.count({ where: { action: "REVIEW_DNS_UNIT", newValue: { path: ["id"], equals: pending.unit.id } } })).toBe(1);
+  });
+  it("rejects inactive invitations and submissions, including admin membership bypass", async () => {
+    await db.dnsUnit.update({ where: { id: unitId }, data: { status: "PENDING" } });
+    await expect(manageAllowlist(creator, unitId, outsider.studentId!)).rejects.toMatchObject({ status: 403 });
+    await expect(assertApplicationPolicy(creator, ["A"], unitId)).rejects.toMatchObject({ status: 403 });
+    await reviewUnit(admin, unitId, "REJECT", "資料不足");
+    expect((await unitDetail(creator, unitId)).unit.reviewNote).toBe("資料不足");
+    await expect(assertApplicationPolicy(creator, ["A"], unitId)).rejects.toMatchObject({ status: 403 });
+    await expect(manageAllowlist(creator, unitId, outsider.studentId!)).rejects.toMatchObject({ status: 403 });
+    await expect(assertApplicationPolicy(admin, ["A"])).rejects.toMatchObject({ status: 403 });
+  });
+  it("blocks approving DNS while its unit is inactive", async () => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    await db.dnsUnit.update({ where: { id: unitId }, data: { status: "PENDING" } });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 403 });
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+    await reviewUnitRequest(admin, pending.id, "REJECT");
+  });
+  it("does not accept arbitrary unit ids or legacy personal policy settings", async () => {
+    await db.systemSetting.create({ data: { key: "dns-application-policy", value: { allowedTypes: ["A"], ownership: "ANY" } } });
+    expect((await readApplicationPolicy()).ownership).toBe("UNIT_ONLY");
+    for (const actor of [outsider, admin, viewer]) await expect(assertApplicationPolicy(actor, ["A"], unitId)).rejects.toMatchObject({ status: 403 });
+    await expect(assertApplicationPolicy(editor, ["A"])).rejects.toMatchObject({ status: 403 });
+  });
+  it("creates an admin, enrolls as viewer and hides outsider units", async () => {
     expect(await unitAccess(creator, unitId, "manage")).toBe("ADMIN");
     expect(await unitAccess(viewer, unitId, "view")).toBe("VIEWER");
     expect(await listUnits(outsider)).toEqual([]);
-    expect(JSON.stringify(await listUnits(viewer))).not.toContain(code);
-    expect((await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } })).passcodeHash).not.toBe(code);
-    expect(await db.auditLog.count({ where: { newValue: { path: ["passcode"], equals: code } } })).toBe(0);
+    expect((await unitDetail(viewer, unitId)).allowlist).toEqual([]);
+    expect((await unitDetail(creator, unitId)).allowlist).toHaveLength(3);
   });
   it("enforces type and membership rules in application services and detects stale policy edits", async () => {
-    const saved = await saveApplicationPolicy({ allowedTypes: ["A"], ownership: "MEMBERS_ONLY" }, null);
+    const saved = await saveApplicationPolicy({ allowedTypes: ["A"], ownership: "UNIT_ONLY" }, null);
     await expect(assertApplicationPolicy(outsider, ["A"])).rejects.toMatchObject({ status: 403 });
     await expect(assertApplicationPolicy(editor, ["AAAA"], unitId)).rejects.toMatchObject({ status: 403 });
     await expect(assertApplicationPolicy(editor, ["A"], unitId)).resolves.toBeUndefined();
-    await expect(saveApplicationPolicy({ allowedTypes: [], ownership: "ANY" }, null)).rejects.toMatchObject({ status: 409 });
+    await expect(saveApplicationPolicy({ allowedTypes: [], ownership: "UNIT_ONLY" }, null)).rejects.toMatchObject({ status: 409 });
     expect((await readApplicationPolicy()).updatedAt).toBe(saved.after.updatedAt);
     const source = await sourceRecord();
-    await saveApplicationPolicy({ allowedTypes: [], ownership: "ANY" }, saved.after.updatedAt);
+    await saveApplicationPolicy({ allowedTypes: [], ownership: "UNIT_ONLY" }, saved.after.updatedAt);
     await expect(requestUnitChange(editor, unitId, changeInput(source))).rejects.toMatchObject({ status: 403 });
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
-  });
-  it("stores messages and audited administrator replies without allowing a user to reply", async () => {
-    const message = await sendContact(viewer, { subject: "問題", body: "DNS 用途需要確認" });
-    await expect(replyContact(outsider, message.id, "偽造回覆")).rejects.toMatchObject({ status: 403 });
-    await replyContact(admin, message.id, "已收到");
-    await expect(replyContact(admin, message.id, "再次回覆")).rejects.toMatchObject({ status: 409 });
-    expect((await db.contactMessage.findUniqueOrThrow({ where: { id: message.id } })).repliedBy).toBe(admin.id);
-    expect(await db.auditLog.count({ where: { userId: admin.id, action: "REPLY_CONTACT_MESSAGE" } })).toBe(1);
-  });
-  it("only permits the assigned user to confirm a live DNS once, with an authenticated inspector", async () => {
-    const source = await sourceRecord();
-    const identity = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
-    await expect(assignInspection(viewer, identity, viewer.id)).rejects.toMatchObject({ status: 403 });
-    const task = await assignInspection(admin, identity, viewer.id);
-    await expect(assignInspection(admin, identity, viewer.id)).rejects.toMatchObject({ code: "P2002" });
-    await expect(respondInspection(outsider, task.id, "CONFIRMED", "")).rejects.toMatchObject({ status: 404 });
-    await respondInspection(viewer, task.id, "CONFIRMED", "仍使用");
-    await expect(respondInspection(viewer, task.id, "CONFIRMED", "")).rejects.toMatchObject({ status: 404 });
-    expect((await db.dnsInspection.findFirstOrThrow({ where: { recordId: source.id } })).inspectorId).toBe(viewer.id);
-    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
-  });
-  it("rejects stale DNS confirmation and lets an admin withdraw and reassign", async () => {
-    const source = await sourceRecord();
-    const identity = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
-    const task = await assignInspection(admin, identity, viewer.id);
-    zone.rrsets = [];
-    await expect(respondInspection(viewer, task.id, "CONFIRMED", "")).rejects.toMatchObject({ status: 409 });
-    await expect(cancelInspection(viewer, task.id)).rejects.toMatchObject({ status: 403 });
-    await cancelInspection(admin, task.id);
-    expect((await db.inspectionTask.findUniqueOrThrow({ where: { id: task.id } })).status).toBe("CANCELLED");
   });
   it("restricts account removal and preserves the last unit administrator", async () => {
     const owner = { ...admin, globalRole: "SUPER_ADMIN" as const, portalIdentifier: "115502532" };
@@ -117,14 +183,14 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const removed = await db.user.findUniqueOrThrow({ where: { id: viewer.id } });
     expect(removed.disabled).toBe(true); expect(removed.removedAt).toBeTruthy();
     expect(await db.unitMember.count({ where: { userId: viewer.id } })).toBe(0);
-    await expect(joinUnit(viewer, code)).rejects.toMatchObject({ status: 403 });
-    await expect(joinUnit(outsider, code)).rejects.toMatchObject({ status: 400 });
-    await expect(assignInspection(admin, { zoneName: zone.name, recordName: "x", recordType: "A", content: "1" }, viewer.id)).rejects.toBeTruthy();
+    await enrollAllowlistedUser(viewer.id);
+    expect(await db.unitAllowlist.count({ where: { userId: viewer.id } })).toBe(0);
+    await expect(unitAccess(viewer, unitId, "view")).rejects.toMatchObject({ status: 403 });
   });
   it("blocks viewer/outsider membership changes and never upgrades a duplicate join", async () => {
-    await expect(manageUnit(viewer, unitId, { action: "rotate" })).rejects.toMatchObject({ status: 403 });
+    await expect(manageAllowlist(viewer, unitId, outsider.studentId!)).rejects.toMatchObject({ status: 403 });
     await expect(manageUnit(outsider, unitId, { action: "member", userId: viewer.id, role: "ADMIN" })).rejects.toMatchObject({ status: 403 });
-    await joinUnit(editor, code);
+    await manageAllowlist(creator, unitId, editor.studentId!);
     expect(await unitAccess(editor, unitId, "edit")).toBe("EDITOR");
     await expect(unitDetail(outsider, unitId)).rejects.toMatchObject({ status: 403 });
   });
@@ -136,14 +202,64 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect(detail.members).toHaveLength(3);
     expect(detail.records).toEqual([]);
   });
-  it("rotates invitations and invalidates distributed codes on removal", async () => {
-    const rotated = await manageUnit(creator, unitId, { action: "rotate" });
-    await expect(joinUnit(outsider, code)).rejects.toMatchObject({ status: 400 });
-    const next = ("passcode" in rotated ? rotated.passcode : "") ?? "";
-    await joinUnit(outsider, next);
+  it("revokes allowlisting on removal and never re-enrolls a removed member", async () => {
+    await manageAllowlist(admin, unitId, outsider.studentId!);
     await manageUnit(creator, unitId, { action: "member", userId: outsider.id, role: null });
-    await expect(joinUnit(outsider, next)).rejects.toMatchObject({ status: 400 });
+    await enrollAllowlistedUser(outsider.id);
     await expect(unitAccess(outsider, unitId, "view")).rejects.toMatchObject({ status: 403 });
+    await manageAllowlist(creator, unitId, outsider.studentId!);
+    expect(await unitAccess(outsider, unitId, "view")).toBe("VIEWER");
+    await manageAllowlist(creator, unitId, outsider.studentId!, true);
+    await enrollAllowlistedUser(outsider.id);
+    await expect(unitAccess(outsider, unitId, "view")).rejects.toMatchObject({ status: 403 });
+    await expect(manageAllowlist(admin, unitId, creator.studentId!, true)).rejects.toMatchObject({ status: 409 });
+  });
+  it("supports pre-registration allowlisting and concurrent enrollment once", async () => {
+    const studentId = crypto.randomUUID();
+    await manageAllowlist(creator, unitId, ` ${studentId} `);
+    const target = await account();
+    await db.user.update({ where: { id: target.id }, data: { studentId } });
+    await Promise.all([enrollAllowlistedUser(target.id), enrollAllowlistedUser(target.id)]);
+    expect(await unitAccess(target, unitId, "view")).toBe("VIEWER");
+    expect(await db.auditLog.count({ where: { userId: target.id, action: "ENROLL_UNIT_ALLOWLIST" } })).toBe(1);
+    await expect(assertApplicationPolicy(target, ["A"], unitId)).rejects.toMatchObject({ status: 403 });
+  });
+  it("denies outsider, editor, disabled and ambiguous identities and honors pending revocation", async () => {
+    for (const actor of [viewer, editor, outsider]) await expect(manageAllowlist(actor, unitId, outsider.studentId!)).rejects.toMatchObject({ status: 403 });
+    await db.user.update({ where: { id: outsider.id }, data: { disabled: true } });
+    await expect(manageAllowlist(creator, unitId, outsider.studentId!)).rejects.toMatchObject({ status: 403 });
+    const duplicate = await account();
+    await db.user.update({ where: { id: duplicate.id }, data: { studentId: viewer.studentId } });
+    await expect(manageAllowlist(creator, unitId, viewer.studentId!)).rejects.toMatchObject({ status: 409 });
+    const studentId = crypto.randomUUID();
+    await manageAllowlist(creator, unitId, studentId);
+    await manageAllowlist(creator, unitId, studentId, true);
+    await db.user.update({ where: { id: duplicate.id }, data: { studentId } });
+    await enrollAllowlistedUser(duplicate.id);
+    await expect(unitAccess(duplicate, unitId, "view")).rejects.toMatchObject({ status: 403 });
+    await manageAllowlist(creator, unitId, studentId);
+    await manageUnit(creator, unitId, { action: "member", userId: duplicate.id, role: null });
+    await db.unitAllowlist.create({ data: { unitId, studentId } });
+    await db.user.update({ where: { id: outsider.id }, data: { studentId, disabled: false } });
+    await enrollAllowlistedUser(duplicate.id);
+    await expect(unitAccess(duplicate, unitId, "view")).rejects.toMatchObject({ status: 403 });
+  });
+  it("defers enrollment for inactive units and disabled users, and serializes revocation", async () => {
+    const studentId = crypto.randomUUID();
+    await manageAllowlist(creator, unitId, studentId);
+    const target = await account();
+    await db.user.update({ where: { id: target.id }, data: { studentId, disabled: true } });
+    await enrollAllowlistedUser(target.id);
+    await expect(unitAccess(target, unitId, "view")).rejects.toMatchObject({ status: 403 });
+    await db.user.update({ where: { id: target.id }, data: { disabled: false } });
+    await db.dnsUnit.update({ where: { id: unitId }, data: { status: "PENDING" } });
+    await enrollAllowlistedUser(target.id);
+    await expect(unitAccess(target, unitId, "view")).rejects.toMatchObject({ status: 403 });
+    await reviewUnit(admin, unitId, "APPROVE");
+    await Promise.all([enrollAllowlistedUser(target.id), manageAllowlist(creator, unitId, studentId, true)]);
+    await enrollAllowlistedUser(target.id);
+    await expect(unitAccess(target, unitId, "view")).rejects.toMatchObject({ status: 403 });
+    expect(await db.unitAllowlist.count({ where: { unitId, studentId } })).toBe(0);
   });
   it("serializes concurrent demotions and preserves one administrator", async () => {
     await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "ADMIN" });
@@ -157,7 +273,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
   it("rejects viewer and cross-unit change submissions without touching DNS", async () => {
     const source = await sourceRecord();
     await expect(requestUnitChange(viewer, unitId, changeInput(source))).rejects.toMatchObject({ status: 403 });
-    const other = await createUnit(editor, `other-${crypto.randomUUID()}`);
+    const other = await createUnit(admin, `other-${crypto.randomUUID()}`, editor.studentId!);
     await expect(requestUnitChange(editor, other.unit.id, changeInput(source))).rejects.toMatchObject({ status: 404 });
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
   });

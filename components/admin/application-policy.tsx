@@ -59,7 +59,7 @@ function GlobalApplicationPolicy() {
           <div className="policy-types">{applicationTypes.map((type) => <label className="type-option" key={type}><input type="checkbox" name="types" value={type} defaultChecked={policy.allowedTypes.includes(type)} /><span>{type}</span></label>)}</div>
         </fieldset>
         <p className="field-help" id="policy-types-help">未勾選任何類型時，將暫停所有類型的新申請。</p>
-        <label>申請資格與歸屬<Select name="ownership" defaultValue={policy.ownership} aria-describedby="policy-ownership-help" options={[{ value: "ANY", label: "所有使用者，可申請個人或單位 DNS" }, { value: "MEMBERS_ONLY", label: "必須已加入單位，可申請個人或單位 DNS" }, { value: "UNIT_ONLY", label: "必須選擇單位歸屬，且具該單位申請權限" }]} /></label>
+        <label>申請資格與歸屬<Select name="ownership" defaultValue={policy.ownership} aria-describedby="policy-ownership-help" options={[{ value: "UNIT_ONLY", label: "必須加入已核准單位，且具該單位申請權限" }]} /></label>
         <p className="field-help" id="policy-ownership-help">單位編輯者僅能提出變更申請；DNS 仍須由系統管理員審核後生效。</p>
         <div className="form-actions"><button className="button primary" aria-busy={pending}>{pending ? "儲存中…" : "儲存設定"}</button></div>
       </fieldset>

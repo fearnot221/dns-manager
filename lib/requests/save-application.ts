@@ -3,28 +3,22 @@ import { Prisma } from "@prisma/client";
 import type { Actor } from "@/lib/dns/types";
 import { db } from "@/lib/db/client";
 import { ApplicationInputError, requestRecordKey, type PreparedApplication } from "./application";
-import { createDevApplication, isDevRequestStore } from "./dev-store";
-import { logAuditEvent } from "@/lib/audit/service";
+import { isDevRequestStore } from "./dev-store";
 import { redactAudit } from "@/lib/audit/redact";
-import { lockActiveUser, lockUnit, unitAccess } from "@/lib/units/service";
+import { lockActiveUser, lockUnit } from "@/lib/units/service";
 import { connectionScope } from "@/lib/inventory/service";
 import { powerdns } from "@/lib/powerdns/client";
 import type { RRSet } from "@/lib/dns/types";
 import { assertApplicationPolicy } from "./policy";
 
 export async function saveApplication(actor: Actor, input: PreparedApplication, request: Request) {
+  if (!input.unitId) throw new ApplicationInputError("必須選擇已核准的單位才能申請 DNS。", 403);
   const applicationId = crypto.randomUUID();
-  if (isDevRequestStore()) {
-    await assertApplicationPolicy(actor, input.records.map((r) => r.recordType), input.unitId);
-    if (input.unitId) throw new ApplicationInputError("單位申請需要資料庫。", 503);
-    createDevApplication(actor, input, applicationId);
-    await logAuditEvent({ actor, zone: "", action: "REQUEST_DNS_APPLICATION", after: { ...input, applicationId }, success: true, request });
-    return { applicationId, count: input.records.length };
-  }
+  if (isDevRequestStore()) throw new ApplicationInputError("單位申請需要資料庫。", 503);
   try {
-    const scope = input.unitId ? await connectionScope() : undefined;
+    const scope = await connectionScope();
     const snapshots = new Map<string, RRSet[]>();
-    if (input.unitId) {
+    {
       for (const zone of new Set(input.records.map((record) => record.zoneName))) snapshots.set(zone, (await powerdns.getZone(zone)).rrsets);
       for (const record of input.records) {
         const current = snapshots.get(record.zoneName)?.find((r) => r.name === record.recordName && r.type === record.recordType);
@@ -32,17 +26,12 @@ export async function saveApplication(actor: Actor, input: PreparedApplication, 
       }
     }
     await db.$transaction(async (tx) => {
-      if (actor.id !== "dev-admin") await lockActiveUser(tx, actor.id);
+      await lockActiveUser(tx, actor.id);
+      await lockUnit(tx, input.unitId);
       await assertApplicationPolicy(actor, input.records.map((r) => r.recordType), input.unitId, tx);
-      if (input.unitId) {
-        await lockUnit(tx, input.unitId);
-        await unitAccess(actor, input.unitId, "edit", tx);
-        const unit = await tx.dnsUnit.findUniqueOrThrow({ where: { id: input.unitId } });
-        input = { ...input, applicantUnit: unit.name };
-      }
-      const userId = actor.id === "dev-admin"
-        ? (await tx.user.upsert({ where: { email: actor.email }, update: {}, create: { email: actor.email, name: actor.name, globalRole: "SUPER_ADMIN" } })).id
-        : actor.id;
+      const unit = await tx.dnsUnit.findUniqueOrThrow({ where: { id: input.unitId } });
+      input = { ...input, applicantUnit: unit.name };
+      const userId = actor.id;
       const { records, ...applicant } = input;
       const existing = await tx.dnsRecordRequest.findMany({
         where: { userId, status: "PENDING", zoneName: { in: [...new Set(records.map((item) => item.zoneName))] } },
@@ -57,7 +46,7 @@ export async function saveApplication(actor: Actor, input: PreparedApplication, 
       // Chunk SQL statements, not applications; all chunks and audit entries commit together.
       for (let offset = 0; offset < records.length; offset += 250) {
         const chunk = records.slice(offset, offset + 250);
-        await tx.dnsRecordRequest.createMany({ data: chunk.map((record) => ({ ...record, ...applicant, applicationId, userId, connectionScope: scope, ...(input.unitId ? { expectedRRSet: (snapshots.get(record.zoneName)?.find((r) => r.name === record.recordName && r.type === record.recordType) as unknown as Prisma.InputJsonValue) ?? Prisma.JsonNull } : {}) })) });
+        await tx.dnsRecordRequest.createMany({ data: chunk.map((record) => ({ ...record, ...applicant, applicationId, userId, connectionScope: scope, expectedRRSet: (snapshots.get(record.zoneName)?.find((r) => r.name === record.recordName && r.type === record.recordType) as unknown as Prisma.InputJsonValue) ?? Prisma.JsonNull })) });
         await tx.auditLog.createMany({ data: chunk.map((record) => ({
           userId, userEmail: actor.email, zone: record.zoneName, recordName: record.recordName, recordType: record.recordType,
           action: "REQUEST_DNS_RECORD", success: true, requestId: request.headers.get("x-request-id") || applicationId,

@@ -4,7 +4,7 @@ import { prepareApplication } from "@/lib/requests/application";
 import { createDevApplication, listDevRequests } from "@/lib/requests/dev-store";
 import type { Actor } from "@/lib/dns/types";
 
-const contact = { applicantName: "王小明", applicantUnit: "電子工程學系", applicantExtension: "01234" };
+const contact = { unitId: "unit-1", applicantName: "王小明", applicantUnit: "電子工程學系", applicantExtension: "01234" };
 const record = { zoneName: "example.com", name: "lab", type: "A", content: "192.0.2.10", ttl: 300 };
 const zones = ["example.com.", "student.example.com."];
 const actor = (): Actor => ({ id: crypto.randomUUID(), email: "user@example.com", globalRole: "USER", zoneRoles: {} });

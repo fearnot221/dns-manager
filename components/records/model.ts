@@ -11,6 +11,7 @@ export type RecordViewProps = {
   zone: string;
   canMutate: (rrset: HashedRRSet) => boolean;
   copy: (value: string) => void;
+  inspection?: boolean;
   openOwnership: (record: import("@/lib/inventory/types").InventoryRecord) => void;
   open: (dialog: { mode: "edit" | "delete"; rrset: HashedRRSet }) => void;
 };

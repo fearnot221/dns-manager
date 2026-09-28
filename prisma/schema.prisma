@@ -51,6 +51,7 @@ model User {
   recordRequests   DnsRecordRequest[] @relation("RecordRequestOwner")
   reviewedRequests DnsRecordRequest[] @relation("RecordRequestReviewer")
   unitMemberships UnitMember[]
+  unitAllowlistEntries UnitAllowlist[]
   contactMessages ContactMessage[]
   inspectionTasks InspectionTask[]
 }
@@ -258,17 +259,21 @@ model ContactMessage {
 model InspectionTask {
   id String @id @default(cuid())
   recordId String
-  userId String
+  unitId String?
+  unit DnsUnit? @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  respondedBy String?
+  userId String?
   createdBy String
   createdAt DateTime @default(now())
   status String @default("PENDING")
   snapshot Json
   response String? @db.Text
   respondedAt DateTime?
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
   record DnsRecordMetadata @relation(fields: [recordId], references: [id], onDelete: Restrict)
   @@index([userId, status])
   @@index([recordId, createdAt])
+  @@index([unitId, status])
 }
 
 enum UnitRole {
@@ -277,15 +282,40 @@ enum UnitRole {
   ADMIN
 }
 
+enum UnitStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model DnsUnit {
+  status UnitStatus @default(PENDING)
+  reviewedBy String?
+  reviewedAt DateTime?
+  reviewNote String?
   id String @id @default(cuid())
   name String @unique
-  passcodeHash String @unique
+  allowlist UnitAllowlist[]
+  passcodeHash String? @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   members UnitMember[]
   records DnsRecordMetadata[]
   requests DnsRecordRequest[]
+  inspectionTasks InspectionTask[]
+}
+
+model UnitAllowlist {
+  unitId String
+  studentId String
+  userId String?
+  createdAt DateTime @default(now())
+  unit DnsUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([unitId, studentId])
+  @@index([studentId])
+  @@index([userId])
 }
 
 model UnitMember {

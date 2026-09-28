@@ -19,7 +19,7 @@ export function prepareApplication(input: unknown, availableZones: readonly stri
   if (!result.success) {
     const issue = result.error.issues[0];
     const field = String(issue.path.at(-1) ?? "");
-    const labels: Record<string, string> = { applicantName: "申請人姓名", applicantUnit: "申請單位", applicantExtension: "單位分機", zoneName: "Zone 網域", name: "名稱", type: "紀錄類型", content: "內容", ttl: "TTL", purpose: "用途" };
+    const labels: Record<string, string> = { unitId: "已核准的單位", applicantName: "申請人姓名", applicantUnit: "申請單位", applicantExtension: "單位分機", zoneName: "Zone 網域", name: "名稱", type: "紀錄類型", content: "內容", ttl: "TTL", purpose: "用途" };
     const prefix = issue.path[0] === "records" && typeof issue.path[1] === "number" ? `第 ${issue.path[1] + 1} 筆：` : "";
     throw new ApplicationInputError(`${prefix}${labels[field] ?? "申請資料"}格式不正確或未填寫。${issue.code === "custom" ? issue.message : ""}`);
   }

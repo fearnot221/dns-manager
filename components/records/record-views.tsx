@@ -7,14 +7,14 @@ import { ScrollRegion } from "@/components/ui/scroll-region";
 import type { PdnsRecord, RecordType } from "@/lib/dns/types";
 import { displayName, type HashedRRSet, type RecordViewProps, type ViewMode } from "./model";
 
-export function RecordTable({ rrsets, zone, canMutate, copy, open, openOwnership }: RecordViewProps) {
+export function RecordTable({ rrsets, zone, canMutate, copy, open, openOwnership, inspection }: RecordViewProps) {
   return <div className="card table-card"><ScrollRegion className="table-wrap records-table" label="DNS 紀錄，可用方向鍵水平捲動"><table>
     <thead><tr><th scope="col">類型</th><th scope="col">名稱</th><th scope="col">解析內容</th><th scope="col">TTL（秒）</th><th scope="col">狀態</th><th scope="col"><span className="sr-only">操作</span></th></tr></thead>
     <tbody>{rrsets.flatMap((rrset) => rrset.records.map((record, index) => (
       <tr key={`${rrset.name}-${rrset.type}-${record.content}-${index}`} className={index ? "rrset-child" : ""}>
         <td>{!index && <TypeBadge type={rrset.type} />}</td>
         <td>{!index && <CopyValue value={displayName(rrset.name, zone)} copyValue={rrset.name} copy={copy} note={rrset.records.length > 1 ? `${rrset.records.length} 個解析值` : undefined} />}</td>
-        <td><CopyValue value={record.content} copy={copy} mono /><OwnershipSummary zone={zone} rrset={rrset} record={record} open={openOwnership} /></td>
+        <td><CopyValue value={record.content} copy={copy} mono /><OwnershipSummary zone={zone} rrset={rrset} record={record} open={openOwnership} inspection={inspection} /></td>
         <td>{!index && rrset.ttl}</td>
         <td><Badge tone={record.disabled ? "neutral" : "green"}>{record.disabled ? "已停用" : "啟用中"}</Badge></td>
         <td>{canMutate(rrset) && <Actions rrset={rrset} record={record} first={!index} open={open} />}</td>
@@ -23,7 +23,7 @@ export function RecordTable({ rrsets, zone, canMutate, copy, open, openOwnership
   </table></ScrollRegion></div>;
 }
 
-export function RecordList({ rrsets, zone, canMutate, copy, open, openOwnership }: RecordViewProps) {
+export function RecordList({ rrsets, zone, canMutate, copy, open, openOwnership, inspection }: RecordViewProps) {
   return <div className="record-list">{rrsets.map((rrset) => (
     <article className="card record-row" key={`${rrset.name}-${rrset.type}`}>
       <TypeBadge type={rrset.type} />
@@ -31,7 +31,7 @@ export function RecordList({ rrsets, zone, canMutate, copy, open, openOwnership 
         <CopyValue value={displayName(rrset.name, zone)} copyValue={rrset.name} copy={copy} />
         <span>TTL {rrset.ttl} 秒 · {rrset.records.length} 個解析值</span>
       </div>
-      <div className="record-values">{rrset.records.map((record, index) => <div className="record-value-line" key={`${record.content}-${index}`}><div><CopyValue value={record.content} copy={copy} mono /><OwnershipSummary zone={zone} rrset={rrset} record={record} open={openOwnership} /></div>{record.disabled && <Badge>已停用</Badge>}</div>)}</div>
+      <div className="record-values">{rrset.records.map((record, index) => <div className="record-value-line" key={`${record.content}-${index}`}><div><CopyValue value={record.content} copy={copy} mono /><OwnershipSummary zone={zone} rrset={rrset} record={record} open={openOwnership} inspection={inspection} /></div>{record.disabled && <Badge>已停用</Badge>}</div>)}</div>
       {canMutate(rrset) && <Actions rrset={rrset} first open={open} />}
     </article>
   ))}</div>;
@@ -39,7 +39,7 @@ export function RecordList({ rrsets, zone, canMutate, copy, open, openOwnership 
 
 type GroupItem = { rrset: HashedRRSet; record?: PdnsRecord };
 
-export function GroupedRecords({ mode, rrsets, zone, canMutate, copy, open, openOwnership }: RecordViewProps & { mode: Exclude<ViewMode, "table" | "list" | "grid"> }) {
+export function GroupedRecords({ mode, rrsets, zone, canMutate, copy, open, openOwnership, inspection }: RecordViewProps & { mode: Exclude<ViewMode, "table" | "list" | "grid"> }) {
   const groups = new Map<string, GroupItem[]>();
   for (const rrset of rrsets) {
     const items = mode === "content"
@@ -56,7 +56,7 @@ export function GroupedRecords({ mode, rrsets, zone, canMutate, copy, open, open
       <div>{items.map(({ rrset, record }, index) => (
         <div className="group-record" key={`${key}-${rrset.name}-${rrset.type}-${index}`}>
           <TypeBadge type={rrset.type} />
-          <div><strong>{displayName(rrset.name, zone)}</strong><span>{record ? `${rrset.ttl}s TTL` : rrset.records.map((item) => item.content + (item.disabled ? "（已停用）" : "")).join(" · ")}</span>{(record ? [record] : rrset.records).map((value, i) => <OwnershipSummary key={i} zone={zone} rrset={rrset} record={value} open={openOwnership} />)}</div>
+          <div><strong>{displayName(rrset.name, zone)}</strong><span>{record ? `${rrset.ttl}s TTL` : rrset.records.map((item) => item.content + (item.disabled ? "（已停用）" : "")).join(" · ")}</span>{(record ? [record] : rrset.records).map((value, i) => <OwnershipSummary key={i} zone={zone} rrset={rrset} record={value} open={openOwnership} inspection={inspection} />)}</div>
           <small>{record ? (record.disabled ? "已停用" : "啟用中") : `${rrset.ttl} 秒`}{!record && rrset.records.some((value) => value.disabled) && <span className="disabled-count">{rrset.records.filter((value) => value.disabled).length} 筆已停用</span>}</small>
           {canMutate(rrset) && <Actions rrset={rrset} record={record} first={!record} open={open} />}
         </div>

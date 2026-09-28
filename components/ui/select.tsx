@@ -14,6 +14,7 @@ type Props = {
   required?: boolean;
   "aria-label"?: string;
   "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
   className?: string;
 };
 

@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { canSubmitUnitRequest, wouldRemoveLastAdmin } from "@/lib/units/policy";
-import { newPasscode, passcodeHash } from "@/lib/units/passcode";
 import { replaceUnitValue, unitChangeState } from "@/lib/units/change";
 import { redactAudit } from "@/lib/audit/redact";
 import type { RRSet } from "@/lib/dns/types";
 
-describe("unit permissions and invitation secrecy", () => {
+describe("unit permissions and historical invitation secrecy", () => {
   it("limits submission to editor and unit admin, never a viewer or nonmember", () => {
     expect(canSubmitUnitRequest("VIEWER")).toBe(false);
     expect(canSubmitUnitRequest(null)).toBe(false);
@@ -18,13 +17,8 @@ describe("unit permissions and invitation secrecy", () => {
     expect(wouldRemoveLastAdmin("ADMIN", "ADMIN", 1)).toBe(false);
     expect(wouldRemoveLastAdmin("ADMIN", "EDITOR", 2)).toBe(false);
   });
-  it("generates opaque 192-bit invitations, hashes them, and redacts them in audit data", () => {
-    const code = newPasscode();
-    expect(code).toMatch(/^[A-Za-z0-9_-]{32}$/);
-    expect(newPasscode()).not.toBe(code);
-    expect(passcodeHash(code)).toHaveLength(64);
-    expect(passcodeHash(` ${code} `)).toBe(passcodeHash(code));
-    expect(redactAudit({ passcode: code, passcodeHash: passcodeHash(code) })).toEqual({ passcode: "[REDACTED]", passcodeHash: "[REDACTED]" });
+  it("continues redacting historical invitation data", () => {
+    expect(redactAudit({ passcode: "legacy-code", passcodeHash: "legacy-hash" })).toEqual({ passcode: "[REDACTED]", passcodeHash: "[REDACTED]" });
   });
 });
 describe("unit DNS change isolation", () => {

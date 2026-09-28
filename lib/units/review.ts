@@ -6,7 +6,7 @@ import type { Actor, RecordType, RRSet } from "@/lib/dns/types";
 import { powerdns } from "@/lib/powerdns/client";
 import { connectionScope, recordId } from "@/lib/inventory/service";
 import { addRecord } from "@/lib/dns/rrset";
-import { lockUnit, unitAudit } from "./service";
+import { lockUnit, unitAudit, requireApprovedUnit } from "./service";
 import { canSubmitUnitRequest } from "./policy";
 import { replaceUnitValue, unitChangeState, unitRRSetHash } from "./change";
 
@@ -20,9 +20,10 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
     const item = await tx.dnsRecordRequest.findUniqueOrThrow({ where: { id }, include: { user: true } });
     if (item.status !== "PENDING") throw new ApiError("此申請已審核，請重新載入。", 409);
     if (decision === "APPROVE") {
+      await requireApprovedUnit(tx, initial.unitId);
       const member = await tx.unitMember.findUnique({ where: { unitId_userId: { unitId: initial.unitId, userId: item.userId } } });
-      // A system administrator can submit for any unit. Revoked member privileges invalidate approval.
-      if (item.user.disabled || (!canSubmitUnitRequest(member?.role) && !["ADMIN", "SUPER_ADMIN"].includes(item.user.globalRole))) throw new ApiError("申請人已無單位編輯權限，請退回此申請。", 409);
+      // Every applicant must retain membership and edit privileges until approval.
+      if (item.user.disabled || !canSubmitUnitRequest(member?.role)) throw new ApiError("申請人已無單位編輯權限，請退回此申請。", 409);
       const scope = await connectionScope();
       if (item.connectionScope !== scope) throw new ApiError("PowerDNS 連線已變更，請退回並重新申請。", 409);
       const zone = await powerdns.getZone(item.zoneName);

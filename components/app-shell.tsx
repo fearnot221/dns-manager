@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCheck, Users, FileCheck2, FilePlus2, Globe2, LogOut, Menu, Monitor, Moon, Sun, X, History, ChevronDown, PanelLeftClose, PanelLeftOpen, MessageSquare, Bell, SlidersHorizontal } from "lucide-react";
+import { ClipboardCheck, Users, FileCheck2, FilePlus2, Globe2, LogOut, Menu, Monitor, Moon, Sun, X, History, ChevronDown, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from "lucide-react";
 import { Brand } from "@/components/brand";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -10,7 +10,7 @@ import { useTheme } from "next-themes";
 import { workspaceNavigation, isNavActive, type NavIcon } from "@/lib/client/navigation";
 import { IdleSession } from "@/components/auth/idle-session";
 
-const navIcons: Record<NavIcon, typeof Users> = { apply: FilePlus2, requests: FileCheck2, units: Users, zones: Globe2, inventory: ClipboardCheck, contact: MessageSquare, inspections: Bell, users: Users, settings: SlidersHorizontal, activity: History };
+const navIcons: Record<NavIcon, typeof Users> = { apply: FilePlus2, requests: FileCheck2, units: Users, zones: Globe2, inventory: ClipboardCheck, users: Users, settings: SlidersHorizontal, activity: History };
 
 export function AppShell({ children, identity, admin, systemAdmin, demo }: {
   children: React.ReactNode;

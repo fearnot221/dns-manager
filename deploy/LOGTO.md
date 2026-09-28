@@ -84,7 +84,7 @@ run_link --user-id EXISTING_USER_ID --subject VERIFIED_LOGTO_USER_ID \
 
 ## 重置所有使用者帳號
 
-`scripts/reset-all-users.ts` 是人工維護工具，不會在部署或 migration 自動執行。它會先提供 dry run；正式套用會撤銷全部 session 與 Logto 綁定、移除角色／網域／群組／單位權限、輪替所有單位加入碼，並把所有帳號（包含先前已移除的帳號）封存到 `/admin/users` 不再顯示。待審核 DNS 申請與待回覆清查會取消；已完成的 DNS 申請、站內訊息、清查及稽核歷史仍保留原 User 關聯，不會因直接刪除外鍵而遺失。
+`scripts/reset-all-users.ts` 是人工維護工具，不會在部署或 migration 自動執行。它會先提供 dry run；正式套用會撤銷全部 session 與 Logto 綁定、移除角色／網域／群組／單位權限、清除所有單位學號白名單，並把所有帳號（包含先前已移除的帳號）封存到 `/admin/users` 不再顯示。待審核 DNS 申請與待回覆清查會取消；已完成的 DNS 申請、站內訊息、清查及稽核歷史仍保留原 User 關聯，不會因直接刪除外鍵而遺失。
 
 使用上方 `deploy_tag` 與 Compose 參數執行新版 tools image：
 

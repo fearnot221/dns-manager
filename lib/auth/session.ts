@@ -1,4 +1,5 @@
 import "server-only";
+import { enrollAllowlistedUser } from "@/lib/units/enroll";
 import { auth } from "./config";
 import { db } from "@/lib/db/client";
 import { demoUsers } from "@/lib/users/demo";
@@ -17,6 +18,7 @@ export async function requireActor():Promise<Actor>{
   }
   const user=await db.user.findUnique({where:{id:session.user.id},include:{accounts:{where:{provider:{in:["ncu-portal","logto"]}},select:{provider:true,providerAccountId:true}},zonePermissions:{where:{OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]}},groupMemberships:{include:{group:{include:{zonePermissions:{where:{OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]}}}}}}}});
   if(!user || user.disabled || user.removedAt)throw new AuthError();
+  if (user.studentId) await enrollAllowlistedUser(user.id);
   const zoneRoles:Actor["zoneRoles"]={};
   for(const permission of [...user.zonePermissions,...user.groupMemberships.flatMap((m)=>m.group.zonePermissions)]){
     const current=zoneRoles[permission.zoneName]; const rank={VIEWER:1,EDITOR:2,ADMIN:3}; if(!current||rank[permission.role]>rank[current])zoneRoles[permission.zoneName]=permission.role;

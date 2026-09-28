@@ -14,7 +14,7 @@ export function InventoryViews({ records, view, open }: { records: InventoryReco
      if (!rrset) { rrset = { name: record.recordName, type: record.recordType as RecordType, ttl: record.ttl, hash: record.ownership.id, records: [] }; rrsets.push(rrset); }
      rrset.records.push({ content: record.content, disabled: record.disabled, ownership: record.ownership });
    }
-   const props = { zone, rrsets, canMutate: () => false, open: () => {}, openOwnership: open, copy: (value: string) => { void navigator.clipboard.writeText(value).then(() => toast.success("已複製")).catch(() => toast.error("無法複製，請手動選取")); } };
+   const props = { zone, rrsets, inspection: true, canMutate: () => false, open: () => {}, openOwnership: open, copy: (value: string) => { void navigator.clipboard.writeText(value).then(() => toast.success("已複製")).catch(() => toast.error("無法複製，請手動選取")); } };
    return <div key={zone}><h3>{zone}</h3>{view === "table" ? <RecordTable {...props} /> : view === "list" ? <RecordList {...props} /> : view === "grid" ? <RecordGrid {...props} /> : <GroupedRecords {...props} mode={view} />}</div>;
  })}</>;
 }

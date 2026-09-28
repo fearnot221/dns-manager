@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Session } from "next-auth";
+vi.mock("@/lib/units/enroll", () => ({ enrollAllowlistedUser: vi.fn() }));
+import { enrollAllowlistedUser } from "@/lib/units/enroll";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/config", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/db/client", () => ({ db: { user: { findUnique: vi.fn() } } }));
@@ -60,4 +62,17 @@ it("lets a Logto user without an identifier enter as USER instead of restoring a
   vi.mocked(auth as () => Promise<Session | null>).mockResolvedValue({ loginProvider: "logto", user: { id: "admin", email: "admin@accounts.invalid", globalRole: "USER" }, expires: "2099-01-01" });
   vi.mocked(db.user.findUnique).mockResolvedValue({ id: "admin", email: "admin@accounts.invalid", globalRole: "ADMIN", logtoName: null, accounts: [{ provider: "logto", providerAccountId: "admin-sub" }], zonePermissions: [], groupMemberships: [] } as never);
   expect(await requireActor()).toMatchObject({ globalRole: "USER", portalIdentifier: null });
+});
+
+it("enrolls using the authenticated stored user id, and never a disabled account", async () => {
+  vi.clearAllMocks();
+  vi.stubEnv("DATABASE_URL", "postgresql://test/db");
+  vi.mocked(auth as () => Promise<Session | null>).mockResolvedValue({ loginProvider: "logto", user: { id: "stored-user", email: "test@accounts.invalid", globalRole: "USER" }, expires: "2099-01-01" });
+  const stored = { id: "stored-user", studentId: "115000001", email: "test@accounts.invalid", globalRole: "USER", accounts: [], zonePermissions: [], groupMemberships: [] };
+  vi.mocked(db.user.findUnique).mockResolvedValue(stored as never);
+  await requireActor();
+  expect(enrollAllowlistedUser).toHaveBeenCalledExactlyOnceWith("stored-user");
+  vi.mocked(db.user.findUnique).mockResolvedValue({ ...stored, disabled: true } as never);
+  await expect(requireActor()).rejects.toMatchObject({ status: 401 });
+  expect(enrollAllowlistedUser).toHaveBeenCalledTimes(1);
 });

@@ -6,10 +6,10 @@ it("rejects unconfigured record types and duplicate policy entries", () => {
  expect(applicationPolicySchema.safeParse({ allowedTypes: ["A", "A"], ownership: "ANY" }).success).toBe(false);
  expect(applicationPolicySchema.safeParse({ allowedTypes: ["SOA"], ownership: "ANY" }).success).toBe(false);
 });
-it("distinguishes membership eligibility from mandatory unit ownership", () => {
- expect(policyViolation(defaultApplicationPolicy, ["A"], undefined, false)).toBeNull();
- expect(policyViolation({ ...defaultApplicationPolicy, ownership: "MEMBERS_ONLY" }, ["A"], undefined, false)).toBeTruthy();
- expect(policyViolation({ ...defaultApplicationPolicy, ownership: "MEMBERS_ONLY" }, ["A"], undefined, true)).toBeNull();
- expect(policyViolation({ ...defaultApplicationPolicy, ownership: "UNIT_ONLY" }, ["A"], undefined, true)).toBeTruthy();
- expect(policyViolation({ ...defaultApplicationPolicy, ownership: "UNIT_ONLY" }, ["A"], "unit", true)).toBeNull();
+it("requires unit ownership and membership unconditionally", () => {
+ expect(policyViolation(defaultApplicationPolicy, ["A"], undefined, false)).toBeTruthy();
+ expect(policyViolation(defaultApplicationPolicy, ["A"], undefined, true)).toBeTruthy();
+ expect(policyViolation(defaultApplicationPolicy, ["A"], "unit", false)).toBeTruthy();
+ expect(policyViolation(defaultApplicationPolicy, ["A"], "unit", true)).toBeNull();
+ for (const ownership of ["ANY", "MEMBERS_ONLY"]) expect(applicationPolicySchema.safeParse({ allowedTypes: ["A"], ownership }).success).toBe(false);
 });

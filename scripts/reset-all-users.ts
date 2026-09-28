@@ -1,5 +1,4 @@
 import { PrismaClient } from "@prisma/client";
-import { newPasscode, passcodeHash } from "../lib/units/passcode";
 
 // Operator-only account reset. Historical DNS requests, messages, inspections and
 // audit rows keep their User relation, while every login identity becomes unusable.
@@ -16,7 +15,7 @@ async function main() {
 
   const db = new PrismaClient();
   try {
-    const [users, accounts, sessions, memberships, permissions, pendingRequests, pendingInspections] = await Promise.all([
+    const [users, accounts, sessions, memberships, permissions, pendingRequests, pendingInspections, allowlistEntries] = await Promise.all([
       db.user.count(),
       db.account.count(),
       db.session.count(),
@@ -24,8 +23,9 @@ async function main() {
       db.zonePermission.count(),
       db.dnsRecordRequest.count({ where: { status: "PENDING" } }),
       db.inspectionTask.count({ where: { status: "PENDING" } }),
+      db.unitAllowlist.count(),
     ]);
-    const summary = { users, accounts, sessions, memberships, permissions, pendingRequests, pendingInspections };
+    const summary = { users, accounts, sessions, memberships, permissions, pendingRequests, pendingInspections, allowlistEntries };
     console.table(summary);
     if (!apply) {
       console.log("Dry run only. Historical DNS requests, messages, inspections and audit records will be preserved.");
@@ -44,8 +44,7 @@ async function main() {
       await tx.unitMember.deleteMany();
       const cancelledRequests = await tx.dnsRecordRequest.updateMany({ where: { status: "PENDING" }, data: { status: "CANCELLED", reviewNote: "系統管理員已重置所有使用者帳號" } });
       const cancelledInspections = await tx.inspectionTask.updateMany({ where: { status: "PENDING" }, data: { status: "CANCELLED", response: "系統管理員已重置所有使用者帳號", respondedAt: now } });
-      const units = await tx.dnsUnit.findMany({ select: { id: true } });
-      for (const unit of units) await tx.dnsUnit.update({ where: { id: unit.id }, data: { passcodeHash: passcodeHash(newPasscode()) } });
+      const revokedAllowlist = await tx.unitAllowlist.deleteMany();
       for (const user of targets) {
         await tx.user.update({ where: { id: user.id }, data: {
           email: `archived-${user.id}@accounts.invalid`,
@@ -65,9 +64,9 @@ async function main() {
         action: "RESET_ALL_USERS",
         requestId: crypto.randomUUID(),
         success: true,
-        newValue: { archivedUsers: targets.length, cancelledRequests: cancelledRequests.count, cancelledInspections: cancelledInspections.count, rotatedUnitPasscodes: units.length },
+        newValue: { archivedUsers: targets.length, cancelledRequests: cancelledRequests.count, cancelledInspections: cancelledInspections.count, revokedUnitAllowlist: revokedAllowlist.count },
       } });
-      return { archivedUsers: targets.length, cancelledRequests: cancelledRequests.count, cancelledInspections: cancelledInspections.count, rotatedUnitPasscodes: units.length };
+      return { archivedUsers: targets.length, cancelledRequests: cancelledRequests.count, cancelledInspections: cancelledInspections.count, revokedUnitAllowlist: revokedAllowlist.count };
     }, { isolationLevel: "Serializable", timeout: 60_000 });
     console.table(result);
     console.log("All active accounts were reset. Existing sessions and Logto bindings were revoked; fresh Portal logins can provision new users.");

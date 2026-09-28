@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import type { Actor, RecordType, RRSet } from "@/lib/dns/types";
 import { powerdns } from "@/lib/powerdns/client";
 import { connectionScope, recordId } from "@/lib/inventory/service";
+import { isGlobalAdmin } from "@/lib/auth/owner";
 import { ApiError } from "@/lib/api/respond";
 import { lockActiveUser, lockUnit, requireUnitDatabase, unitAccess, unitAudit } from "./service";
 import { replaceUnitValue } from "./change";
@@ -14,8 +15,12 @@ import { assertApplicationPolicy } from "@/lib/requests/policy";
 export async function unitDetail(actor: Actor, unitId: string) {
   requireUnitDatabase();
   const role = await unitAccess(actor, unitId, "view");
-  const unit = await db.dnsUnit.findUnique({ where: { id: unitId }, select: { id: true, name: true, members: { select: { userId: true, role: true, user: { select: { name: true, studentId: true, disabled: true } } } } } });
+  const unit = await db.dnsUnit.findUnique({ where: { id: unitId }, select: { id: true, name: true, status: true, reviewNote: true, members: { select: { userId: true, role: true, user: { select: { name: true, studentId: true, disabled: true } } } } } });
   if (!unit) throw new ApiError("找不到單位。", 404);
+  const members = unit.members.map((m) => ({ userId: m.userId, role: m.role, label: m.user.name || m.user.studentId || "未提供姓名", studentId: m.user.studentId, disabled: m.user.disabled }));
+  const allowlist = role === "ADMIN" ? await db.unitAllowlist.findMany({ where: { unitId }, select: { studentId: true, userId: true }, orderBy: { studentId: "asc" } }) : [];
+  const summary = { allowlist, unit: { id: unit.id, name: unit.name, status: unit.status, reviewNote: unit.reviewNote }, role, canReview: isGlobalAdmin(actor), canApply: unit.status === "APPROVED" && unit.members.some((m) => m.userId === actor.id && ["EDITOR", "ADMIN"].includes(m.role)), members };
+  if (unit.status !== "APPROVED") return { ...summary, records: [], recordsError: "" };
   const saved = await db.dnsRecordMetadata.findMany({ where: { unitId } });
   const scope = await connectionScope();
   const scoped = saved.filter((record) => record.id === recordId(scope, record));
@@ -31,7 +36,7 @@ export async function unitDetail(actor: Actor, unitId: string) {
     return live && rrset ? [{ id: record.id, zoneName: record.zoneName, recordName: record.recordName, recordType: record.recordType, content: record.content, ttl: rrset.ttl, disabled: live.disabled, purpose: record.purpose, expectedHash: rrsetHash(rrset) }] : [];
   });
   // Do not return emails, private applicant contact fields, or other units' RRset values.
-  return { unit: { id: unit.id, name: unit.name }, role, members: unit.members.map((m) => ({ userId: m.userId, role: m.role, label: m.user.name || m.user.studentId || "未提供姓名", studentId: m.user.studentId, disabled: m.user.disabled })), records, recordsError: unavailable.length ? `有 ${unavailable.length} 個網域暫時無法取得 DNS，清單可能不完整；成員管理不受影響。` : "" };
+  return { ...summary, records, recordsError: unavailable.length ? `有 ${unavailable.length} 個網域暫時無法取得 DNS，清單可能不完整；成員管理不受影響。` : "" };
 }
 
 export async function requestUnitChange(actor: Actor, unitId: string, input: { recordId: string; content: string; purpose: string; expectedHash: string }) {

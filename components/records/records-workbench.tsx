@@ -10,6 +10,7 @@ import { protectedTypes, type DialogState, type HashedRRSet, type RecordViewProp
 import { RecordTable, RecordList, GroupedRecords } from "./record-views";
 import { RecordGrid } from "./record-board";
 import type { InventoryRecord } from "@/lib/inventory/types";
+import { zoneCategory } from "@/lib/dns/zone-category";
 import { OwnershipDialog } from "./ownership-dialog";
 import { RecordDialog } from "./record-dialog";
 import { isRecordView, recordViews } from "./view-options";
@@ -75,7 +76,8 @@ export function RecordsWorkbench({ zoneName }: { zoneName: string }) {
     catch { toast.error("無法複製，請手動選取內容。"); }
   }
 
-  const viewProps: RecordViewProps = { rrsets: filtered, zone: zoneName, canMutate, copy, open: setDialog, openOwnership: setOwnership };
+  const inspection = zoneCategory(zoneName) === "forward";
+  const viewProps: RecordViewProps = { inspection, rrsets: filtered, zone: zoneName, canMutate, copy, open: setDialog, openOwnership: setOwnership };
 
   return (
     <>
@@ -117,7 +119,7 @@ export function RecordsWorkbench({ zoneName }: { zoneName: string }) {
           : view === "grid" ? <RecordGrid {...viewProps} />
           : <GroupedRecords {...viewProps} mode={view} />}
 
-      {ownership && <OwnershipDialog record={ownership} onClose={() => setOwnership(null)} onSaved={async () => { setOwnership(null); await load(); }} />}
+      {ownership && <OwnershipDialog record={ownership} inspection={inspection} onClose={() => setOwnership(null)} onSaved={async () => { setOwnership(null); await load(); }} />}
       {dialog && <RecordDialog zone={zoneName} dialog={dialog} onClose={() => setDialog(null)} onSaved={async () => { setDialog(null); await load(); }} />}
     </>
   );

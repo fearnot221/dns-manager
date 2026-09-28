@@ -1,0 +1,20 @@
+import { beforeEach, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class extends Error { status = 401; } }));
+vi.mock("@/lib/audit/service", () => ({ logAuditEvent: vi.fn(async () => {}) }));
+vi.mock("@/lib/requests/policy", () => ({ readApplicationPolicy: vi.fn(), saveApplicationPolicy: vi.fn() }));
+import { requireActor } from "@/lib/auth/session";
+import { PUT as policyPut } from "@/app/api/application-policy/route";
+import { saveApplicationPolicy } from "@/lib/requests/policy";
+const user = { id: "user-one", email: "one@example.com", globalRole: "USER" as const, zoneRoles: {} };
+const request = (path: string, method: string, body: unknown) => new Request(`http://localhost:3000/api/${path}`, { method, headers: { Origin: "http://localhost:3000", "Content-Type": "application/json" }, body: JSON.stringify(body) });
+beforeEach(() => { vi.clearAllMocks(); vi.mocked(requireActor).mockResolvedValue(user); });
+it("restricts policy writes to system admins and accepts the UI payload", async () => {
+ const body = { policy: { allowedTypes: ["A"], ownership: "UNIT_ONLY" }, expectedUpdatedAt: null };
+ expect((await policyPut(request("application-policy", "PUT", body))).status).toBe(403);
+ expect(saveApplicationPolicy).not.toHaveBeenCalled();
+ vi.mocked(requireActor).mockResolvedValue({ ...user, globalRole: "ADMIN" });
+ vi.mocked(saveApplicationPolicy).mockResolvedValue({ before: { allowedTypes: [], ownership: "UNIT_ONLY", updatedAt: null }, after: { allowedTypes: ["A"], ownership: "UNIT_ONLY", updatedAt: null } });
+ expect((await policyPut(request("application-policy", "PUT", body))).status).toBe(200);
+ expect(saveApplicationPolicy).toHaveBeenCalledWith(body.policy, null);
+});

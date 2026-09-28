@@ -9,7 +9,7 @@ import { contentHelp } from "./model";
 import { apiRequest, jsonRequest } from "@/lib/client/api";
 import { useResource } from "@/lib/client/use-resource";
 import { Dialog } from "@/components/ui/dialog";
-import { canSubmitUnitRequest, type UnitRole } from "@/lib/units/policy";
+import { type UnitRole } from "@/lib/units/policy";
 import { Select } from "@/components/ui/select";
 
 import { policyViolation, type ApplicationPolicy } from "@/lib/requests/policy-model";
@@ -23,9 +23,10 @@ export function DnsApplicationForm() {
   const zones = data?.zones ?? [];
   const policyResource = useResource<{ policy: ApplicationPolicy }>("/api/application-policy");
   const requestTypes = policyResource.data?.policy.allowedTypes || [];
-  const unitResource = useResource<{ units: { id: string; name: string; role: UnitRole }[] }>("/api/units");
+  const unitResource = useResource<{ units: { id: string; name: string; role: UnitRole; canApply: boolean }[] }>("/api/units");
   const [unitId, setUnitId] = useState("");
-  const selectedUnit = unitResource.data?.units.find((unit) => unit.id === unitId);
+  const eligibleUnits = unitResource.data?.units.filter((unit) => unit.canApply) ?? [];
+  const selectedUnit = eligibleUnits.find((unit) => unit.id === unitId);
   const [records, setRecords] = useState<DraftRecord[]>([blankRecord(0)]);
   const nextId = useRef(1);
   const focusId = useRef<number | null>(null);
@@ -102,7 +103,7 @@ export function DnsApplicationForm() {
     setError("");
     setErrorRecordId(null);
     if (!policyResource.data) { setError("無法取得申請規則，請重新載入。"); return; }
-    const violation = policyViolation(policyResource.data.policy, records.map((r) => r.type), unitId || undefined, !!unitResource.data?.units.length);
+    const violation = policyViolation(policyResource.data.policy, records.map((r) => r.type), unitId || undefined, !!selectedUnit);
     if (violation) { setError(violation); return; }
     const unavailable = records.findIndex((record) => !zones.some((zone) => zone.name === record.zoneName));
     if (unavailable !== -1) { setErrorRecordId(records[unavailable].id); setError("第 " + (unavailable + 1) + " 筆：請選擇目前可申請的 Zone 網域。"); return; }
@@ -131,16 +132,17 @@ export function DnsApplicationForm() {
     }
   }
 
-  return <><p className="record-results" role="status">{policyResource.error || (policyResource.loading ? "載入申請規則…" : policyResource.data?.policy.ownership === "UNIT_ONLY" ? "目前僅接受單位共享 DNS，請先加入單位並選擇歸屬。" : policyResource.data?.policy.ownership === "MEMBERS_ONLY" ? "目前僅限已加入單位的使用者提出申請。" : "可申請個人或單位 DNS。")}</p><form className="card dns-application" onSubmit={submit} onChange={() => { dirty.current = true; }} aria-label="申請 DNS" aria-busy={pending}>
+  return <><p className="record-results" role="status">{policyResource.error || (policyResource.loading ? "載入申請規則…" : "必須加入已核准的單位，並具備該單位編輯權限才能申請 DNS。")}</p><form className="card dns-application" onSubmit={submit} onChange={() => { dirty.current = true; }} aria-label="申請 DNS" aria-busy={pending}>
     <div className="modal-body">
       <fieldset className="application-section" disabled={pending}>
         <legend>申請人資料</legend>
-        <label>DNS 歸屬<Select aria-label="DNS 歸屬" value={unitId} onChange={setUnitId} disabled={unitResource.loading || Boolean(unitResource.error)} options={[{ value: "", label: "個人（不與單位共享）" }, ...(unitResource.data?.units.filter((unit) => canSubmitUnitRequest(unit.role)).map((unit) => ({ value: unit.id, label: `${unit.name}（單位共享）` })) ?? [])]} /></label>
+        <label>DNS 歸屬<Select aria-label="DNS 歸屬" value={unitId} onChange={setUnitId} disabled={unitResource.loading || Boolean(unitResource.error)} options={[{ value: "", label: "請選擇已核准的單位", disabled: true }, ...(eligibleUnits.map((unit) => ({ value: unit.id, label: `${unit.name}（單位共享）` })) ?? [])]} /></label>
         <p className="application-help">選擇單位後，核准的 DNS 與申請進度會供單位成員查看；查看角色不能代單位申請。</p>
-        {unitResource.error && <p className="request-notice" role="status">無法載入共享單位，目前僅可申請個人 DNS。<button className="button" type="button" onClick={() => void unitResource.reload()}>重新載入單位</button></p>}
+        {unitResource.error && <p className="request-notice" role="status">無法載入單位，暫時無法送出申請。<button className="button" type="button" onClick={() => void unitResource.reload()}>重新載入單位</button></p>}
+        {!unitResource.loading && !unitResource.error && !eligibleUnits.length && <p className="request-notice" role="status">尚無可申請的單位。請聯絡系統管理員建立單位並指定管理人，或加入已核准的單位並取得編輯權限。<button className="button" type="button" data-leave-workspace onClick={() => router.push("/units")}>前往我的單位</button></p>}
         <div className="applicant-grid">
           <label>申請人姓名<input name="applicantName" autoComplete="name" required maxLength={100} placeholder="請填寫姓名" /></label>
-          <label>申請單位{unitId ? <input value={selectedUnit?.name || "請重新載入單位"} readOnly /> : <input name="applicantUnit" autoComplete="organization" required maxLength={200} placeholder="系所、實驗室或行政單位" />}</label>
+          <label>申請單位<input value={selectedUnit?.name || "請先選擇單位"} readOnly /></label>
           <label>單位分機<input name="applicantExtension" inputMode="numeric" autoComplete="tel-extension" required pattern="[0-9]{1,10}" maxLength={10} title="請填入 1–10 位數字" placeholder="例如 1234" /></label>
         </div>
         <p className="application-help">聯絡資料為必填，同一份申請只需填一次。</p>
@@ -171,6 +173,6 @@ export function DnsApplicationForm() {
       <p className="application-review-note">送出後由管理員逐筆審核，核准前不會建立 DNS 紀錄。</p>
       {error && errorRecordId === null && <div className="form-error" role="alert"><AlertTriangle size={17} /><p ref={errorTarget} tabIndex={-1}>{error}。填寫內容已保留。</p></div>}
     </div>
-    <div className="modal-foot"><span className="application-count" aria-live="polite">共 {records.length} 筆待送出</span><button className="button" type="button" data-leave-workspace disabled={pending} onClick={() => router.push("/requests")}>返回我的 DNS</button><button type="submit" className="button primary" disabled={pending || loading || Boolean(zoneError) || !zones.length || Boolean(unitId && (!selectedUnit || unitResource.loading || unitResource.error))}>{pending && <Loader2 className="spin" size={16} />}{pending ? "送出中…" : "送出 " + records.length + " 筆申請"}</button></div>
+    <div className="modal-foot"><span className="application-count" aria-live="polite">共 {records.length} 筆待送出</span><button className="button" type="button" data-leave-workspace disabled={pending} onClick={() => router.push("/requests")}>返回我的 DNS</button><button type="submit" className="button primary" disabled={pending || loading || Boolean(zoneError) || !zones.length || (!selectedUnit || unitResource.loading || Boolean(unitResource.error) || policyResource.loading || Boolean(policyResource.error))}>{pending && <Loader2 className="spin" size={16} />}{pending ? "送出中…" : "送出 " + records.length + " 筆申請"}</button></div>
   </form>{leaveTarget && <Dialog title="要離開尚未送出的申請嗎？" description="離開後，這次填寫的聯絡資料和 DNS 紀錄不會保留。" onClose={() => setLeaveTarget(null)}><div className="modal-foot"><button type="button" className="button" onClick={() => { dirty.current = false; setLeaveTarget(null); leaveTarget.click(); }}>離開並捨棄</button><button type="button" className="button primary" data-dialog-initial-focus onClick={() => setLeaveTarget(null)}>繼續填寫</button></div></Dialog>}</>;
 }
