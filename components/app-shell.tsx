@@ -1,24 +1,32 @@
 "use client";
 
+import { UnitWorkspaceProvider, useUnitWorkspace, type UnitWorkspace } from "@/components/units/unit-workspace";
 import { ClipboardCheck, Users, FileCheck2, FilePlus2, Globe2, LogOut, Menu, Monitor, Moon, Sun, X, History, ChevronDown, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from "lucide-react";
 import { Brand } from "@/components/brand";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { logoutAction } from "@/lib/auth/logout-action";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { workspaceNavigation, isNavActive, type NavIcon } from "@/lib/client/navigation";
 import { IdleSession } from "@/components/auth/idle-session";
 
-const navIcons: Record<NavIcon, typeof Users> = { apply: FilePlus2, requests: FileCheck2, units: Users, zones: Globe2, inventory: ClipboardCheck, users: Users, settings: SlidersHorizontal, activity: History };
+const navIcons: Record<NavIcon, typeof Users> = { dns: Globe2, apply: FilePlus2, requests: FileCheck2, units: Users, zones: Globe2, inventory: ClipboardCheck, users: Users, settings: SlidersHorizontal, activity: History };
 
-export function AppShell({ children, identity, admin, systemAdmin, demo }: {
+type ShellProps = {
   children: React.ReactNode;
   identity: { name: string; email: string };
   admin: boolean;
   systemAdmin: boolean;
   demo: boolean;
-}) {
+  units: UnitWorkspace[];
+};
+export function AppShell(props: ShellProps) {
+  return <UnitWorkspaceProvider units={props.units}><ShellContent {...props} /></UnitWorkspaceProvider>;
+}
+function ShellContent({ children, identity, admin, systemAdmin, demo }: ShellProps) {
+  const workspace = useUnitWorkspace();
+  const router = useRouter();
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
   const [mobile, setMobile] = useState(false);
@@ -26,8 +34,8 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
   const sidebar = useRef<HTMLElement>(null);
   const menu = useRef<HTMLButtonElement>(null);
   const zones = pathname.startsWith("/zones");
-  const groups = workspaceNavigation(admin, systemAdmin);
-  const sectionLabel = groups.flatMap((group) => group.items).find((item) => isNavActive(pathname, item))?.label || "工作區";
+  const groups = workspaceNavigation(admin, systemAdmin, workspace.active?.role === "ADMIN");
+  const sectionLabel = groups.flatMap((group) => group.items).find((item) => isNavActive(pathname, item))?.label || "DNS 管理";
   const zone = zones && pathname.split("/")[2] ? decodeURIComponent(pathname.split("/")[2]) : null;
 
   useEffect(() => {
@@ -62,22 +70,22 @@ export function AppShell({ children, identity, admin, systemAdmin, demo }: {
     {mobile && <button type="button" className="navigation-backdrop" tabIndex={-1} aria-label="關閉導覽選單" onClick={() => setMobile(false)} />}
     <aside ref={sidebar} id="workspace-navigation" className={`sidebar ${mobile ? "mobile-open" : ""}`}>
       <div className="brand"><Brand /><button className="icon-button mobile-close" onClick={() => setMobile(false)} aria-label="關閉導覽選單"><X size={20} /></button></div>
-      <p className="nav-label">{systemAdmin ? "系統管理工作區" : admin ? "網域管理工作區" : "個人工作區"}</p>
-      <nav className="nav" aria-label="工作區導覽">
-        {groups.map((group) => <details className="nav-group" key={group.id} open>
-          <summary>{group.label}<ChevronDown size={15} aria-hidden="true" /></summary>
-          <div>{group.items.map((item) => {
-            const active = isNavActive(pathname, item);
-            const Icon = navIcons[item.icon];
-            return <Link key={item.href} href={item.href} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={() => setMobile(false)}><Icon size={18} aria-hidden="true" /><span>{item.label}</span></Link>;
-          })}</div>
-        </details>)}
+      {workspace.units.length > 1 ? <details className="workspace-switcher">
+        <summary><span><small>切換工作區</small><strong>{workspace.active?.name}</strong></span><ChevronDown size={16} aria-hidden="true" /></summary>
+        <div>{workspace.units.map((unit) => <button type="button" key={unit.id} data-leave-workspace aria-pressed={unit.id === workspace.active?.id} onClick={() => { workspace.select(unit.id); router.push("/dns"); setMobile(false); }}><span>{unit.name}</span>{unit.id === workspace.active?.id && <span aria-hidden="true">✓</span>}</button>)}</div>
+      </details> : workspace.active ? <p className="sidebar-unit" title={workspace.active.name}>{workspace.active.name}</p> : <p className="sidebar-unit">{systemAdmin ? "DNS 管理系統" : "尚未加入單位"}</p>}
+      <nav className="nav" aria-label="功能導覽">
+        {groups.flatMap((group) => group.items).map((item) => {
+          const active = isNavActive(pathname, item);
+          const Icon = navIcons[item.icon];
+          return <Link key={item.href} href={item.href} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={() => setMobile(false)}><Icon size={18} aria-hidden="true" /><span>{item.label}</span></Link>;
+        })}
       </nav>
       <div className="sidebar-bottom">
         {demo && <div className="demo-label"><Monitor size={15} /><span>Local demo</span></div>}
         <div className="account-panel">
           <div className="avatar">{identity.name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</div>
-          <div><strong title={identity.name}>{identity.name}</strong><span title={identity.email}>{identity.email}</span><small>{systemAdmin ? "系統管理員" : admin ? "網域管理員" : "使用者"}</small></div>
+          <div><strong title={identity.name}>{identity.name}</strong><span title={identity.email}>{identity.email}</span><small>{systemAdmin ? "系統管理員" : admin ? "網域管理員" : workspace.active?.role === "ADMIN" ? "單位管理員" : "單位成員"}</small></div>
           <form action={logoutAction}><button type="submit" className="icon-button" data-leave-workspace aria-label="登出" title="登出"><LogOut size={17} /></button></form>
         </div>
       </div>

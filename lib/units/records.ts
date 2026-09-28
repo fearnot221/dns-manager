@@ -12,15 +12,16 @@ import { normalizeRecordContent } from "@/lib/dns/names";
 import { rrsetHash } from "@/lib/dns/rrset";
 import { assertApplicationPolicy } from "@/lib/requests/policy";
 
-export async function unitDetail(actor: Actor, unitId: string) {
+export async function unitDetail(actor: Actor, unitId: string, mode: "dns" | "manage" = "dns") {
   requireUnitDatabase();
   const role = await unitAccess(actor, unitId, "view");
+  if (mode === "manage" && role !== "ADMIN") throw new ApiError("只有單位管理員或系統管理員可以管理單位。", 403);
   const unit = await db.dnsUnit.findUnique({ where: { id: unitId }, select: { id: true, name: true, status: true, reviewNote: true, members: { select: { userId: true, role: true, user: { select: { name: true, studentId: true, disabled: true } } } } } });
   if (!unit) throw new ApiError("找不到單位。", 404);
   const members = unit.members.map((m) => ({ userId: m.userId, role: m.role, label: m.user.name || m.user.studentId || "未提供姓名", studentId: m.user.studentId, disabled: m.user.disabled }));
   const allowlist = role === "ADMIN" ? await db.unitAllowlist.findMany({ where: { unitId }, select: { studentId: true, userId: true }, orderBy: { studentId: "asc" } }) : [];
   const summary = { allowlist, unit: { id: unit.id, name: unit.name, status: unit.status, reviewNote: unit.reviewNote }, role, canReview: isGlobalAdmin(actor), canApply: unit.status === "APPROVED" && unit.members.some((m) => m.userId === actor.id && ["EDITOR", "ADMIN"].includes(m.role)), members };
-  if (unit.status !== "APPROVED") return { ...summary, records: [], recordsError: "" };
+  if (mode === "manage" || unit.status !== "APPROVED") return { ...summary, records: [], recordsError: "" };
   const saved = await db.dnsRecordMetadata.findMany({ where: { unitId } });
   const scope = await connectionScope();
   const scoped = saved.filter((record) => record.id === recordId(scope, record));

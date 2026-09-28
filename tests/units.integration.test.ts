@@ -10,6 +10,9 @@ vi.mock("@/lib/powerdns/settings", () => ({ connectionEnvironment: async () => (
 vi.mock("@/lib/powerdns/client", () => ({ powerdns: { getZone: vi.fn(), replaceRRSet: vi.fn() } }));
 import { manageAllowlist } from "@/lib/units/allowlist";
 import { enrollAllowlistedUser } from "@/lib/units/enroll";
+import { assignRecordUnit } from "@/lib/inventory/assignment";
+import { describeRecords } from "@/lib/inventory/service";
+import { memberWorkspaces } from "@/lib/units/workspace";
 import { db } from "@/lib/db/client";
 import { powerdns } from "@/lib/powerdns/client";
 import { createUnit, listUnits, manageUnit, unitAccess, reviewUnit, assignUnitManager } from "@/lib/units/service";
@@ -59,6 +62,71 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await manageAllowlist(creator, unitId, viewer.studentId!);
     await manageAllowlist(creator, unitId, editor.studentId!);
     await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "EDITOR" });
+  });
+  it("uses actual memberships for workspaces and restricts management data without calling DNS", async () => {
+    expect((await memberWorkspaces(creator)).map((unit) => unit.id)).toEqual([unitId]);
+    expect(await memberWorkspaces(admin)).toEqual([]);
+    expect(await memberWorkspaces(outsider)).toEqual([]);
+    await sourceRecord();
+    await expect(unitDetail(viewer, unitId, "manage")).rejects.toMatchObject({ status: 403 });
+    await expect(unitDetail(editor, unitId, "manage")).rejects.toMatchObject({ status: 403 });
+    expect((await unitDetail(creator, unitId, "manage")).members).toHaveLength(3);
+    expect((await unitDetail(admin, unitId, "manage")).allowlist).toHaveLength(3);
+    expect(powerdns.getZone).not.toHaveBeenCalled();
+  });
+  it("assigns a live DNS value to a unit while preserving history, neighboring records and DNS", async () => {
+    const source = await sourceRecord();
+    const before = await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { applicantName: "原申請人", purpose: "原用途" } });
+    const inspection = await db.dnsInspection.create({ data: { recordId: source.id, inspectorId: admin.id, inspectorName: "Admin", inspectorEmail: admin.email, note: "原清查" } });
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    const target = await createUnit(admin, `assigned-${crypto.randomUUID()}`, outsider.studentId!);
+    const rrsets = structuredClone(zone.rrsets);
+    await assignRecordUnit(admin, { ...before, expectedUpdatedAt: before.updatedAt.toISOString(), unitId: target.unit.id });
+    const after = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id }, include: { inspections: true } });
+    expect(after).toMatchObject({ unitId: target.unit.id, applicantUnit: target.unit.name, applicantName: "原申請人", purpose: "原用途" });
+    expect(after.inspections.map((item) => item.id)).toEqual([inspection.id]);
+    expect((await unitDetail(editor, unitId)).records).toEqual([]);
+    expect((await unitDetail(outsider, target.unit.id)).records.map((item) => item.content)).toEqual(["192.0.2.1"]);
+    expect((await describeRecords(admin, zone.name, zone.rrsets))[0].ownership).toMatchObject({ unitId: target.unit.id, unitName: target.unit.name });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 409 });
+    expect(zone.rrsets).toEqual(rrsets); expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+    expect(await db.inspectionTask.count({ where: { recordId: source.id } })).toBe(0);
+    expect(await db.auditLog.count({ where: { action: "ASSIGN_DNS_UNIT", userId: admin.id } })).toBe(1);
+  });
+  it("creates ownership for an unassigned value and rejects stale reassignment", async () => {
+    await sourceRecord();
+    const identity = { zoneName: zone.name, recordName: zone.rrsets[0].name, recordType: "A", content: "192.0.2.99" };
+    const input = { ...identity, id: recordId("local-mock", identity), expectedUpdatedAt: null, unitId };
+    await assignRecordUnit(admin, input);
+    expect((await unitDetail(viewer, unitId)).records).toHaveLength(2);
+    await expect(assignRecordUnit(admin, input)).rejects.toMatchObject({ status: 409 });
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+  });
+  it("blocks unauthorized assignment, inactive targets, stale connections and missing DNS values", async () => {
+    const source = await sourceRecord();
+    const before = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    const input = { ...before, expectedUpdatedAt: before.updatedAt.toISOString(), unitId };
+    for (const actor of [creator, editor, viewer, { ...outsider, zoneRoles: { [zone.name]: "ADMIN" as const } }]) await expect(assignRecordUnit(actor, input)).rejects.toMatchObject({ status: 403 });
+    await expect(assignRecordUnit(admin, { ...input, unitId: "missing" })).rejects.toMatchObject({ status: 404 });
+    await db.dnsUnit.update({ where: { id: unitId }, data: { status: "PENDING" } });
+    await expect(assignRecordUnit(admin, input)).rejects.toMatchObject({ status: 403 });
+    await reviewUnit(admin, unitId, "APPROVE");
+    await expect(assignRecordUnit(admin, { ...input, id: recordId("other-connection", input), expectedUpdatedAt: null })).rejects.toMatchObject({ status: 409 });
+    await expect(assignRecordUnit(admin, { ...input, zoneName: "2.0.192.in-addr.arpa." })).rejects.toMatchObject({ status: 400 });
+    zone.rrsets = [];
+    await expect(assignRecordUnit(admin, input)).rejects.toMatchObject({ status: 409 });
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).updatedAt).toEqual(before.updatedAt);
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+  });
+  it("serializes competing unit assignments so only one can use the displayed version", async () => {
+    const source = await sourceRecord();
+    const before = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    const first = await createUnit(admin, `first-${crypto.randomUUID()}`, outsider.studentId!);
+    const second = await createUnit(admin, `second-${crypto.randomUUID()}`, outsider.studentId!);
+    const results = await Promise.allSettled([first, second].map((target) => assignRecordUnit(admin, { ...before, expectedUpdatedAt: before.updatedAt.toISOString(), unitId: target.unit.id })));
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")[0]).toMatchObject({ reason: { status: 409 } });
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
   });
   it("only allows system admins to create an effective unit for the specified student", async () => {
     const name = `admin-created-${crypto.randomUUID()}`;

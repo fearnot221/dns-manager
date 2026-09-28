@@ -1,3 +1,4 @@
+import { isGlobalAdmin } from "@/lib/auth/owner";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { RecordsWorkbench } from "@/components/records/records-workbench";
@@ -15,9 +16,9 @@ export default async function ZonePage({ params }: PageProps<"/zones/[zone]">) {
 
   return (
     <div className="content">
-      <Link href="/zones" className="back-link"><ArrowLeft size={14} />所有 Zone</Link>
+      <Link href="/zones" className="back-link"><ArrowLeft size={14} />返回網域管理</Link>
       <PageHeader title={zone} description="查詢、分類與維護這個網域的 DNS 紀錄。" />
-      <RecordsWorkbench key={zoneName} zoneName={zoneName} />
+      <RecordsWorkbench systemAdmin={isGlobalAdmin(actor)} key={zoneName} zoneName={zoneName} />
     </div>
   );
 }

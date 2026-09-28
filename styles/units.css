@@ -24,3 +24,8 @@
 .unit-wrap { overflow-wrap: anywhere; }
 @media (max-width: 1100px) { .unit-layout { grid-template-columns: minmax(0, 1fr); } .unit-selector { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } }
 @media (max-width: 600px) { .unit-panel { padding: 16px; } .unit-actions .button { min-height: 44px; } }
+.unit-layout-single { grid-template-columns: minmax(0, 1fr); }
+.unit-members li:last-child { border-bottom: 0; }
+.unit-members .button { flex-shrink: 0; }
+.unit-table td .button { min-height: 44px; }
+.unit-panel > h2 { font-size: 1.125rem; }

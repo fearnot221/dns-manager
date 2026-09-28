@@ -213,8 +213,9 @@ Back up PostgreSQL, the settings encryption key, and the PowerDNS backend. Postg
 
 ## Verification
 
-### Units and shared DNS
+### Unit DNS and membership
 
+- `/dns` shows live DNS for the selected unit, `/requests` shows unit application history (or authorized administrative review), and `/units` is restricted to unit/global administrators. Navigation is flat; a workspace switcher appears only for multiple actual memberships.
 - Only global administrators create units and designate a registered manager by student ID. Unit administrators or global administrators add student IDs to each unit's allowlist. Registered active users join immediately; future users join on authenticated access. New members default to VIEWER; repeated additions preserve existing roles.
 - VIEWER reads shared DNS and application history. EDITOR submits requests. Unit ADMIN also manages member roles and the unit allowlist. **Unit roles never grant zone permissions or DNS publication/review authority.** Only global system administrators approve unit requests.
 - Self-service passcode joining is retired. Removing an allowlist entry revokes its membership; removing a member or account revokes its allowlist entries. At least one active unit administrator must remain. Apply all migrations before starting the web image, including `20260929010000_unit_allowlist`. Existing memberships and roles remain intact; only unambiguous student IDs are backfilled. Legacy hashes remain stored but cannot be used.

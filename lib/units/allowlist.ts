@@ -30,7 +30,7 @@ export async function manageAllowlist(actor: Actor, unitId: string, rawStudentId
       const current = await tx.user.findMany({ where: { studentId, removedAt: null }, select: { id: true }, take: 2 });
       if (current.length !== candidates.length || current[0]?.id !== candidates[0]?.id) throw new ApiError("學號資料已更新，請重新確認。", 409);
       const userId = candidates[0]?.id ?? null;
-      if (before?.userId && before.userId !== userId) throw new ApiError("此白名單已綁定其他帳號，請先移除再重新加入。", 409);
+      if (before?.userId && before.userId !== userId) throw new ApiError("此學號已對應其他帳號，請先移除原使用者再重新新增。", 409);
       await tx.unitAllowlist.upsert({ where, create: { unitId, studentId, userId }, update: { userId } });
       if (userId) await tx.unitMember.upsert({ where: { unitId_userId: { unitId, userId } }, create: { unitId, userId, role: "VIEWER" }, update: {} });
     }

@@ -16,7 +16,7 @@ export function PortalSignIn({ available = true, unavailableReason = "登入服�
     setPending(true);
     setError(false);
     try {
-      await signIn("logto", { redirectTo: "/requests" });
+      await signIn("logto", { redirectTo: "/dashboard" });
     } catch {
       submitting.current = false;
       setPending(false);

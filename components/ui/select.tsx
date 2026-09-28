@@ -35,11 +35,16 @@ export function Select({ name, value, defaultValue, options, onChange, disabled,
     return () => document.removeEventListener("pointerdown", close);
   }, []);
 
+  useEffect(() => {
+    if (open) root.current?.querySelector<HTMLElement>(".custom-select-menu .is-active")?.scrollIntoView({ block: "nearest" });
+  }, [open, activeIndex]);
+
   function choose(option: SelectOption) {
     if (option.disabled) return;
     if (!controlled) setSelected(option.value);
     setOpen(false);
     onChange?.(option.value);
+    trigger.current?.focus();
   }
   function move(step: number) {
     let next = activeIndex;
@@ -55,16 +60,17 @@ export function Select({ name, value, defaultValue, options, onChange, disabled,
     if (event.key === "ArrowDown") { event.preventDefault(); move(1); }
     else if (event.key === "ArrowUp") { event.preventDefault(); move(-1); }
     else if (event.key === "Home") { event.preventDefault(); setActiveIndex(options.findIndex((option) => !option.disabled)); }
-    else if (event.key === "End") { event.preventDefault(); setActiveIndex([...options].reverse().findIndex((option) => !option.disabled) < 0 ? activeIndex : options.length - 1); }
+    else if (event.key === "End") { event.preventDefault(); setActiveIndex([...options].reverse().findIndex((option) => !option.disabled) < 0 ? activeIndex : options.findLastIndex((option) => !option.disabled)); }
     else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (options[activeIndex]) choose(options[activeIndex]); }
-    else if (event.key === "Escape" || event.key === "Tab") setOpen(false);
+    else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); }
+    else if (event.key === "Tab") setOpen(false);
   }
 
-  return <div ref={root} className={`custom-select ${open ? "is-open" : ""} ${className}`}>
+  return <div ref={root} className={`custom-select ${open ? "is-open" : ""} ${className}`} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
     {name && <input type="hidden" name={name} value={current} required={required} disabled={disabled} />}
-    <button ref={trigger} type="button" className="custom-select-trigger" aria-haspopup="listbox" aria-expanded={open} aria-controls={id} disabled={disabled} onClick={() => { setOpen((isOpen) => !isOpen); setActiveIndex(Math.max(0, options.findIndex((option) => option.value === current))); }} onKeyDown={keyDown} {...aria}>
+    <button ref={trigger} type="button" className="custom-select-trigger" role="combobox" aria-autocomplete="none" aria-required={required || undefined} aria-activedescendant={open && options[activeIndex] ? `${id}-${activeIndex}` : undefined} aria-haspopup="listbox" aria-expanded={open} aria-controls={id} disabled={disabled} onClick={() => { setOpen((isOpen) => !isOpen); setActiveIndex(Math.max(0, options.findIndex((option) => option.value === current))); }} onKeyDown={keyDown} {...aria}>
       <span>{currentOption?.label ?? "請選擇"}</span><ChevronDown size={16} aria-hidden="true" />
     </button>
-    {open && <div id={id} className="custom-select-menu" role="listbox" aria-label={aria["aria-label"] ?? "選項"}>{options.map((option, index) => <button type="button" role="option" aria-selected={option.value === current} aria-disabled={option.disabled || undefined} disabled={option.disabled} className={index === activeIndex ? "is-active" : ""} key={option.value} onMouseEnter={() => setActiveIndex(index)} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); move(1); } else if (event.key === "ArrowUp") { event.preventDefault(); move(-1); } else if (event.key === "Escape") { event.preventDefault(); setOpen(false); trigger.current?.focus(); } }} onClick={() => choose(option)}><span>{option.label}</span>{option.value === current && <Check size={16} aria-hidden="true" />}</button>)}</div>}
+    {open && <div id={id} className="custom-select-menu" role="listbox" aria-label={aria["aria-label"] ?? "選項"}>{options.map((option, index) => <button type="button" id={`${id}-${index}`} tabIndex={-1} role="option" aria-selected={option.value === current} aria-disabled={option.disabled || undefined} disabled={option.disabled} className={index === activeIndex ? "is-active" : ""} key={option.value} onMouseEnter={() => setActiveIndex(index)} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(option)}><span>{option.label}</span>{option.value === current && <Check size={16} aria-hidden="true" />}</button>)}</div>}
   </div>;
 }

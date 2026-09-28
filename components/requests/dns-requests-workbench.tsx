@@ -3,6 +3,7 @@
 import { RefreshCw, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
+import { useUnitWorkspace } from "@/components/units/unit-workspace";
 import { EmptyState } from "@/components/ui";
 
 import { filterRequests, scopeRequests, type RequestScope, statuses, type DnsRequest, type RequestStatus } from "./model";
@@ -16,9 +17,12 @@ import { Select } from "@/components/ui/select";
 const emptyRequests: DnsRequest[] = [];
 
 export function DnsRequestsWorkbench({ admin, actorId }: { admin: boolean; actorId: string }) {
+  const workspace = useUnitWorkspace();
+  const canApply = workspace.active?.status === "APPROVED" && workspace.active.role !== "VIEWER";
   const { data, loading, error, reload: load } = useResource<{ requests: DnsRequest[] }>("/api/dns-requests");
   const [scope, setScope] = useState<RequestScope>("ALL");
-  const requests = useMemo(() => scopeRequests(data?.requests ?? emptyRequests, scope, actorId), [data, scope, actorId]);
+  const available = useMemo(() => (data?.requests ?? emptyRequests).filter((item) => admin || !!workspace.active && item.unitId === workspace.active.id), [data, admin, workspace.active]);
+  const requests = useMemo(() => scopeRequests(available, scope, actorId), [available, scope, actorId]);
   const [query, setQuery] = useState("");
   const searchInput = useRef<HTMLInputElement>(null);
   const clearSearch = () => { setQuery(""); searchInput.current?.focus(); };
@@ -33,8 +37,10 @@ export function DnsRequestsWorkbench({ admin, actorId }: { admin: boolean; actor
     key === "ALL" ? requests.length : requests.filter((item) => item.status === key).length,
   ])), [requests]);
 
+  if (!admin && !workspace.active) return <EmptyState title="尚未加入單位" description="請提供學號給單位管理員或系統管理員，由管理員將你加入單位，加入後即可查看申請紀錄。" />;
+
   return <>
-    <div className="request-scope-bar"><label>資料範圍<Select aria-label="申請資料範圍" value={scope} onChange={(value) => { setScope(value as RequestScope); setStatus("ALL"); }} options={[{ value: "ALL", label: admin ? "所有可查看的申請" : "我的申請與單位共享" }, { value: "MINE", label: "我送出的申請" }, { value: "SHARED", label: "單位共享申請" }, ...(admin ? [{ value: "REVIEWABLE", label: "我可審核的申請" }] : [])]} /></label><p className="field-help">{admin ? "僅授權網域可直接管理；單位 DNS 申請須由系統管理員核准。" : "只顯示本人申請與已加入單位的共享申請；共享不代表具備編輯或審核權限。"}</p></div>
+    <div className="request-scope-bar"><label>資料範圍<Select aria-label="申請資料範圍" value={scope} onChange={(value) => { setScope(value as RequestScope); setStatus("ALL"); }} options={[{ value: "ALL", label: admin ? "所有可查看的申請" : `${workspace.active?.name ?? "單位"}的申請` }, { value: "MINE", label: "我送出的申請" }, ...(admin ? [{ value: "SHARED", label: "單位申請" }, { value: "REVIEWABLE", label: "可審核的申請" }] : [])]} /></label><p className="field-help">{admin ? "僅授權網域可直接管理；單位 DNS 申請須由系統管理員核准。" : "顯示目前單位成員送出的申請與審核進度。"}</p></div>
     <div className="request-toolbar">
       <div className="filter-input request-search"><Search size={15} aria-hidden="true" /><input ref={searchInput} type="search" value={query} onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); clearSearch(); } }} onChange={(event) => setQuery(event.target.value)} placeholder={admin ? "搜尋名稱、帳號、姓名、單位或用途" : "搜尋名稱、網域、內容或用途"} aria-label="搜尋 DNS 申請" />{query && <button type="button" className="search-clear" onClick={clearSearch} aria-label="清除搜尋"><X size={15} /></button>}</div>
       <button type="button" className="button request-refresh" disabled={loading} onClick={() => void load()}><RefreshCw size={15} className={loading ? "spin" : ""} />重新整理</button>
@@ -44,7 +50,7 @@ export function DnsRequestsWorkbench({ admin, actorId }: { admin: boolean; actor
       </div>
 
     <div className="record-results request-results" aria-live="polite">{loading ? "讀取中…" : error ? "無法取得紀錄" : `顯示 ${filtered.length} / ${requests.length} 筆紀錄`}{!loading && filtered.length > 0 && <span>點選紀錄查看詳細資料</span>}</div>
-    {error ? <ResourceError message={error} retry={load} /> : loading ? <RequestSkeleton /> : filtered.length === 0 ? <EmptyState title={requests.length ? admin && status === "PENDING" && !query.trim() ? "目前沒有待審核申請" : "沒有符合條件的紀錄" : "尚無 DNS 申請"} description={requests.length ? "可以清除搜尋條件，或切換其他審核狀態。" : admin ? "收到申請後，可在這裡審核。" : "送出申請後，就能在這裡查看進度。"} action={requests.length ? <button className="button" onClick={() => { clearSearch(); setStatus("ALL"); }}>顯示全部紀錄</button> : !admin && <Link className="button primary" href="/requests/new">申請 DNS</Link>} /> : (
+    {error ? <ResourceError message={error} retry={load} /> : loading ? <RequestSkeleton /> : filtered.length === 0 ? <EmptyState title={available.length ? admin && status === "PENDING" && !query.trim() ? "目前沒有待審核申請" : "沒有符合條件的紀錄" : "尚無 DNS 申請"} description={available.length ? "可以清除搜尋條件，或切換其他審核狀態。" : admin ? "收到申請後，可在這裡審核。" : canApply ? "送出申請後，就能在這裡查看進度。" : "單位成員送出申請後，會顯示在這裡。"} action={available.length ? <button className="button" onClick={() => { clearSearch(); setStatus("ALL"); setScope("ALL"); }}>清除篩選</button> : !admin && canApply && <Link className="button primary" href="/requests/new">申請 DNS</Link>} /> : (
       <div className="request-list"><div className="request-row request-columns" aria-hidden="true"><span>類型</span><span>DNS 名稱</span><span>解析內容</span><span>狀態</span><span>申請日期</span><span /></div>{filtered.map((item) => <RequestCard key={item.id} item={item} admin={admin} onReview={(decision) => setReview({ item, decision })} />)}</div>
     )}
 

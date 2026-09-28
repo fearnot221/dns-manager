@@ -43,7 +43,7 @@
 
 ## 單位審核遷移
 
-部署前須執行 `prisma migrate deploy`，套用 `20260928000000_unit_approval`。既有單位也會列為待審核，需由系統管理員至「我的單位」逐一核准；遷移不刪除或改寫既有 DNS、成員、歷史申請。未核准期間暫停單位操作與 DNS 申請。既有個人申請保留歷史處理能力，但不再接受任何新的個人申請。
+部署前須執行 `prisma migrate deploy`，套用 `20260928000000_unit_approval`。既有單位也會列為待審核，需由系統管理員至「單位管理」逐一核准；遷移不刪除或改寫既有 DNS、成員、歷史申請。未核准期間暫停單位操作與 DNS 申請。既有個人申請保留歷史處理能力，但不再接受任何新的個人申請。
 
 申請規則固定為 `UNIT_ONLY`；讀取舊 `ANY`／`MEMBERS_ONLY` 設定時轉為單位制，不允許透過設定 API 恢復個人申請。
 
@@ -101,3 +101,17 @@
 - `npm run build` 通過，包含 TypeScript 檢查。補測期間曾因測試 session 缺少必要 globalRole 型別失敗，修正後重新 build 通過。
 - `DATABASE_URL=…/dns_units_test npx prisma migrate deploy` 在隔離資料庫成功套用 `20260929010000_unit_allowlist`。另一個保留舊資料的隔離 schema 沒有 Prisma migration history，deploy 回報 P3005；改以 `psql -v ON_ERROR_STOP=1 -f prisma/migrations/20260929010000_unit_allowlist/migration.sql` 驗證 SQL，確認既有成員、角色及 DNS 資料完全保留，唯一對應學號成功回填。
 - local demo 保持關閉；僅執行靜態渲染測試，未進行瀏覽器視覺驗證。未 push、未部署、未修改正式資料；部署前須先套用所有 pending migrations。
+
+
+## 單位導向 UI
+
+導覽、角色入口與介面檢查詳見 [單位 UI 檢查紀錄](unit-ui-review.md)。一般成員改由 `/dns` 查看單位 DNS，`/units` 僅供單位管理員與系統管理員管理。只有多個實際成員單位時才顯示工作區切換；申請表與一般成員申請紀錄均使用目前單位。
+
+## 清查中的 DNS 單位指派（2026-09-29 修正）
+
+- 系統管理員在「清查 → 指派單位」可將單一解析值歸屬至已核准單位。清查列表及網域明細的共用清查對話框均提供入口；委派網域管理員不具指派權，API／服務層同樣阻擋。
+- 指派更新 `DnsRecordMetadata.unitId` 與顯示單位名稱，保留聯絡資料、用途及歷史清查，不寫入 PowerDNS，也不建立清查通知。新單位成員可查看 DNS，編輯者可申請變更。
+- 改派後原單位不再取得這筆 DNS；其尚待審核的變更申請會因歸屬已變更而拒絕核准。已存在的歷史申請仍保留。
+- 儲存時檢查版本、連線、解析值存在性與單位狀態；與單位變更審核共用單位鎖，並行指派衝突回傳 409。
+- 最終程式碼驗證：`UNIT_TEST_DATABASE_URL=…/dns_units_test npm test`，48 個檔案、290 項全數通過；`npm run lint`、`npm run build`（包含 TypeScript）與 `git diff --check` 通過。並行測試發現 raw SQL 的 PostgreSQL 40001 需另轉成 409，修正後完整套件通過。
+- 沒有新增 migration；只在隔離資料庫測試，未修改正式 DNS／資料，未啟動 demo、未進行瀏覽器視覺驗證、未推送。

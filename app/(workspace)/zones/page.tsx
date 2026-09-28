@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { isGlobalAdmin } from "@/lib/auth/owner";
 import { DnsExportButton } from "@/components/admin/dns-export-button";
 
-export const metadata = { title: "Zone 管理" };
+export const metadata = { title: "網域管理" };
 
 export default async function ZonesPage() {
   const actor = await requireActor();
@@ -14,7 +14,7 @@ export default async function ZonesPage() {
 
   return (
     <div className="content">
-      <PageHeader title="Zone 管理" description="查看與管理授權範圍內的網域。" actions={isGlobalAdmin(actor) && <DnsExportButton />} />
+      <PageHeader title="網域管理" description="查看與管理授權範圍內的網域。" actions={isGlobalAdmin(actor) && <DnsExportButton />} />
       <ZonesTable />
     </div>
   );

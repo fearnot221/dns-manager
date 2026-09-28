@@ -1,3 +1,4 @@
+import { memberWorkspaces } from "@/lib/units/workspace";
 import { redirect } from "next/navigation";
 import { isGlobalAdmin } from "@/lib/auth/owner";
 import { AppShell } from "@/components/app-shell";
@@ -11,7 +12,7 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
     throw error;
   });
   const person = personDisplay({ name: actor.name, email: actor.portalEmail || actor.email, studentId: actor.studentId });
-  return <AppShell systemAdmin={isGlobalAdmin(actor)} admin={canAccessZoneManagement(actor)} demo={process.env.NODE_ENV !== "production" && process.env.PDNS_MOCK === "true"}
+  return <AppShell units={await memberWorkspaces(actor)} systemAdmin={isGlobalAdmin(actor)} admin={canAccessZoneManagement(actor)} demo={process.env.NODE_ENV !== "production" && process.env.PDNS_MOCK === "true"}
     identity={{ name: person.primary, email: person.secondary }}>
     {children}
   </AppShell>;

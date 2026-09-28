@@ -1,5 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { useUnitWorkspace } from "@/components/units/unit-workspace";
+import { EmptyState } from "@/components/ui";
+import { ResourceError } from "@/components/ui/resource-error";
 import { AlertTriangle, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -19,12 +23,13 @@ const hints: Partial<Record<RecordType, string>> = { A: "192.0.2.10", AAAA: "200
 
 export function DnsApplicationForm() {
   const router = useRouter();
+  const workspace = useUnitWorkspace();
   const { data, loading, error: zoneError, reload } = useResource<{ zones: { name: string }[] }>("/api/dns-requests/zones");
   const zones = data?.zones ?? [];
   const policyResource = useResource<{ policy: ApplicationPolicy }>("/api/application-policy");
   const requestTypes = policyResource.data?.policy.allowedTypes || [];
   const unitResource = useResource<{ units: { id: string; name: string; role: UnitRole; canApply: boolean }[] }>("/api/units");
-  const [unitId, setUnitId] = useState("");
+  const unitId = workspace.active?.id ?? "";
   const eligibleUnits = unitResource.data?.units.filter((unit) => unit.canApply) ?? [];
   const selectedUnit = eligibleUnits.find((unit) => unit.id === unitId);
   const [records, setRecords] = useState<DraftRecord[]>([blankRecord(0)]);
@@ -106,7 +111,7 @@ export function DnsApplicationForm() {
     const violation = policyViolation(policyResource.data.policy, records.map((r) => r.type), unitId || undefined, !!selectedUnit);
     if (violation) { setError(violation); return; }
     const unavailable = records.findIndex((record) => !zones.some((zone) => zone.name === record.zoneName));
-    if (unavailable !== -1) { setErrorRecordId(records[unavailable].id); setError("第 " + (unavailable + 1) + " 筆：請選擇目前可申請的 Zone 網域。"); return; }
+    if (unavailable !== -1) { setErrorRecordId(records[unavailable].id); setError("第 " + (unavailable + 1) + " 筆：請選擇目前可申請的網域。"); return; }
     const formData = new FormData(event.currentTarget);
     sending.current = true;
     setPending(true);
@@ -132,14 +137,15 @@ export function DnsApplicationForm() {
     }
   }
 
-  return <><p className="record-results" role="status">{policyResource.error || (policyResource.loading ? "載入申請規則…" : "必須加入已核准的單位，並具備該單位編輯權限才能申請 DNS。")}</p><form className="card dns-application" onSubmit={submit} onChange={() => { dirty.current = true; }} aria-label="申請 DNS" aria-busy={pending}>
+  if (unitResource.loading) return <p role="status">正在確認單位與申請權限…</p>;
+  if (unitResource.error) return <ResourceError message={unitResource.error} retry={unitResource.reload} />;
+  if (!selectedUnit) return <EmptyState title={workspace.active ? "此單位目前無法申請" : "尚未加入單位"} description={workspace.active ? "須為已核准單位的編輯者或管理員才能申請。請聯絡單位管理員確認權限。" : "請提供學號給單位管理員或系統管理員，由管理員將你加入單位並授予編輯權限。"} action={<Link className="button" href="/dns">查看單位 DNS</Link>} />;
+
+  return <>{policyResource.error && <ResourceError message="無法取得申請規則，暫時無法送出申請。" retry={policyResource.reload} />}<p className="record-results" role="status">{policyResource.error || (policyResource.loading ? "載入申請規則…" : "必須加入已核准的單位，並具備該單位編輯權限才能申請 DNS。")}</p><form className="card dns-application" onSubmit={submit} onChange={() => { dirty.current = true; }} aria-label="申請 DNS" aria-busy={pending}>
     <div className="modal-body">
       <fieldset className="application-section" disabled={pending}>
         <legend>申請人資料</legend>
-        <label>DNS 歸屬<Select aria-label="DNS 歸屬" value={unitId} onChange={setUnitId} disabled={unitResource.loading || Boolean(unitResource.error)} options={[{ value: "", label: "請選擇已核准的單位", disabled: true }, ...(eligibleUnits.map((unit) => ({ value: unit.id, label: `${unit.name}（單位共享）` })) ?? [])]} /></label>
-        <p className="application-help">選擇單位後，核准的 DNS 與申請進度會供單位成員查看；查看角色不能代單位申請。</p>
-        {unitResource.error && <p className="request-notice" role="status">無法載入單位，暫時無法送出申請。<button className="button" type="button" onClick={() => void unitResource.reload()}>重新載入單位</button></p>}
-        {!unitResource.loading && !unitResource.error && !eligibleUnits.length && <p className="request-notice" role="status">尚無可申請的單位。請聯絡系統管理員建立單位並指定管理人，或加入已核准的單位並取得編輯權限。<button className="button" type="button" data-leave-workspace onClick={() => router.push("/units")}>前往我的單位</button></p>}
+        <p className="application-help">本次申請歸屬「{selectedUnit.name}」。核准的 DNS 與申請紀錄會供單位成員查看。</p>
         <div className="applicant-grid">
           <label>申請人姓名<input name="applicantName" autoComplete="name" required maxLength={100} placeholder="請填寫姓名" /></label>
           <label>申請單位<input value={selectedUnit?.name || "請先選擇單位"} readOnly /></label>
@@ -158,7 +164,7 @@ export function DnsApplicationForm() {
         {records.map((record, index) => <fieldset key={record.id} className={"application-record" + (errorRecordId === record.id ? " has-error" : "")} disabled={pending} aria-label={"第 " + (index + 1) + " 筆 DNS 紀錄"}>
           <div className="application-record-head"><h3>紀錄 {index + 1}</h3><button className="icon-button danger-hover" type="button" disabled={records.length === 1 || pending} aria-label={"移除第 " + (index + 1) + " 筆"} title="移除此筆，可復原" onClick={() => removeRecord(record.id)}><Trash2 size={16} /></button></div>
           <div className="dns-fields">
-            <label>Zone 網域<Select aria-label="Zone 網域" value={record.zoneName} required disabled={loading || Boolean(zoneError) || !zones.length} onChange={(value) => update(record.id, { zoneName: value })} options={[{ value: "", label: "選擇網域", disabled: true }, ...(record.zoneName && !zones.some((zone) => zone.name === record.zoneName) ? [{ value: record.zoneName, label: `${record.zoneName}（目前無法使用）`, disabled: true }] : []), ...zones.map((zone) => ({ value: zone.name, label: zone.name.replace(/\.$/, "") }))]} /></label>
+            <label>網域<Select aria-label="網域" value={record.zoneName} required disabled={loading || Boolean(zoneError) || !zones.length} onChange={(value) => update(record.id, { zoneName: value })} options={[{ value: "", label: "選擇網域", disabled: true }, ...(record.zoneName && !zones.some((zone) => zone.name === record.zoneName) ? [{ value: record.zoneName, label: `${record.zoneName}（目前無法使用）`, disabled: true }] : []), ...zones.map((zone) => ({ value: zone.name, label: zone.name.replace(/\.$/, "") }))]} /></label>
             <label>名稱<input value={record.name} onChange={(event) => update(record.id, { name: event.target.value })} placeholder="www 或 @" required maxLength={253} autoCapitalize="none" spellCheck={false} ref={(node) => { if (node && focusId.current === record.id) { if (!record.zoneName) node.closest("fieldset")?.querySelector<HTMLElement>(".custom-select-trigger")?.focus(); else node.focus(); focusId.current = null; } }} /></label>
             <label>類型<Select aria-label="DNS 類型" value={record.type} onChange={(value) => update(record.id, { type: value as RecordType })} options={[...(!requestTypes.includes(record.type as typeof requestTypes[number]) ? [{ value: record.type, label: `${record.type}（未開放，請改選）`, disabled: true }] : []), ...requestTypes.map((type) => ({ value: type, label: type }))]} /></label>
             <label className="content-field">解析內容<input value={record.content} onChange={(event) => update(record.id, { content: event.target.value })} placeholder={hints[record.type]} required maxLength={65535} autoCapitalize="none" spellCheck={false} aria-label="解析內容" aria-describedby={`content-help-${record.id}`} /><small id={`content-help-${record.id}`}>{contentHelp(record.type)}</small></label>
@@ -173,6 +179,6 @@ export function DnsApplicationForm() {
       <p className="application-review-note">送出後由管理員逐筆審核，核准前不會建立 DNS 紀錄。</p>
       {error && errorRecordId === null && <div className="form-error" role="alert"><AlertTriangle size={17} /><p ref={errorTarget} tabIndex={-1}>{error}。填寫內容已保留。</p></div>}
     </div>
-    <div className="modal-foot"><span className="application-count" aria-live="polite">共 {records.length} 筆待送出</span><button className="button" type="button" data-leave-workspace disabled={pending} onClick={() => router.push("/requests")}>返回我的 DNS</button><button type="submit" className="button primary" disabled={pending || loading || Boolean(zoneError) || !zones.length || (!selectedUnit || unitResource.loading || Boolean(unitResource.error) || policyResource.loading || Boolean(policyResource.error))}>{pending && <Loader2 className="spin" size={16} />}{pending ? "送出中…" : "送出 " + records.length + " 筆申請"}</button></div>
+    <div className="modal-foot"><span className="application-count" aria-live="polite">共 {records.length} 筆待送出</span><button className="button" type="button" data-leave-workspace disabled={pending} onClick={() => router.push("/requests")}>返回申請紀錄</button><button type="submit" className="button primary" disabled={pending || loading || Boolean(zoneError) || !zones.length || (!selectedUnit || unitResource.loading || Boolean(unitResource.error) || policyResource.loading || Boolean(policyResource.error))}>{pending && <Loader2 className="spin" size={16} />}{pending ? "送出中…" : "送出 " + records.length + " 筆申請"}</button></div>
   </form>{leaveTarget && <Dialog title="要離開尚未送出的申請嗎？" description="離開後，這次填寫的聯絡資料和 DNS 紀錄不會保留。" onClose={() => setLeaveTarget(null)}><div className="modal-foot"><button type="button" className="button" onClick={() => { dirty.current = false; setLeaveTarget(null); leaveTarget.click(); }}>離開並捨棄</button><button type="button" className="button primary" data-dialog-initial-focus onClick={() => setLeaveTarget(null)}>繼續填寫</button></div></Dialog>}</>;
 }

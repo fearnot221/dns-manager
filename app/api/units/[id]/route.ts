@@ -17,7 +17,7 @@ const schema = z.discriminatedUnion("action", [
 ]);
 type Context = { params: Promise<{ id: string }> };
 export async function GET(_request: Request, { params }: Context) {
-  try { return Response.json(await unitDetail(await requireActor(), (await params).id), { headers: { "Cache-Control": "no-store" } }); }
+  try { return Response.json(await unitDetail(await requireActor(), (await params).id, new URL(_request.url).searchParams.get("view") === "manage" ? "manage" : "dns"), { headers: { "Cache-Control": "no-store" } }); }
   catch (error) { return apiError(error); }
 }
 export const PATCH = auditMutation(async (request: Request, { params }: Context) => {

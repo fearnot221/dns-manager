@@ -1,5 +1,6 @@
 export type Inspection = { id: string; inspectedAt: string; inspectorId: string; inspectorEmail: string; inspectorName: string; inspectorStudentId?: string | null; note: string };
 export type Ownership = {
+  unitId?: string | null; unitName?: string | null;
   id: string; applicantName: string; applicantEmail: string; applicantUnit: string; applicantExtension: string; purpose: string;
   updatedAt: string | null; updatedBy: string; updatedByName?: string | null; inspections: Inspection[];
 };

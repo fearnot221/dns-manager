@@ -23,8 +23,16 @@ it("merges list actions into a single inspection entry", () => {
   for (const record of records) expect(html.split(`aria-label="清查 ${record.recordName} ${record.content}"`)).toHaveLength(2);
   expect(html).not.toContain("指派確認"); expect(html).not.toContain("歸屬／歷史"); expect(html).not.toContain("記錄清查");
 });
-it("keeps direct inspection and history without any assignment or response controls", () => {
+it("keeps direct inspection and history without assignment controls for delegated admins", () => {
   const html = renderToStaticMarkup(createElement(OwnershipDialog, { record: records[0], inspection: true, onClose: vi.fn(), onSaved: vi.fn(async () => {}) }));
   expect(html).toContain("DNS 清查"); expect(html).toContain("歷次清查"); expect(html).toContain("歸屬資料"); expect(html).toContain("確認清查並記錄");
   expect(html).not.toContain("指派單位"); expect(html).not.toContain("回覆");
+});
+
+it("restores unit assignment inside the system administrator inspection dialog", () => {
+  const html = renderToStaticMarkup(createElement(OwnershipDialog, { record: records[0], inspection: true, systemAdmin: true, onClose: vi.fn(), onSaved: vi.fn(async () => {}) }));
+  expect(html).toContain("指派單位"); expect(html).toContain("所屬單位");
+  expect(html).not.toContain("回覆"); expect(html).not.toContain("通知");
+  const reverse = renderToStaticMarkup(createElement(OwnershipDialog, { record: records[0], inspection: false, systemAdmin: true, onClose: vi.fn(), onSaved: vi.fn(async () => {}) }));
+  expect(reverse).not.toContain("指派單位");
 });

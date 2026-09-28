@@ -59,7 +59,7 @@ function GlobalApplicationPolicy() {
           <div className="policy-types">{applicationTypes.map((type) => <label className="type-option" key={type}><input type="checkbox" name="types" value={type} defaultChecked={policy.allowedTypes.includes(type)} /><span>{type}</span></label>)}</div>
         </fieldset>
         <p className="field-help" id="policy-types-help">未勾選任何類型時，將暫停所有類型的新申請。</p>
-        <label>申請資格與歸屬<Select name="ownership" defaultValue={policy.ownership} aria-describedby="policy-ownership-help" options={[{ value: "UNIT_ONLY", label: "必須加入已核准單位，且具該單位申請權限" }]} /></label>
+        <input type="hidden" name="ownership" value="UNIT_ONLY" /><p>申請資格：已加入核准單位，並具備單位編輯或管理權限。</p>
         <p className="field-help" id="policy-ownership-help">單位編輯者僅能提出變更申請；DNS 仍須由系統管理員審核後生效。</p>
         <div className="form-actions"><button className="button primary" aria-busy={pending}>{pending ? "儲存中…" : "儲存設定"}</button></div>
       </fieldset>
@@ -117,7 +117,7 @@ function ZoneApplicationSettings() {
 
   return <section className="card table-card">
     <ActionFeedback feedback={feedback} />
-    <header className="workflow-panel-head"><Globe2 size={22} aria-hidden="true" /><div><h2>開放申請的網域</h2><p>選擇使用者可在申請表中選取的 Zone。暫停申請不會刪除 DNS，也不影響已送出的案件。</p></div></header>
+    <header className="workflow-panel-head"><Globe2 size={22} aria-hidden="true" /><div><h2>開放申請的網域</h2><p>選擇使用者可在申請表中選取的網域。暫停申請不會刪除 DNS，也不影響已送出的案件。</p></div></header>
     <div className="table-tools">
       <div className="filter-input"><Search size={15} aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋網域" aria-label="搜尋申請網域" /></div>
       <Select className="zone-access-filter" aria-label="申請開放狀態" value={status} onChange={setStatus} options={[{ value: "all", label: "全部申請狀態" }, { value: "open", label: "開放申請" }, { value: "closed", label: "暫停申請" }]} />
@@ -132,7 +132,7 @@ function ZoneApplicationSettings() {
         return <tr key={zone.id}><td><strong>{zone.name.replace(/\.$/, "")}</strong></td><td>{category?.label ?? "一般網域"}</td><td><button type="button" className="zone-access-switch" role="switch" aria-checked={access.enabled} aria-label={`${zone.name} 開放申請`} disabled={!!pending} onClick={() => access.enabled ? setClosing(zone) : void save(zone, true)}><span className="zone-switch-track" aria-hidden="true"><span /></span><span>{pending === zone.id ? "儲存中…" : access.enabled ? "開放申請" : "暫停申請"}</span></button></td></tr>;
       })}
     </tbody></table></ScrollRegion>}
-    {!resource.loading && !resource.error && !rows.length && <EmptyState title={zones.length ? "沒有符合條件的網域" : "目前沒有可管理的網域"} description={zones.length ? "請調整搜尋或申請狀態。" : "取得可管理的 Zone 後，即可在此設定是否開放申請。"} />}
+    {!resource.loading && !resource.error && !rows.length && <EmptyState title={zones.length ? "沒有符合條件的網域" : "目前沒有可管理的網域"} description={zones.length ? "請調整搜尋或申請狀態。" : "取得可管理的網域後，即可在此設定是否開放申請。"} />}
     {closing && <Dialog title="暫停此網域的申請？" description={`${closing.name} 將從申請表移除，既有 DNS 與待審核申請不受影響。`} pending={!!pending} onClose={() => { setClosing(null); setFeedback(null); setConflict(false); }}>
       <div className="modal-foot"><button className="button" type="button" disabled={!!pending} onClick={() => { setClosing(null); setFeedback(null); setConflict(false); }}>取消</button>{conflict ? <button type="button" className="button primary" onClick={refresh}>重新載入最新設定</button> : <button className="button primary" type="button" disabled={!!pending} onClick={() => void save(closing, false)}>{pending ? "儲存中…" : "暫停申請"}</button>}</div>
     </Dialog>}
