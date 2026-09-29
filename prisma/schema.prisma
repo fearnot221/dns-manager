@@ -270,6 +270,9 @@ model ContactMessage {
 }
 
 model InspectionTask {
+  // Historical recipient after unit deletion; these fields never grant access.
+  archivedUnitId String?
+  archivedUnitName String?
   id String @id @default(cuid())
   recordId String
   unitId String?

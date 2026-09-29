@@ -2,10 +2,14 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db/client";
 import { ApiError } from "@/lib/api/respond";
-import type { Actor } from "@/lib/dns/types";
+import type { Actor, RRSet } from "@/lib/dns/types";
 import { accountOwnerIdentifier, isGlobalAdmin, isOwner, OWNER_IDENTIFIER } from "@/lib/auth/owner";
 import { canSubmitUnitRequest, type UnitRole, wouldRemoveLastAdmin } from "./policy";
 
+import { powerdns } from "@/lib/powerdns/client";
+import { PowerDNSError } from "@/lib/powerdns/errors";
+import { connectionScope, recordId } from "@/lib/inventory/service";
+import { lockDnsZone } from "@/lib/dns/lock";
 import { redactAudit } from "@/lib/audit/redact";
 
 export function requireUnitDatabase() {
@@ -130,13 +134,38 @@ export async function editUnit(actor: Actor, id: string, input: { action: "renam
         await unitAudit(tx, actor, "RENAME_DNS_UNIT", before, unit);
         return { saved: true };
       }
-      const linked = await tx.dnsUnit.findUniqueOrThrow({ where: { id }, select: { _count: { select: { records: true, requests: true, inspectionTasks: true, members: true, allowlist: true } } } });
-      const counts = linked._count;
-      if (counts.records || counts.requests || counts.inspectionTasks) throw new ApiError("此單位仍有 DNS、申請紀錄或清查任務關聯，無法刪除。", 409);
+      // Closed requests and retired inspection notifications are history, not active dependencies.
+      const pending = await tx.dnsRecordRequest.count({ where: { unitId: id, status: "PENDING" } });
+      if (pending) throw new ApiError(`此單位仍有 ${pending} 筆待審核申請，請先完成審核後再刪除。`, 409);
+      const records = await tx.dnsRecordMetadata.findMany({ where: { unitId: id } });
+      if (records.length) {
+        const scope = await connectionScope();
+        if (records.some((record) => record.id !== recordId(scope, record))) throw new ApiError("此單位有其他 DNS 連線來源的歸屬資料，無法確認是否已刪除，請先確認歸屬。", 409);
+        // The same locks guard direct edits and approvals, so a value cannot reappear during this check.
+        for (const zoneName of [...new Set(records.map((record) => record.zoneName))].sort()) {
+          await lockDnsZone(tx, zoneName, scope);
+          let rrsets: RRSet[];
+          try { rrsets = (await powerdns.getZone(zoneName)).rrsets; }
+          catch (error) {
+            if (error instanceof PowerDNSError && error.status === 404) rrsets = [];
+            else throw new ApiError("暫時無法確認此單位的 DNS 狀態，未刪除單位，請稍後重試。", 503);
+          }
+          const live = records.some((record) => record.zoneName === zoneName && rrsets.some((rrset) => rrset.name === record.recordName && rrset.type === record.recordType && rrset.records.some((value) => value.content === record.content)));
+          if (live) throw new ApiError("此單位仍有 DNS 解析值，請先刪除或重新指派歸屬後再刪除單位。", 409);
+        }
+      }
+      const linked = await tx.dnsUnit.findUniqueOrThrow({ where: { id }, select: { _count: { select: { members: true, allowlist: true } } } });
+      const requests = await tx.dnsRecordRequest.findMany({ where: { unitId: id }, select: { id: true } });
+      const tasks = await tx.inspectionTask.findMany({ where: { unitId: id }, select: { id: true } });
+      // Retain every historical row and snapshot; only detach the FK to the unit being removed.
+      await tx.dnsRecordMetadata.updateMany({ where: { unitId: id }, data: { unitId: null } });
+      await tx.dnsRecordRequest.updateMany({ where: { unitId: id, OR: [{ applicantUnit: null }, { applicantUnit: "" }] }, data: { applicantUnit: before.name } });
+      await tx.dnsRecordRequest.updateMany({ where: { unitId: id }, data: { unitId: null } });
+      await tx.inspectionTask.updateMany({ where: { unitId: id }, data: { unitId: null, archivedUnitId: id, archivedUnitName: before.name } });
       await tx.dnsUnit.delete({ where: { id } });
-      await unitAudit(tx, actor, "DELETE_DNS_UNIT", { ...before, members: counts.members, allowlist: counts.allowlist }, null);
+      await unitAudit(tx, actor, "DELETE_DNS_UNIT", { ...before, ...linked._count, recordIds: records.map((record) => record.id), requestIds: requests.map((request) => request.id), inspectionTaskIds: tasks.map((task) => task.id) }, null);
       return { saved: true };
-    });
+    }, { timeout: 60000 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new ApiError("此單位名稱已存在，請使用不同名稱。", 409);
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") throw new ApiError("此單位仍有資料關聯，無法刪除。", 409);

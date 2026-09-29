@@ -1,3 +1,6 @@
+import { DELETE as deleteDnsRecord } from "@/app/api/zones/[zone]/records/route";
+import { PowerDNSError } from "@/lib/powerdns/errors";
+import { lockDnsZone } from "@/lib/dns/lock";
 /** Opt-in: UNIT_TEST_DATABASE_URL must point at a disposable local dns_units_test DB. */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
@@ -115,14 +118,100 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toMatchObject({ status: 404 });
     expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
   });
-  it("blocks deletion with DNS or historical requests without removing members", async () => {
+  it("blocks live DNS but retains closed requests when deleting an empty unit", async () => {
     const source = await sourceRecord();
     await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toMatchObject({ status: 409 });
     const pending = await requestUnitChange(editor, unitId, changeInput(source));
     await reviewUnitRequest(admin, pending.id, "REJECT");
-    await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId: null } });
-    await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toMatchObject({ status: 409 });
     expect(await db.unitMember.count({ where: { unitId } })).toBe(3);
+    zone.rrsets = [];
+    await editUnit(admin, unitId, { action: "delete" });
+    expect(await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).toMatchObject({ unitId: null, status: "REJECTED" });
+    expect(await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).toMatchObject({ unitId: null });
+  });
+  it("deletes a unit after a direct DNS deletion, retaining record inspections and retired task snapshots", async () => {
+    const source = await sourceRecord();
+    const inspected = await inspectUnitRecord(viewer, unitId, { recordId: source.id, expectedHash: source.expectedHash, note: "歷史清查" });
+    const unit = await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } });
+    const snapshot = { unitId, unitName: "historical-name", content: "192.0.2.1" };
+    const tasks = await Promise.all(["PENDING", "COMPLETED", "CANCELLED"].map((status) => db.inspectionTask.create({ data: { recordId: source.id, unitId, createdBy: admin.id, status, snapshot } })));
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    const response = await deleteDnsRecord(new Request("http://localhost/api/zones/example.com/records", { method: "DELETE", headers: { Origin: "http://localhost" }, body: JSON.stringify({ name: zone.rrsets[0].name, type: "A", content: "192.0.2.1", expectedHash: source.expectedHash, deletionPassword: "test-delete-password" }) }), { params: Promise.resolve({ zone: zone.name }) });
+    expect(response.status).toBe(200);
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
+    vi.mocked(powerdns.replaceRRSet).mockClear();
+    await editUnit(admin, unitId, { action: "delete" });
+    expect(await db.dnsUnit.findUnique({ where: { id: unitId } })).toBeNull();
+    expect(await db.dnsInspection.findUniqueOrThrow({ where: { id: inspected.id } })).toMatchObject({ recordId: source.id, note: "歷史清查" });
+    for (const task of tasks) expect(await db.inspectionTask.findUniqueOrThrow({ where: { id: task.id } })).toEqual({ ...task, unitId: null, archivedUnitId: unitId, archivedUnitName: unit.name });
+    expect(await db.auditLog.findFirstOrThrow({ where: { action: "DELETE_DNS_UNIT", userId: admin.id } })).toMatchObject({ oldValue: { id: unitId, recordIds: [source.id], inspectionTaskIds: expect.arrayContaining(tasks.map((task) => task.id)) } });
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
+  });
+  it("keeps exactly one live or archived inspection recipient and requires an archived name", async () => {
+    const source = await sourceRecord();
+    const base = { recordId: source.id, createdBy: admin.id, status: "PENDING", snapshot: {} };
+    for (const invalid of [{}, { unitId, userId: viewer.id }, { unitId, archivedUnitId: unitId, archivedUnitName: "歷史單位" }, { archivedUnitId: unitId }]) {
+      await expect(db.inspectionTask.create({ data: { ...base, ...invalid } })).rejects.toThrow();
+    }
+    const userTask = await db.inspectionTask.create({ data: { ...base, userId: viewer.id } });
+    const archivedTask = await db.inspectionTask.create({ data: { ...base, archivedUnitId: unitId, archivedUnitName: "歷史單位" } });
+    expect(userTask.userId).toBe(viewer.id);
+    expect(archivedTask).toMatchObject({ userId: null, unitId: null, archivedUnitId: unitId });
+  });
+  it("deletes a unit after an approved last-value deletion and preserves the approved application", async () => {
+    const source = await sourceRecord();
+    zone.rrsets[0].records.pop();
+    const pending = await requestUnitChange(editor, unitId, { operation: "DELETE", recordId: source.id, expectedHash: rrsetHash(zone.rrsets[0]), purpose: "退役" });
+    const before = await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } });
+    await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
+    await editUnit(admin, unitId, { action: "delete" });
+    const after = await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } });
+    expect(after).toMatchObject({ status: "APPROVED", unitId: null, applicantUnit: before.applicantUnit, expectedRRSet: before.expectedRRSet, sourceRecordId: source.id });
+    expect(await db.dnsUnit.findUnique({ where: { id: unitId } })).toBeNull();
+  });
+  it("blocks pending applications even after their DNS value is removed", async () => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    zone.rrsets = [];
+    await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toThrow("待審核申請");
+    expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).unitId).toBe(unitId);
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
+    expect(await db.unitMember.count({ where: { unitId } })).toBe(3);
+  });
+  it.each(["offline", "scope", "disabled-live"])("fails closed for %s DNS without unlinking history", async (scenario) => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    await reviewUnitRequest(admin, pending.id, "REJECT");
+    if (scenario === "offline") vi.mocked(powerdns.getZone).mockRejectedValueOnce(new PowerDNSError("offline", 503));
+    if (scenario === "scope") await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { id: "other-scope-" + source.id } });
+    if (scenario === "disabled-live") zone.rrsets[0].records[0].disabled = true;
+    await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toMatchObject({ status: scenario === "offline" ? 503 : 409 });
+    expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).unitId).toBe(unitId);
+    expect(await db.dnsRecordMetadata.count({ where: { unitId } })).toBe(1);
+    expect(await db.unitMember.count({ where: { unitId } })).toBe(3);
+  });
+  it("allows a confirmed deleted Zone and fills missing historical unit names", async () => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    await reviewUnitRequest(admin, pending.id, "REJECT");
+    const unit = await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } });
+    await db.dnsRecordRequest.update({ where: { id: pending.id }, data: { applicantUnit: null } });
+    vi.mocked(powerdns.getZone).mockRejectedValueOnce(new PowerDNSError("Zone not found", 404));
+    await editUnit(admin, unitId, { action: "delete" });
+    expect(await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).toMatchObject({ unitId: null, applicantUnit: unit.name });
+  });
+  it("does not detach DNS ownership while another application writer holds the zone lock", async () => {
+    const source = await sourceRecord();
+    zone.rrsets = [];
+    let release!: () => void, acquired!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const ready = new Promise<void>((resolve) => { acquired = resolve; });
+    const writer = db.$transaction(async (tx) => { await lockDnsZone(tx, zone.name, "local-mock"); acquired(); await gate; });
+    await ready;
+    try { await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toMatchObject({ status: 409 }); }
+    finally { release(); await writer; }
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
+    await editUnit(admin, unitId, { action: "delete" });
   });
   it("lets the verified Logto owner manage units with a stored USER role", async () => {
     await db.user.update({ where: { id: outsider.id }, data: { logtoName: "115502532" } });
