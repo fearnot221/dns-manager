@@ -14,6 +14,11 @@ x-app-environment: &app-environment
   PDNS_SERVER_ID: ${PDNS_SERVER_ID:-localhost}
   AUTH_LOGTO_ID: ${AUTH_LOGTO_ID:-dtvpigx50sgdvy4aeadee}
   AUTH_LOGTO_SECRET: ${AUTH_LOGTO_SECRET:-}
+  DNS_APPLICATION_MAX_RECORDS: ${DNS_APPLICATION_MAX_RECORDS:-5000}
+  DNS_UNIT_MAX_PENDING_RECORDS: ${DNS_UNIT_MAX_PENDING_RECORDS:-50000}
+  DNS_UNIT_MAX_DAILY_RECORDS: ${DNS_UNIT_MAX_DAILY_RECORDS:-100000}
+  DNS_UNIT_MAX_PENDING_BYTES: ${DNS_UNIT_MAX_PENDING_BYTES:-33554432}
+  DNS_UNIT_MAX_DAILY_BYTES: ${DNS_UNIT_MAX_DAILY_BYTES:-67108864}
 
 services:
   postgres:
@@ -63,15 +68,38 @@ services:
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
 
+  runtime-db:
+    image: dns-manager-tools:${DEPLOY_TAG:-local}
+    user: "0:0"
+    environment:
+      DATABASE_URL: postgresql://aegis:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/aegis_dns?schema=public
+      RUNTIME_DATABASE_URL_FILE: /run/dns-db/database-url
+    command: [node, provision-runtime-db.mjs]
+    restart: "no"
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    networks: [database]
+    volumes: ["runtime_db:/run/dns-db"]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+
   web:
     image: dns-manager-web:${DEPLOY_TAG:-local}
     build: {context: ., target: runner}
     restart: unless-stopped
     init: true
-    environment: *app-environment
+    environment:
+      <<: *app-environment
+      DATABASE_URL: ""
+      RUNTIME_DATABASE_URL_FILE: /run/dns-db/database-url
+    volumes: ["runtime_db:/run/dns-db:ro"]
     ports: ["127.0.0.1:${WEB_PORT:-3000}:3000"]
     depends_on:
-      migrate: {condition: service_completed_successfully}
+      runtime-db: {condition: service_completed_successfully}
+    # The web process receives only the least-privilege DSN file.
     networks: [frontend, database]
     read_only: true
     tmpfs:
@@ -90,6 +118,7 @@ services:
       options: {max-size: 10m, max-file: "3"}
 
 volumes:
+  runtime_db:
   postgres_data:
 networks:
   frontend:

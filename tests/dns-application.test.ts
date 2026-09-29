@@ -77,3 +77,9 @@ it("allows omitted or blank notes and rejects overlong notes", () => {
   for (const notes of [undefined, "", "  "]) expect(prepareApplication({ ...contact, records: [{ ...record, notes }] }, zones).records[0].notes).toBeNull();
   expect(() => prepareApplication({ ...contact, records: [{ ...record, notes: "x".repeat(1001) }] }, zones)).toThrow("備註");
 });
+
+it("keeps 1001-record batches and rejects only the configurable safety ceiling",()=>{
+  expect(prepareApplication({...contact,records:Array.from({length:1001},(_,i)=>({...record,name:`bulk-${i}`}))},zones).records).toHaveLength(1001);
+  vi.stubEnv("DNS_APPLICATION_MAX_RECORDS","2");
+  try{expect(()=>prepareApplication({...contact,records:Array.from({length:3},(_,i)=>({...record,name:`bounded-${i}`}))},zones)).toThrow("最多 2 筆");}finally{vi.unstubAllEnvs();}
+});

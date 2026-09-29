@@ -14,7 +14,7 @@ import { EmptyState, LoadingRows } from "@/components/ui";
 import { ScrollRegion } from "@/components/ui/scroll-region";
 import { Select } from "@/components/ui/select";
 
-type ZoneSetting = { id: string; name: string; applicationAccess: ZoneApplicationAccess };
+type ZoneSetting = { id: string; name: string; applicationAccess: ZoneApplicationAccess; canManageApplications?:boolean };
 
 export function ApplicationPolicySettings({ systemAdmin }: { systemAdmin: boolean }) {
   return <div className="workflow-page">
@@ -129,7 +129,7 @@ function ZoneApplicationSettings() {
       {resource.loading ? <LoadingRows columns={3} /> : rows.map((zone) => {
         const access = accessFor(zone);
         const category = zoneCategories.find((item) => item.id === zoneCategory(zone.name));
-        return <tr key={zone.id}><td><strong>{zone.name.replace(/\.$/, "")}</strong></td><td>{category?.label ?? "一般網域"}</td><td><button type="button" className="zone-access-switch" role="switch" aria-checked={access.enabled} aria-label={`${zone.name} 開放申請`} disabled={!!pending} onClick={() => access.enabled ? setClosing(zone) : void save(zone, true)}><span className="zone-switch-track" aria-hidden="true"><span /></span><span>{pending === zone.id ? "儲存中…" : access.enabled ? "開放申請" : "暫停申請"}</span></button></td></tr>;
+        return <tr key={zone.id}><td><strong>{zone.name.replace(/\.$/, "")}</strong></td><td>{category?.label ?? "一般網域"}</td><td><button type="button" className="zone-access-switch" role="switch" aria-checked={access.enabled} aria-label={`${zone.name} 開放申請`} disabled={!!pending||zone.canManageApplications===false} title={zone.canManageApplications===false?"需要完整網域管理權限才能變更申請設定":undefined} onClick={() => access.enabled ? setClosing(zone) : void save(zone, true)}><span className="zone-switch-track" aria-hidden="true"><span /></span><span>{pending === zone.id ? "儲存中…" : access.enabled ? "開放申請" : "暫停申請"}</span></button></td></tr>;
       })}
     </tbody></table></ScrollRegion>}
     {!resource.loading && !resource.error && !rows.length && <EmptyState title={zones.length ? "沒有符合條件的網域" : "目前沒有可管理的網域"} description={zones.length ? "請調整搜尋或申請狀態。" : "取得可管理的網域後，即可在此設定是否開放申請。"} />}

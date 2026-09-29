@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   accountFind: vi.fn(),
   accountCreate: vi.fn(),
 }));
+vi.mock("@/lib/security/rate-limit",()=>({allowPasswordAttempt:vi.fn(async()=>true)}));
 vi.mock("@/lib/audit/service", () => ({ logAuditEvent: vi.fn(async () => undefined) }));
 vi.mock("@/lib/auth/idle-session", () => ({ createIdleSession: vi.fn(async () => Date.now() + 900000), readIdleSession: vi.fn(async () => Date.now() + 900000), revokeIdleSession: vi.fn(async () => undefined) }));
 vi.mock("next-auth", () => ({ default: mocks.nextAuth }));
@@ -197,4 +198,14 @@ it("reports safe denial reasons without leaking identity or database errors", as
   expect(log).toHaveBeenLastCalledWith(expect.stringContaining('"reason":"invalid_profile"'));
   expect(JSON.stringify(log.mock.calls)).not.toMatch(/private|owner-test|ordinary/);
   expect(mocks.accountCreate).not.toHaveBeenCalled();
+});
+
+it("checks the server budget before expensive password lookup without disabling login",async()=>{
+ const {allowPasswordAttempt}=await import("@/lib/security/rate-limit");
+ const config=await configuration();
+ vi.mocked(allowPasswordAttempt).mockResolvedValueOnce(false);
+ const provider=config.providers[0] as unknown as {options:{authorize:(value:unknown)=>Promise<unknown>}};
+ expect(await provider.options.authorize({email:"test@example.invalid",password:"test-password"})).toBeNull();
+ expect(mocks.findUnique).not.toHaveBeenCalled();
+ expect(allowPasswordAttempt).toHaveBeenCalledWith("test@example.invalid");
 });

@@ -26,6 +26,15 @@ export DEPLOY_TAG
 DEPLOY_TAG="$(git rev-parse HEAD)"
 compose=(docker compose --project-name dns-manager --env-file "$DEPLOY_ENV_FILE" -f "$DEPLOY_DIR/docker-compose.yml")
 "${compose[@]}" config --quiet
+# Historical signed events have no recoverable digest marker. If the desired
+# checkout is already deployed and healthy, a webhook replay is a no-op.
+# Direct/manual deployments intentionally keep their full restart behavior.
+if [[ "${DEPLOY_FROM_WEBHOOK:-}" == 1 && -f "$DEPLOY_STATE_DIR/last-successful-commit" && "$(cat "$DEPLOY_STATE_DIR/last-successful-commit")" == "$DEPLOY_TAG" ]]; then
+  if "${compose[@]}" exec -T web node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+    echo "Already healthy at $DEPLOY_TAG; no restart needed"
+    exit 0
+  fi
+fi
 # Build before downtime. Never stop the current release if lint/test/build fails.
 "${compose[@]}" build --pull web migrate
 # Intentionally restart the whole application stack as requested. Preserve named volumes and bind-mounted data.

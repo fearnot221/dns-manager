@@ -76,3 +76,11 @@ it("enrolls using the authenticated stored user id, and never a disabled account
   await expect(requireActor()).rejects.toMatchObject({ status: 401 });
   expect(enrollAllowlistedUser).toHaveBeenCalledTimes(1);
 });
+
+it("retains direct and group scope/type restrictions while excluding expired grants at lookup",async()=>{
+  vi.stubEnv("DATABASE_URL","postgresql://test/db");
+  vi.mocked(db.user.findUnique).mockResolvedValue({id:"u",email:"u@test.invalid",globalRole:"USER",accounts:[],zonePermissions:[{zoneName:"example.test.",role:"ADMIN",resourcePattern:"*.lab.example.test.",allowedRecordTypes:["A"]}],groupMemberships:[{group:{zonePermissions:[{zoneName:"example.test.",role:"ADMIN",resourcePattern:"mail.example.test."}]}}]} as never);
+  const actor=await requireActor();
+  expect(actor.zoneGrants).toEqual([{zoneName:"example.test.",role:"ADMIN",resourcePattern:"*.lab.example.test.",allowedRecordTypes:["A"]},{zoneName:"example.test.",role:"ADMIN",resourcePattern:"mail.example.test.",allowedRecordTypes:[]}]);
+  expect(vi.mocked(db.user.findUnique).mock.calls.at(-1)![0]?.include?.zonePermissions).toMatchObject({where:{OR:[{expiresAt:null},{expiresAt:{gt:expect.any(Date)}}]}});
+});

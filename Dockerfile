@@ -18,6 +18,11 @@ USER node
 RUN npm run lint && npm test && npm run build
 
 FROM builder AS tools
+# The one-shot root/CHOWN provisioner must read its entry point even when the
+# installer checkout was 0600/0700; all other tools still run as node.
+COPY --chmod=0644 scripts/provision-runtime-db.mjs ./provision-runtime-db.mjs
+# Node's ESM package-scope lookup also reads this non-secret metadata file.
+COPY --chmod=0644 package.json ./package.json
 ENV NODE_ENV=production
 USER node
 CMD ["npm", "run", "db:migrate"]

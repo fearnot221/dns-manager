@@ -5,7 +5,7 @@ import { isLocalDemo, localDocument } from "@/lib/db/local-store";
 import { powerdns } from "@/lib/powerdns/client";
 import { connectionEnvironment } from "@/lib/powerdns/settings";
 import { listDevRequests } from "@/lib/requests/dev-store";
-import { canManageZone } from "@/lib/auth/permissions";
+import { canManageZone, canManageRecord } from "@/lib/auth/permissions";
 import { ApiError } from "@/lib/api/respond";
 import type { Actor, RRSet } from "@/lib/dns/types";
 import type { InventoryRecord, Ownership } from "./types";
@@ -20,7 +20,7 @@ const emptyOwnership = (id: string): Ownership => ({ id, applicantName: "", appl
 
 export async function describeRecords(actor: Actor, zoneName: string, rrsets: RRSet[]): Promise<InventoryRecord[]> {
   const scope = await connectionScope();
-  const records = rrsets.flatMap((rrset) => rrset.records.map((record) => ({ zoneName, recordName: rrset.name, recordType: rrset.type, content: record.content, ttl: rrset.ttl, disabled: record.disabled })));
+  const records = rrsets.filter((rrset)=>canManageRecord(actor,zoneName,rrset.name,rrset.type)).flatMap((rrset) => rrset.records.map((record) => ({ zoneName, recordName: rrset.name, recordType: rrset.type, content: record.content, ttl: rrset.ttl, disabled: record.disabled })));
   const ids = records.map((record) => recordId(scope, record));
   const saved = isLocalDemo() ? await localDocument<Store, Stored[]>("inventory", async () => ({ records: {} }), (data) => ids.flatMap((id) => data.records[id] ? [data.records[id]] : [])) : await db.dnsRecordMetadata.findMany({ where: { id: { in: ids } }, include: { unit: { select: { name: true } }, inspections: { orderBy: { inspectedAt: "desc" } } } });
   const updaterEmails = [...new Set(saved.map((item) => item.updatedBy).filter(Boolean))];
@@ -60,7 +60,7 @@ export async function captureApprovedRequest(actor: Actor, request: Identity & {
 }
 
 export async function saveInventory(actor: Actor, input: Identity & { id: string; expectedUpdatedAt: string | null; mode: "metadata" | "inspect" | "inspect-and-metadata"; applicantName: string; applicantEmail: string; applicantUnit: string; applicantExtension: string; purpose: string; note: string }) {
-  if (!canManageZone(actor, input.zoneName)) throw new ApiError("找不到可管理的 DNS 紀錄。", 404);
+  if (!canManageRecord(actor, input.zoneName, input.recordName, input.recordType)) throw new ApiError("找不到可管理的 DNS 紀錄。", 404);
   if (input.id !== recordId(await connectionScope(), input)) throw new ApiError("DNS 連線已變更，請重新載入。", 409);
   const zone = await powerdns.getZone(input.zoneName);
   const live = (await describeRecords(actor, input.zoneName, zone.rrsets)).find((record) => record.ownership.id === input.id);

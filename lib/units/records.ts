@@ -10,6 +10,7 @@ import { lockActiveUser, lockUnit, requireUnitDatabase, unitAccess, unitAudit, r
 import { replaceUnitValue, deleteUnitValue } from "./change";
 import { normalizeRecordContent } from "@/lib/dns/names";
 import { rrsetHash } from "@/lib/dns/rrset";
+import { assertUnitRequestBudget } from "@/lib/requests/limits";
 import { assertApplicationPolicy } from "@/lib/requests/policy";
 
 type UnitOwnershipInput = { expectedUpdatedAt: string; applicantName: string; applicantEmail: string; applicantExtension: string; purpose: string };
@@ -67,6 +68,7 @@ export async function requestUnitChange(actor: Actor, unitId: string, input: { r
     const unit = await tx.dnsUnit.findUniqueOrThrow({ where: { id: unitId } });
     const ownership = !deleting ? input.ownership : undefined;
     if (ownership && ownership.expectedUpdatedAt !== source.updatedAt.toISOString()) throw new ApiError("清查資料已更新，請重新載入後再申請。", 409);
+    await assertUnitRequestBudget(tx,unitId,1,Buffer.byteLength(JSON.stringify({source,current,input}))+512);
     const saved = await tx.dnsRecordRequest.create({ data: { operation: deleting ? "DELETE" : "UPDATE", userId: actor.id, unitId, sourceRecordId: source.id, originalContent: source.content, expectedRRSet: current as unknown as Prisma.InputJsonValue, connectionScope: scope, zoneName: source.zoneName, recordName: source.recordName, recordType: source.recordType, ttl: current.ttl, content, purpose: input.purpose, sourceMetadataUpdatedAt: source.updatedAt, recordPurpose: ownership?.purpose ?? source.purpose, applicantName: ownership?.applicantName ?? source.applicantName, applicantEmail: ownership?.applicantEmail ?? source.applicantEmail, applicantExtension: ownership?.applicantExtension ?? source.applicantExtension, applicantUnit: unit.name } });
     await unitAudit(tx, actor, deleting ? "REQUEST_UNIT_DNS_DELETE" : "REQUEST_UNIT_DNS_CHANGE", { recordId: source.id, content: source.content }, { requestId: saved.id, unitId, content, purpose: input.purpose });
     return { id: saved.id };

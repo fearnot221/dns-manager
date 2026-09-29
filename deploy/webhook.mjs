@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
-import { createHmac, timingSafeEqual } from "node:crypto";
-import { mkdir, readdir, rename, access, writeFile } from "node:fs/promises";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { mkdir, readdir, rename, access, writeFile, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { join, isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -17,7 +17,7 @@ export function validateDelivery(raw, headers, config) {
   if (event !== 'push' || payload.ref !== `refs/heads/${config.branch}` || payload.deleted) return { kind: 'ignored' };
   const delivery = headers['x-github-delivery'];
   if (typeof delivery !== 'string' || !/^[a-f0-9-]{36}$/i.test(delivery)) throw new Error('Invalid delivery ID');
-  return { kind: 'deploy', delivery };
+  return { kind: 'deploy', delivery, jobKey: createHash('sha256').update(raw).digest('hex') };
 }
 
 export async function startWebhook(env = process.env) {
@@ -35,8 +35,15 @@ export async function startWebhook(env = process.env) {
     running = true;
     try {
       for (;;) {
-        const next = (await readdir(queue)).filter((name) => /^[a-f0-9-]{36}\.json$/i.test(name)).sort()[0];
+        const next = (await readdir(queue)).filter((name) => /^(?:[a-f0-9]{64}|[a-f0-9-]{36})\.json$/i.test(name)).sort()[0];
         if (!next) break;
+        const jobFile=join(queue,next);
+        const job=JSON.parse(await readFile(jobFile,'utf8'));
+        const previous=Number.isInteger(job.attempts)?job.attempts:0;
+        if(previous>=3){await rename(jobFile,jobFile.replace(/\.json$/,'.failed'));continue;}
+        const attempts=previous+1;
+        await writeFile(jobFile+'.tmp',JSON.stringify({...job,attempts}),{mode:0o600});
+        await rename(jobFile+'.tmp',jobFile);
         console.info('Starting deployment', next.slice(0, -5));
         // No request content, commit message, repository URL or shell command is executed.
         const ok = await new Promise((resolve) => {
@@ -44,7 +51,7 @@ export async function startWebhook(env = process.env) {
             PATH: env.PATH, HOME: env.HOME, SSH_AUTH_SOCK: env.SSH_AUTH_SOCK,
             DEPLOY_DIR: env.DEPLOY_DIR, DEPLOY_ENV_FILE: env.DEPLOY_ENV_FILE,
             DEPLOY_BRANCH: config.branch, DEPLOY_REPOSITORY: config.repository,
-            DEPLOY_STATE_DIR: queue, GIT_TERMINAL_PROMPT: '0',
+            DEPLOY_STATE_DIR: queue, DEPLOY_FROM_WEBHOOK: '1', GIT_TERMINAL_PROMPT: '0',
           } });
           child.once('error', () => resolve(false)); child.once('exit', (code) => resolve(code === 0));
         });
@@ -62,10 +69,15 @@ export async function startWebhook(env = process.env) {
       for await (const chunk of req) { size += chunk.length; if (size > 2 * 1024 * 1024) { respond(413, 'Payload too large'); req.destroy(); return; } chunks.push(chunk); }
       const delivery = validateDelivery(Buffer.concat(chunks), req.headers, config);
       if (delivery.kind !== 'deploy') return respond(200, delivery.kind);
-      const base = join(queue, delivery.delivery);
+      const base = join(queue, delivery.jobKey);
+      // Signed bytes are the identity. Unsigned delivery IDs are metadata only.
       if (await exists(base + '.done')) return respond(200, 'Already deployed');
-      if (await exists(base + '.failed')) await rename(base + '.failed', base + '.json');
-      else { try { await writeFile(base + '.json', '{}', { flag: 'wx', mode: 0o600 }); } catch (error) { if (error.code !== 'EEXIST') throw error; } }
+      if (await exists(base + '.failed')) {
+        const failed=JSON.parse(await readFile(base+'.failed','utf8'));
+        if ((failed.attempts??0)>=3) return respond(409,'Retry budget exhausted; inspect journal and deploy manually');
+        await rename(base + '.failed', base + '.json');
+      }
+      else { try { await writeFile(base + '.json', JSON.stringify({delivery:delivery.delivery,attempts:0}), { flag: 'wx', mode: 0o600 }); } catch (error) { if (error.code !== 'EEXIST') throw error; } }
       respond(202, 'Queued; completion is reported in the server journal');
       void drain().catch(() => { console.error('Queue failure; restarting for recovery'); server.close(); process.exitCode = 1; });
     } catch (error) {

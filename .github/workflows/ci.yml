@@ -6,6 +6,19 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      UNIT_TEST_DATABASE_URL: postgresql://dns_audit:ci-test-password@127.0.0.1:5432/dns_units_test
+    services:
+      security-postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: dns_audit
+          POSTGRES_PASSWORD: ci-test-password
+          POSTGRES_DB: dns_units_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dns_audit -d dns_units_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -15,6 +28,7 @@ jobs:
       - run: npm ci
       - run: npm run db:generate
       - run: npm run lint
+      - run: DATABASE_URL="$UNIT_TEST_DATABASE_URL" npm run db:migrate
       - run: npm test
       - run: bash -n deploy/install-vm.sh deploy/deploy.sh deploy/register-webhook.sh deploy/update-now.sh
       - run: npm run build

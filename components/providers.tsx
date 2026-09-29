@@ -8,9 +8,9 @@ function Notifications() {
   return <Toaster position="bottom-right" theme={resolvedTheme === "dark" ? "dark" : "light"} />;
 }
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children, nonce }: { children: React.ReactNode; nonce?:string }) {
   return (
-    <ThemeProvider attribute="data-theme" storageKey="aegis-theme" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider nonce={nonce} attribute="data-theme" storageKey="aegis-theme" defaultTheme="system" enableSystem disableTransitionOnChange>
       {children}
       <Notifications />
     </ThemeProvider>

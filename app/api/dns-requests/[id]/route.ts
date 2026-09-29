@@ -1,5 +1,5 @@
 import { assertSameOrigin } from "@/lib/api/security";
-import { withDnsZoneLock } from "@/lib/dns/lock";
+import { lockDnsZone, withDnsZoneLock } from "@/lib/dns/lock";
 import { auditMutation } from "@/lib/audit/mutation";
 import type { RecordType, RRSet } from "@/lib/dns/types";
 import { captureApprovedRequest } from "@/lib/inventory/service";
@@ -12,6 +12,8 @@ import { apiError, ApiError, notFoundUnless } from "@/lib/api/respond";
 import { dnsRequestDecisionSchema } from "@/lib/validation/api";
 import { logAuditEvent } from "@/lib/audit/service";
 import { findDevRequest, isDevRequestStore, reviewDevRequest } from "@/lib/requests/dev-store";
+import { withDnsRequestLock } from "@/lib/requests/lock";
+import { connectionScope } from "@/lib/inventory/service";
 import { reviewUnitRequest } from "@/lib/units/review";
 
 async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns-requests/[id]">) {
@@ -27,11 +29,16 @@ async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns
       const reviewed = await reviewUnitRequest(actor, id, decision.decision, decision.reviewNote, decision.deletionPassword);
       return Response.json({ request: { id: reviewed.id, status: reviewed.status } });
     }
-    notFoundUnless(Boolean(recordRequest) && canReviewDnsRequest(actor, recordRequest!));
+    const reviewed = await withDnsRequestLock(id,async(tx)=>{
+    // The initial lookup only selects the unit/legacy path; never authorize or
+    // transition using that stale snapshot.
+    actor=await requireActor();
+    recordRequest=isDevRequestStore()?findDevRequest(id):await tx!.dnsRecordRequest.findUnique({where:{id},include:{user:{select:{email:true,name:true}}}});
+    notFoundUnless(Boolean(recordRequest) && canReviewDnsRequest(actor!, recordRequest!));
     if (recordRequest!.status !== "PENDING") throw new ApiError("This request has already been reviewed", 409);
 
     if (decision.decision === "APPROVE") {
-      await withDnsZoneLock(recordRequest!.zoneName, async () => {
+      const publish=async () => {
       const recordType = recordRequest!.recordType as RecordType;
       const zone = await powerdns.getZone(recordRequest!.zoneName);
       const current = zone.rrsets.find((rrset) => rrset.name === recordRequest!.recordName && rrset.type === recordType);
@@ -47,24 +54,27 @@ async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns
       }
       // Keep approval retryable if storing ownership fails after PowerDNS succeeds.
       await captureApprovedRequest(actor!, recordRequest!);
-      });
+      };
+      if(tx){await lockDnsZone(tx,recordRequest!.zoneName,await connectionScope());await publish();}
+      else await withDnsZoneLock(recordRequest!.zoneName,publish);
     }
 
-    const reviewed = isDevRequestStore()
-      ? reviewDevRequest(recordRequest!.id, actor, decision.decision, decision.reviewNote)!
-      : await db.dnsRecordRequest.update({
+    return isDevRequestStore()
+      ? reviewDevRequest(recordRequest!.id, actor!, decision.decision, decision.reviewNote)!
+      : await tx!.dnsRecordRequest.update({
           where: { id: recordRequest!.id },
           data: {
             status: decision.decision === "APPROVE" ? "APPROVED" : "REJECTED",
             reviewNote: decision.reviewNote || null,
             reviewedAt: new Date(),
-            reviewerId: actor.id === "dev-admin" ? null : actor.id,
+            reviewerId: actor!.id === "dev-admin" ? null : actor!.id,
           },
           include: {
             user: { select: { id: true, name: true, email: true } },
             reviewer: { select: { name: true, email: true } },
           },
         });
+    });
     await logAuditEvent({
       actor,
       zone: reviewed.zoneName,

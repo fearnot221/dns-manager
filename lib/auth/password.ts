@@ -3,6 +3,9 @@ import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCallback);
 const keyLength = 64;
+// Valid scrypt encoding for equal-cost nonexistent/disabled-account verification.
+// Its value is deliberately public; it is never associated with an account.
+export const dummyPasswordHash = `scrypt$${"00".repeat(16)}$${"00".repeat(keyLength)}`;
 
 export async function hashPassword(password: string) {
   if (password.length < 12) throw new Error("Password must be at least 12 characters");

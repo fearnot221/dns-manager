@@ -4,7 +4,8 @@ import { after } from "next/server";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
-import { verifyPassword } from "@/lib/auth/password";
+import { allowPasswordAttempt } from "@/lib/security/rate-limit";
+import { verifyPassword, dummyPasswordHash } from "@/lib/auth/password";
 import { demoUsers } from "@/lib/users/demo";
 import { resolvedGlobalRole } from "@/lib/auth/owner";
 import { logtoProvider, logtoConfigured, logtoIdentity } from "./logto";
@@ -27,17 +28,21 @@ const credentialsProvider = Credentials({
     if (!parsed.success) return null;
     const email = parsed.data.email.trim().toLowerCase();
     const password = parsed.data.password;
+    if (!await allowPasswordAttempt(email)) return null;
 
     if (process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL) {
       const account = await demoUsers((users) => users.find((item) => item.email === email));
-      if (account && !account.disabled && account.passwordHash && await verifyPassword(password, account.passwordHash)) {
+      const valid=await verifyPassword(password, account?.passwordHash || dummyPasswordHash);
+      if (account && !account.disabled && account.passwordHash && valid) {
         return { id: account.id, email: account.email, name: account.name, globalRole: resolvedGlobalRole(account.email, account.globalRole) };
       }
+      return null;
     }
 
     if (!process.env.DATABASE_URL) return null;
     const user = await db.user.findUnique({ where: { email } });
-    if (!user?.passwordHash || user.disabled || user.removedAt || !await verifyPassword(password, user.passwordHash)) return null;
+    const valid=await verifyPassword(password,user?.passwordHash || dummyPasswordHash);
+    if (!user?.passwordHash || user.disabled || user.removedAt || !valid) return null;
     return { id: user.id, email: user.email, name: user.name, globalRole: resolvedGlobalRole(user.email, user.globalRole) };
   },
 });

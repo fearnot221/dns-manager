@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/requests/policy",()=>({assertApplicationPolicy:vi.fn(async()=>undefined)}));
 vi.mock("@/lib/requests/zone-access", () => ({ applicationZoneNames: vi.fn() }));
 import { applicationZoneNames } from "@/lib/requests/zone-access";
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class AuthError extends Error {} }));

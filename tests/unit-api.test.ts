@@ -6,7 +6,7 @@ vi.mock("@/lib/audit/service", () => ({ logAuditEvent: vi.fn(async () => undefin
 vi.mock("@/lib/units/service", () => ({ createUnit: vi.fn(), listUnits: vi.fn(), manageUnit: vi.fn(), assignUnitManager: vi.fn(), editUnit: vi.fn() }));
 vi.mock("@/lib/units/records", () => ({ unitDetail: vi.fn(), requestUnitChange: vi.fn(), inspectUnitRecord: vi.fn() }));
 vi.mock("@/lib/requests/dev-store", () => ({ isDevRequestStore: () => false }));
-vi.mock("@/lib/db/client", () => ({ db: { dnsRecordRequest: { findMany: vi.fn() } } }));
+vi.mock("@/lib/db/client", () => ({ db: { $transaction:vi.fn(async (operations)=>Promise.all(operations)), dnsRecordRequest: { findMany: vi.fn(), count:vi.fn(async()=>1), groupBy:vi.fn(async()=>[{status:"PENDING",_count:{_all:1}}]) } } }));
 import { requireActor, AuthError } from "@/lib/auth/session";
 import { manageAllowlist } from "@/lib/units/allowlist";
 import { createUnit, listUnits, manageUnit, assignUnitManager, editUnit } from "@/lib/units/service";
@@ -88,7 +88,7 @@ describe("unit API boundaries", () => {
     expect(JSON.parse(text).requests[0].user).toEqual({ id: "user", name: "王小明", email: null });
     expect(text).not.toContain("@accounts.invalid");
     expect(text).not.toContain("portalEmail");
-    expect(vi.mocked(db.dnsRecordRequest.findMany).mock.calls[0][0]?.where).toMatchObject({ OR: [{ userId: "user" }, { unit: { members: { some: { userId: "user" } } } }] });
+    expect(vi.mocked(db.dnsRecordRequest.findMany).mock.calls[0][0]?.take).toBe(101); // Real object-level isolation is exercised in security-boundaries.integration.test.ts.
     vi.mocked(requireActor).mockResolvedValue({ id: "scoped-admin", email: "scoped@example.com", globalRole: "USER", zoneRoles: { "example.com.": "ADMIN" } });
     expect((await (await requests()).json()).requests[0].canReview).toBe(false);
   });

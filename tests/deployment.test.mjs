@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { mkdtemp, access, rm } from 'node:fs/promises';
+import { mkdtemp, access, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,12 +20,38 @@ describe('signed deployment webhooks', () => {
       const send = (signed) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(signed ? headers(raw) : {}) }, body: raw });
       expect((await send(false)).status).toBe(400);
       expect((await send(true)).status).toBe(202);
-      await vi.waitFor(() => access(join(directory, headers(raw)['x-github-delivery'] + '.done')));
+      await vi.waitFor(() => access(join(directory, validateDelivery(raw,headers(raw),config).jobKey + '.done')));
       expect((await send(true)).status).toBe(200);
+      const replay=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',...headers(raw,{'x-github-delivery':'00000000-0000-0000-0000-000000000002'})},body:raw});
+      expect(replay.status).toBe(200);
+      expect(await replay.json()).toEqual({message:'Already deployed'});
     } finally {
       if (server) await new Promise((resolve) => server.close(resolve));
       await rm(directory, { recursive: true, force: true });
     }
+  });
+  it('limits retries by signed body even when delivery IDs change', async()=>{
+    const directory=await mkdtemp(join(tmpdir(),'dns-webhook-retry-test-'));let server;
+    try{
+      server=await startWebhook({WEBHOOK_SECRET:config.secret,DEPLOY_REPOSITORY:config.repository,DEPLOY_BRANCH:config.branch,WEBHOOK_STATE_DIR:directory,WEBHOOK_PORT:'0',DEPLOY_SCRIPT:fileURLToPath(new URL('./fixtures/deploy-failed.sh',import.meta.url))});
+      const raw=Buffer.from(JSON.stringify({...payload,after:'a'.repeat(40)}));const key=validateDelivery(raw,headers(raw),config).jobKey;
+      const url=`http://127.0.0.1:${server.address().port}/hooks/github`;
+      const send=(i)=>fetch(url,{method:'POST',headers:{'Content-Type':'application/json',...headers(raw,{'x-github-delivery':`00000000-0000-0000-0000-00000000000${i}`})},body:raw});
+      for(let i=1;i<=3;i++){
+        expect((await send(i)).status).toBe(202);
+        await vi.waitFor(async()=>{const job=JSON.parse(await readFile(join(directory,key+'.failed'),'utf8'));expect(job.attempts).toBe(i);});
+      }
+      expect((await send(4)).status).toBe(409);
+      expect((await readFile(join(directory,'test-attempts'),'utf8')).trim().split('\n')).toHaveLength(3);
+    }finally{if(server)await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});}
+  });
+  it('recovers legacy UUID jobs after upgrading the queue identity',async()=>{
+    const directory=await mkdtemp(join(tmpdir(),'dns-webhook-legacy-test-'));let server;
+    try{
+      const legacy=headers(Buffer.from('{}'))['x-github-delivery'];await writeFile(join(directory,legacy+'.json'),'{}',{mode:0o600});
+      server=await startWebhook({WEBHOOK_SECRET:config.secret,DEPLOY_REPOSITORY:config.repository,DEPLOY_BRANCH:config.branch,WEBHOOK_STATE_DIR:directory,WEBHOOK_PORT:'0',DEPLOY_SCRIPT:fileURLToPath(new URL('./fixtures/deploy-noop.sh',import.meta.url))});
+      await vi.waitFor(()=>access(join(directory,legacy+'.done')));
+    }finally{if(server)await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});}
   });
   it('accepts only correctly signed pushes for the configured repository and branch', () => {
     const raw = Buffer.from(JSON.stringify(payload));

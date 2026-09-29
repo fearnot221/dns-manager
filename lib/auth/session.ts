@@ -20,12 +20,14 @@ export async function requireActor():Promise<Actor>{
   if(!user || user.disabled || user.removedAt)throw new AuthError();
   if (user.studentId) await enrollAllowlistedUser(user.id);
   const zoneRoles:Actor["zoneRoles"]={};
+  const zoneGrants: NonNullable<Actor["zoneGrants"]> = [];
   for(const permission of [...user.zonePermissions,...user.groupMemberships.flatMap((m)=>m.group.zonePermissions)]){
+    zoneGrants.push({ zoneName: permission.zoneName, role: permission.role, resourcePattern: permission.resourcePattern ?? null, allowedRecordTypes: "allowedRecordTypes" in permission ? permission.allowedRecordTypes : [] });
     const current=zoneRoles[permission.zoneName]; const rank={VIEWER:1,EDITOR:2,ADMIN:3}; if(!current||rank[permission.role]>rank[current])zoneRoles[permission.zoneName]=permission.role;
   }
   const portalIdentifier = session.loginProvider === "logto" ? accountOwnerIdentifier(user.accounts, user.globalRole, user.logtoName) : null;
   const storedRole = session.loginProvider === "logto" && !user.logtoName ? "USER" : user.globalRole;
-  return {id:user.id,email:user.email,portalEmail:user.portalEmail,name:user.name,portalIdentifier,studentId:user.studentId,globalRole:resolvedGlobalRole(user.email,storedRole,portalIdentifier),zoneRoles};
+  return {id:user.id,email:user.email,portalEmail:user.portalEmail,name:user.name,portalIdentifier,studentId:user.studentId,globalRole:resolvedGlobalRole(user.email,storedRole,portalIdentifier),zoneRoles,zoneGrants};
 }
 
 export class AuthError extends Error { readonly status=401; constructor(){super("Authentication required");this.name="AuthError";} }

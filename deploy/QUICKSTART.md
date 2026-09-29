@@ -50,6 +50,7 @@ sudo bash install-dns-manager.sh
 
 ```caddyfile
 dnsmgr.ce.ncu.edu.tw {
+    header Strict-Transport-Security "max-age=31536000"
     reverse_proxy http://VM_PRIVATE_IP:8080
 }
 ```

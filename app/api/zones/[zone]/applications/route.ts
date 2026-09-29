@@ -2,7 +2,7 @@ import { z } from "zod";
 import { auditMutation } from "@/lib/audit/mutation";
 import { logAuditEvent } from "@/lib/audit/service";
 import { requireActor } from "@/lib/auth/session";
-import { canManageZone } from "@/lib/auth/permissions";
+import { canManageWholeZone } from "@/lib/auth/permissions";
 import { normalizeZoneName } from "@/lib/dns/names";
 import { powerdns } from "@/lib/powerdns/client";
 import { assertSameOrigin } from "@/lib/api/security";
@@ -14,7 +14,7 @@ export const PATCH = auditMutation(async (request: Request, { params }: { params
     assertSameOrigin(request);
     const actor = await requireActor();
     const zone = normalizeZoneName((await params).zone);
-    if (!canManageZone(actor, zone)) throw new ApiError("找不到可管理的網域。", 404);
+    if (!canManageWholeZone(actor, zone)) throw new ApiError("找不到可管理的網域。", 404);
     const input = z.object({ enabled: z.boolean(), expectedUpdatedAt: z.string().datetime().nullable() }).strict().parse(await request.json());
     await powerdns.getZone(zone);
     const changes = await setZoneApplicationAccess(zone, input.enabled, input.expectedUpdatedAt, actor.email);

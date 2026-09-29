@@ -13,7 +13,7 @@ export function requestRecordKey(record: Pick<RequestRecordInput, "zoneName" | "
   return JSON.stringify([record.zoneName, record.recordName, record.recordType, record.content]);
 }
 
-/** Validate every record before any write; a batch has no record-count ceiling. */
+/** Validate every record before any write; large batches remain supported within the configurable safety budget. */
 export function prepareApplication(input: unknown, availableZones: readonly string[]) {
   const result = dnsApplicationSchema.safeParse(input);
   if (!result.success) {

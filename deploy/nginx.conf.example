@@ -9,6 +9,7 @@ server {
     server_name dns.example.edu.tw;
     ssl_certificate /etc/letsencrypt/live/dns.example.edu.tw/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/dns.example.edu.tw/privkey.pem;
+    add_header Strict-Transport-Security "max-age=31536000" always;
     client_max_body_size 2m;
     location = /hooks/github {
         limit_except POST { deny all; }

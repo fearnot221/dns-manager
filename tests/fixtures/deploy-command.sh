@@ -12,6 +12,7 @@ case "${0##*/}" in
     ;;
   docker)
     printf '%s\n' "$*" >> "$DEPLOY_TEST_LOG"
+    if [[ "$*" == *' exec -T web '* && ${TEST_FAIL_HEALTH:-0} == 1 ]]; then exit 44; fi
     if [[ "$*" == *' build '* && ${TEST_FAIL_BUILD:-0} == 1 ]]; then exit 42; fi
     if [[ "$*" == *' up '* && ${TEST_FAIL_UP:-0} == 1 ]]; then exit 43; fi
     ;;

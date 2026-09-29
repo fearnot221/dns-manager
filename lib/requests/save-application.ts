@@ -9,6 +9,8 @@ import { lockActiveUser, lockUnit } from "@/lib/units/service";
 import { connectionScope } from "@/lib/inventory/service";
 import { powerdns } from "@/lib/powerdns/client";
 import type { RRSet } from "@/lib/dns/types";
+import { applicationLimits } from "./limit-policy";
+import { assertUnitRequestBudget } from "./limits";
 import { assertApplicationPolicy } from "./policy";
 
 export async function saveApplication(actor: Actor, input: PreparedApplication, request: Request) {
@@ -16,6 +18,7 @@ export async function saveApplication(actor: Actor, input: PreparedApplication, 
   const applicationId = crypto.randomUUID();
   if (isDevRequestStore()) throw new ApplicationInputError("單位申請需要資料庫。", 503);
   try {
+    await assertApplicationPolicy(actor,input.records.map((r)=>r.recordType),input.unitId);
     const scope = await connectionScope();
     const snapshots = new Map<string, RRSet[]>();
     {
@@ -43,10 +46,15 @@ export async function saveApplication(actor: Actor, input: PreparedApplication, 
         if (pending.has(key)) throw new ApplicationInputError(`第 ${index + 1} 筆：已有相同的待審核申請，整份申請尚未送出。`, 409);
         pending.add(key);
       });
+      const rows=records.map(record=>({...record,...applicant,applicationId,userId,connectionScope:scope,expectedRRSet:(snapshots.get(record.zoneName)?.find(r=>r.name===record.recordName&&r.type===record.recordType) as unknown as Prisma.InputJsonValue)??Prisma.JsonNull}));
+      // Reserve room for generated IDs, review metadata and serialized snapshots.
+      let bytes=0;const limits=applicationLimits();
+      for(const row of rows){bytes+=Buffer.byteLength(JSON.stringify(row))+1024;if(bytes>Math.min(limits.pendingBytes,limits.dailyBytes))throw new ApplicationInputError("本份申請資料量超過單位安全上限，請分批送出。",429);}
+      await assertUnitRequestBudget(tx,input.unitId,records.length,bytes);
       // Chunk SQL statements, not applications; all chunks and audit entries commit together.
       for (let offset = 0; offset < records.length; offset += 250) {
         const chunk = records.slice(offset, offset + 250);
-        await tx.dnsRecordRequest.createMany({ data: chunk.map((record) => ({ ...record, ...applicant, applicationId, userId, connectionScope: scope, expectedRRSet: (snapshots.get(record.zoneName)?.find((r) => r.name === record.recordName && r.type === record.recordType) as unknown as Prisma.InputJsonValue) ?? Prisma.JsonNull })) });
+        await tx.dnsRecordRequest.createMany({ data: rows.slice(offset,offset+250) });
         await tx.auditLog.createMany({ data: chunk.map((record) => ({
           userId, userEmail: actor.email, zone: record.zoneName, recordName: record.recordName, recordType: record.recordType,
           action: "REQUEST_DNS_RECORD", success: true, requestId: request.headers.get("x-request-id") || applicationId,

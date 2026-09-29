@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -13,6 +14,7 @@ export const metadata: Metadata = {
   description: "NCUEECESNMG DNS 紀錄申請、審核與管理平台。",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-Hant" suppressHydrationWarning><body className={`${geist.variable} ${mono.variable}`}><Providers>{children}</Providers></body></html>;
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const nonce=(await headers()).get("x-nonce") ?? undefined;
+  return <html lang="zh-Hant" suppressHydrationWarning><body className={`${geist.variable} ${mono.variable}`}><Providers nonce={nonce}>{children}</Providers></body></html>;
 }

@@ -231,6 +231,7 @@ model DnsRecordRequest {
   @@index([userId, createdAt])
   @@index([applicationId])
   @@index([unitId, status])
+  @@index([unitId, createdAt])
   @@index([zoneName, status, createdAt])
   @@index([status, createdAt])
 }
@@ -290,6 +291,7 @@ model InspectionTask {
   @@index([userId, status])
   @@index([recordId, createdAt])
   @@index([unitId, status])
+  @@index([unitId, createdAt])
 }
 
 enum UnitRole {
@@ -362,4 +364,12 @@ model DnsChangeRestore {
   requestedBy String
   createdAt DateTime @default(now())
   completedAt DateTime?
+}
+
+// Shared, expiring budgets; never store plaintext login identifiers.
+model SecurityRateLimit {
+  key String @id
+  count Int
+  expiresAt DateTime
+  @@index([expiresAt])
 }

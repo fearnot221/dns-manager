@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, copyFile, chmod, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, copyFile, chmod, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,6 +36,10 @@ describe('Ubuntu installer release selection', () => {
 async function deploy(overrides = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'dns-deploy-flow-'));
   try {
+    if (overrides.TEST_PREVIOUS_COMMIT) {
+      await mkdir(join(directory,'state'));
+      await writeFile(join(directory,'state','last-successful-commit'),overrides.TEST_PREVIOUS_COMMIT+'\n');
+    }
     const bin = join(directory, 'bin');
     await mkdir(bin);
     for (const name of ['git', 'docker', 'flock']) {
@@ -62,6 +66,18 @@ describe('VM full-stack restart deployment', () => {
     expect(commands.indexOf(' down --timeout 30')).toBeLessThan(commands.indexOf(' up -d --wait --wait-timeout 180'));
     expect(commands).not.toMatch(/--volumes|down -v|prune|db:seed/);
     expect(deployed?.trim()).toBe('a'.repeat(40));
+  });
+  it('skips a healthy already-deployed webhook replay while keeping manual full restart',async()=>{
+    const head='a'.repeat(40);
+    const replay=await deploy({TEST_PREVIOUS_COMMIT:head,DEPLOY_FROM_WEBHOOK:'1'});
+    expect(replay.result.status).toBe(0);
+    expect(replay.commands).toContain(' exec -T web ');
+    expect(replay.commands).not.toMatch(/ build | down | up /);
+    const manual=await deploy({TEST_PREVIOUS_COMMIT:head});
+    expect(manual.result.status).toBe(0);
+    expect(manual.commands).toContain(' down --timeout 30');
+    const unhealthy=await deploy({TEST_PREVIOUS_COMMIT:head,DEPLOY_FROM_WEBHOOK:'1',TEST_FAIL_HEALTH:'1'});
+    expect(unhealthy.commands).toContain(' down --timeout 30');
   });
   it('keeps the running stack when build fails', async () => {
     const { result, commands, deployed } = await deploy({ TEST_FAIL_BUILD: '1' });

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 // Fail closed before accepting traffic; never print secret values.
 export function validateProductionEnvironment(env) {
   if (!env.DATABASE_URL) throw new Error("DATABASE_URL is required");
@@ -9,6 +10,8 @@ export function validateProductionEnvironment(env) {
   if (!['true', 'false'].includes(env.PDNS_MOCK || 'false')) throw new Error("PDNS_MOCK must be true or false");
 }
 if (process.argv[1]?.endsWith("/start-production.mjs")) {
-  try { validateProductionEnvironment(process.env); await import("../server.js"); }
+  try {
+    if (process.env.RUNTIME_DATABASE_URL_FILE) process.env.DATABASE_URL=(await readFile(process.env.RUNTIME_DATABASE_URL_FILE,"utf8")).trim();
+    validateProductionEnvironment(process.env); await import("../server.js"); }
   catch (error) { console.error("Startup blocked:", error instanceof Error ? error.message : "Invalid configuration"); process.exitCode = 1; }
 }

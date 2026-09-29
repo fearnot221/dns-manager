@@ -47,7 +47,7 @@ docker compose --env-file /home/snmg/config/app.env --profile maintenance run --
 docker compose --env-file /home/snmg/config/app.env ps
 ```
 
-`up` 先等待 PostgreSQL 健康，再完成所有 migration，最後啟動 web。Seed 僅執行一次，已有最高帳號時會拒絕覆寫。成功後刪除 env 中的 `OWNER_INITIAL_PASSWORD` 值。不使用 `docker compose down -v`，那會刪除資料庫 volume。
+`up` 先等待 PostgreSQL 健康，再完成所有 migration，再由 `runtime-db` 配置非 superuser 的 `dns_app` 角色，最後啟動 web。web 只讀取 `runtime_db` volume 中的私有 DSN，不接收 bootstrap admin 密碼；runtime 密碼由 bootstrap 隨機密碼的 HMAC 派生，既有 env 不需新增密碼。migration 與 seed 保留原連線、資料表所有權不變；新表會於每次部署補齊 CRUD grants。`runtime-db` 僅在隔離容器中用 root 與 CHOWN capability 寫入 secret volume，不掛 host／Docker socket。若已有人為建立 `dns_app` 且具有角色會員或資料表所有權，會拒絕啟動，需維運者檢查，不能自動覆寫這些授權。若舊 `aegis` 帳號已人工降權、不能 CREATE ROLE，provision 亦會 fail-closed；先在隔離 DB 演練合法 bootstrap，勿直接更動正式角色。非 Compose 部署須自行配置相同的最小權限 runtime DSN。Seed 僅執行一次，已有最高帳號時會拒絕覆寫。成功後刪除 env 中的 `OWNER_INITIAL_PASSWORD` 值。不使用 `docker compose down -v`，那會刪除資料庫 volume。
 
 PowerDNS 如果在 host 上，容器中的 `127.0.0.1` 不會連到 host；使用受防火牆保護的私有位址，或自行配置 Docker network／host-gateway。絕不可把 PowerDNS API 直接開到 Internet。
 
@@ -116,3 +116,11 @@ Repository → Settings → Webhooks → Add webhook：
 Local demo 預設保持關閉，明確需要時才使用 `npm run demo`；它不使用真實 Portal、資料庫或 PowerDNS，也不能驗證單位制申請與 DNS 復原。Docker 使用獨立 PostgreSQL，不會匯入 `.local-demo`、demo 帳密或本機申請紀錄。
 
 參考：[GitHub webhook 簽章驗證](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)、[Compose 啟動順序](https://docs.docker.com/compose/how-tos/startup-order/)、[NCU Portal 介接](https://portal.ncu.edu.tw/about/howto)。
+
+## 安全修正的升級相容性
+
+詳見 [安全修正紀錄](../SECURITY_REMEDIATION.md)。既有登入方式、批次申請與歷史個人申請審查保留。超過 1,000 筆的申請仍受測試覆蓋；預設每份 5,000 筆、每單位待審 50,000 筆／32 MiB、最近 24 小時 100,000 筆／64 MiB，可透過 `app.env` 的 `DNS_*` 五個變數調整。bytes 為 request row／snapshot 的保守估算，不是整個 DB disk quota；既有資料不會刪除，archive/retention 需另外制定。列表每頁 100 筆，搜尋和篩選在 server 執行，所有歷史仍可翻頁取得。
+
+密碼登入保留，每帳號 15 分鐘 10 次嘗試、全站每分鐘 300 次，包含成功嘗試；budget 存 DB 並自動清除過期鍵，不用永久鎖帳。Logto 不受 password limiter 影響。scope 授權只允許授權範圍內的紀錄，完整 zone 申請開關需完整 zone ADMIN；這是修正越權，未改成禁用所有委派管理。
+
+外部 Caddy 的既有站台不會隨 app 更新自動套用 HSTS；需維運者合併範例設定、validate/reload。Webhook 程式安裝在 checkout 外，也需依原維運方式更新並重啟 systemd service；本次沒有操作正式機器。新 queue 依 signed body SHA-256 去重，保留 legacy UUID jobs 消費；升級前的 UUID-only completed marker 沒有 body digest，無法回推歷史簽章事件；但相同 commit 已健康部署時 webhook 會 no-op。新的失敗事件最多三次嘗試，超過請維運者檢查後手動部署；手動部署仍保留全 stack restart 流程；健康且 commit 未變的 webhook 重播會 no-op。
