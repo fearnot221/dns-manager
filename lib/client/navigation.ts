@@ -12,9 +12,9 @@ export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAd
   if (admin) items.push(
     { href: "/zones", label: "DNS 管理", icon: "zones", nested: true },
     { href: "/admin/application-policy", label: "申請規則", icon: "settings" },
+    { href: "/admin/deletion-protection", label: "刪除保護", icon: "settings" },
   );
   if (systemAdmin) items.push(
-    { href: "/admin/dns-changes", label: "DNS 變更紀錄", icon: "activity" },
     { href: "/admin/users", label: "帳號管理", icon: "users" },
     { href: "/activity", label: "操作紀錄", icon: "activity" },
   );

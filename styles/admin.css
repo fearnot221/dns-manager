@@ -77,13 +77,3 @@
 .inventory-row-managed { grid-template-columns: minmax(0, 1fr) minmax(120px, .4fr) minmax(170px, 240px); }
 .inventory-row-managed .page-actions { justify-content: flex-end; }
 @media (max-width: 900px) { .inventory-row-managed { grid-template-columns: minmax(0, 1fr); } }
-
-.dns-change-list { display: grid; gap: var(--space-4); }
-.dns-change-entry { padding: var(--space-5); overflow-wrap: anywhere; }
-.dns-change-entry h2, .dns-change-entry h3 { font-size: var(--text-body); }
-.dns-change-entry details { margin-top: var(--space-3); }
-.dns-change-entry summary { cursor: pointer; }
-.dns-change-snapshots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); margin-top: var(--space-4); }
-.dns-change-snapshots ul { padding-left: var(--space-5); }
-.dns-change-snapshots code { white-space: pre-wrap; }
-@media (max-width: 600px) { .dns-change-snapshots { grid-template-columns: minmax(0, 1fr); } }

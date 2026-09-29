@@ -1,0 +1,31 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeEach, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/client/use-resource", () => ({ useResource: vi.fn() }));
+vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn() }));
+vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`redirect:${url}`); } }));
+import { useResource } from "@/lib/client/use-resource";
+import { requireActor } from "@/lib/auth/session";
+import { DeletionProtectionSettings } from "@/components/admin/deletion-protection";
+import Page from "@/app/(workspace)/admin/deletion-protection/page";
+beforeEach(() => { vi.mocked(useResource).mockReturnValue({ loading: false, error: "", reload: vi.fn(), data: { configured: false, updatedAt: null } } as never); });
+it("shows an unset warning and exposes password configuration only to the owner", () => {
+  const admin = renderToStaticMarkup(createElement(DeletionProtectionSettings, { canConfigure: false }));
+  expect(admin).toContain("所有 DNS 刪除操作暫停");
+  expect(admin).not.toContain('type="password"');
+  const owner = renderToStaticMarkup(createElement(DeletionProtectionSettings, { canConfigure: true }));
+  expect(owner.match(/type="password"/g)).toHaveLength(2);
+  expect(owner).toContain('autoComplete="new-password"');
+  expect(owner).toContain('minLength="12"');
+  expect(owner).toContain("再次輸入新密碼");
+});
+it("uses verified owner identity on the server page and denies non-administrators", async () => {
+  const actor = { id: "a", email: "a@example.com", globalRole: "SUPER_ADMIN" as const, zoneRoles: {} };
+  vi.mocked(requireActor).mockResolvedValue(actor);
+  expect(renderToStaticMarkup(await Page())).not.toContain('type="password"');
+  vi.mocked(requireActor).mockResolvedValue({ ...actor, portalIdentifier: "115502532" });
+  expect(renderToStaticMarkup(await Page())).toContain('type="password"');
+  vi.mocked(requireActor).mockResolvedValue({ ...actor, globalRole: "USER" });
+  await expect(Page()).rejects.toThrow("redirect:/requests");
+});

@@ -1,4 +1,5 @@
-import { withDnsZoneLock } from "@/lib/dns-changes/lock";
+import { assertSameOrigin } from "@/lib/api/security";
+import { withDnsZoneLock } from "@/lib/dns/lock";
 import { auditMutation } from "@/lib/audit/mutation";
 import type { RecordType, RRSet } from "@/lib/dns/types";
 import { captureApprovedRequest } from "@/lib/inventory/service";
@@ -17,12 +18,13 @@ async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns
   let actor: Awaited<ReturnType<typeof requireActor>> | undefined;
   let recordRequest;
   try {
+    assertSameOrigin(request);
     actor = await requireActor();
     const { id } = await params;
     const decision = dnsRequestDecisionSchema.parse(await request.json());
     recordRequest = isDevRequestStore() ? findDevRequest(id) : await db.dnsRecordRequest.findUnique({ where: { id }, include: { user: { select: { email: true, name: true } } } });
     if (recordRequest && "unitId" in recordRequest && recordRequest.unitId) {
-      const reviewed = await reviewUnitRequest(actor, id, decision.decision, decision.reviewNote);
+      const reviewed = await reviewUnitRequest(actor, id, decision.decision, decision.reviewNote, decision.deletionPassword);
       return Response.json({ request: { id: reviewed.id, status: reviewed.status } });
     }
     notFoundUnless(Boolean(recordRequest) && canReviewDnsRequest(actor, recordRequest!));

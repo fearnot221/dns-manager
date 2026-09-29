@@ -1,5 +1,6 @@
+import { assertDeletionPassword } from "@/lib/security/deletion-protection";
 import "server-only";
-import { lockDnsZone } from "@/lib/dns-changes/lock";
+import { lockDnsZone } from "@/lib/dns/lock";
 import { Prisma } from "@prisma/client";
 import { redactAudit } from "@/lib/audit/redact";
 import { db } from "@/lib/db/client";
@@ -14,7 +15,7 @@ import { canSubmitUnitRequest } from "./policy";
 import { deleteUnitValue, replaceUnitValue, unitChangeState, unitRRSetHash } from "./change";
 
 /** Unit roles NEVER authorize publication; only global system administrators review. */
-export async function reviewUnitRequest(actor: Actor, id: string, decision: "APPROVE" | "REJECT", note?: string) {
+export async function reviewUnitRequest(actor: Actor, id: string, decision: "APPROVE" | "REJECT", note?: string, deletionPassword?: string) {
   if (!isGlobalAdmin(actor)) throw new ApiError("只有系統管理員可以審核單位申請。", 403);
   return db.$transaction(async (tx) => {
     const initial = await tx.dnsRecordRequest.findUnique({ where: { id }, select: { unitId: true } });
@@ -48,6 +49,7 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
         next = item.operation === "DELETE" ? deleteUnitValue(before, source.content) : replaceUnitValue(before, source.content, item.content);
         const state = unitChangeState(current, before, next);
         if (state === "CONFLICT") throw new ApiError("DNS 已被其他操作更新，不能覆蓋；請退回並重新申請。", 409);
+        await assertDeletionPassword(actor, deletionPassword);
         if (state === "APPLIED") auditBefore = before;
         if (state === "READY") {
           if (next) await powerdns.replaceRRSet(item.zoneName, next);
@@ -73,7 +75,7 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
         if (current && unitRRSetHash(current) === unitRRSetHash(expectedAfter)) auditBefore = before;
         await tx.dnsRecordMetadata.upsert({ where: { id: targetId }, update: {}, create: { id: targetId, unitId: initial.unitId, zoneName: item.zoneName, recordName: item.recordName, recordType: item.recordType, content: item.content, applicantName: item.applicantName || "", applicantEmail: item.applicantEmail ?? item.user.portalEmail ?? "", applicantUnit: item.applicantUnit || "", applicantExtension: item.applicantExtension || "", purpose: item.purpose || "", updatedBy: actor.email } });
       }
-      await tx.auditLog.create({ data: { userId: actor.id, userEmail: actor.email, zone: item.zoneName, recordName: item.recordName, recordType: item.recordType, dnsScope: scope, action: "APPLY_UNIT_DNS_REQUEST", success: true, oldValue: auditBefore ? redactAudit(auditBefore) as Prisma.InputJsonValue : Prisma.JsonNull, newValue: redactAudit({ requestId: id, unitId: initial.unitId, operation: item.operation, rrset: item.operation === "DELETE" ? next ?? null : next ?? current }) as Prisma.InputJsonValue } });
+      await tx.auditLog.create({ data: { userId: actor.id, userEmail: actor.email, zone: item.zoneName, recordName: item.recordName, recordType: item.recordType, action: "APPLY_UNIT_DNS_REQUEST", success: true, oldValue: auditBefore ? redactAudit(auditBefore) as Prisma.InputJsonValue : Prisma.JsonNull, newValue: redactAudit({ requestId: id, unitId: initial.unitId, operation: item.operation, rrset: item.operation === "DELETE" ? next ?? null : next ?? current }) as Prisma.InputJsonValue } });
     }
     const saved = await tx.dnsRecordRequest.update({ where: { id }, data: { status: decision === "APPROVE" ? "APPROVED" : "REJECTED", reviewerId: actor.id, reviewedAt: new Date(), reviewNote: note || null } });
     await unitAudit(tx, actor, "REVIEW_UNIT_DNS_REQUEST", { requestId: id, status: item.status }, { requestId: id, status: saved.status, reviewNote: note ?? "" });

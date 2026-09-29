@@ -1,8 +1,4 @@
 /** Opt-in: UNIT_TEST_DATABASE_URL must point at a disposable local dns_units_test DB. */
-import { Prisma } from "@prisma/client";
-import { POST as createDnsRecord } from "@/app/api/zones/[zone]/records/route";
-import { withDnsZoneLock } from "@/lib/dns-changes/lock";
-import { restoreDnsChange, listDnsChanges } from "@/lib/dns-changes/service";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class extends Error {} }));
@@ -24,6 +20,8 @@ import { db } from "@/lib/db/client";
 import { powerdns } from "@/lib/powerdns/client";
 import { createUnit, listUnits, manageUnit, unitAccess, assignUnitManager, editUnit } from "@/lib/units/service";
 import { inspectUnitRecord, requestUnitChange, unitDetail } from "@/lib/units/records";
+import { hashPassword } from "@/lib/auth/password";
+import { saveDeletionPassword, assertDeletionPassword, deletionProtectionStatus } from "@/lib/security/deletion-protection";
 import { reviewUnitRequest } from "@/lib/units/review";
 import { saveApplication } from "@/lib/requests/save-application";
 import { recordId } from "@/lib/inventory/service";
@@ -51,10 +49,11 @@ async function sourceRecord() {
 const changeInput = (source: { id: string; expectedHash: string }) => ({ recordId: source.id, expectedHash: source.expectedHash, content: "192.0.2.10", purpose: "服務搬遷" });
 
 describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", () => {
-  beforeAll(() => {
+  beforeAll(async () => {
     const target = new URL(url!);
     if (!["127.0.0.1", "localhost"].includes(target.hostname) || target.pathname !== "/dns_units_test") throw new Error("Use a disposable localhost dns_units_test database only");
     vi.stubEnv("DATABASE_URL", url!);
+    await db.systemSetting.upsert({ where: { key: "dns-deletion-protection" }, create: { key: "dns-deletion-protection", value: { passwordHash: await hashPassword("test-delete-password") } }, update: { value: { passwordHash: await hashPassword("test-delete-password") } } });
   });
   afterAll(async () => { await db.$disconnect(); vi.unstubAllEnvs(); });
   beforeEach(async () => {
@@ -70,6 +69,29 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await manageAllowlist(creator, unitId, viewer.studentId!);
     await manageAllowlist(creator, unitId, editor.studentId!);
     await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "EDITOR" });
+  });
+  it("requires a fresh deletion password for approvals and persists throttling across rollbacks", async () => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, { operation: "DELETE", recordId: source.id, expectedHash: source.expectedHash, purpose: "退役" });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 403 });
+    for (let i = 0; i < 5; i++) await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "wrong-password")).rejects.toMatchObject({ status: 403 });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 429 });
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
+    expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("PENDING");
+    await reviewUnitRequest(admin, pending.id, "REJECT");
+  });
+  it("serializes concurrent password changes and shares persistent attempt limits", async () => {
+    const owner = { ...admin, globalRole: "SUPER_ADMIN" as const, portalIdentifier: "115502532" };
+    const status = await deletionProtectionStatus();
+    const input = { password: "test-delete-password", confirmation: "test-delete-password", expectedUpdatedAt: status.updatedAt };
+    const results = await Promise.allSettled([saveDeletionPassword(owner, input), saveDeletionPassword(owner, input)]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: { status: 409 } });
+    const failures = await Promise.allSettled(Array.from({ length: 7 }, () => assertDeletionPassword(admin, "incorrect")));
+    expect(failures.filter((result) => result.status === "rejected" && result.reason.status === 403)).toHaveLength(5);
+    expect(failures.filter((result) => result.status === "rejected" && result.reason.status === 429)).toHaveLength(2);
+    const stored = await db.systemSetting.findUniqueOrThrow({ where: { key: "dns-deletion-protection" } });
+    expect(JSON.stringify(stored.value)).not.toContain("test-delete-password");
   });
   it("renames units and current ownership while preserving requests and enforcing unique names", async () => {
     const source = await sourceRecord();
@@ -230,7 +252,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect((await unitDetail(editor, unitId)).records).toEqual([]);
     expect((await unitDetail(outsider, target.unit.id)).records.map((item) => item.content)).toEqual(["192.0.2.1"]);
     expect((await describeRecords(admin, zone.name, zone.rrsets))[0].ownership).toMatchObject({ unitId: target.unit.id, unitName: target.unit.name });
-    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 409 });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 409 });
     expect(zone.rrsets).toEqual(rrsets); expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
     expect(await db.inspectionTask.count({ where: { recordId: source.id } })).toBe(0);
     expect(await db.auditLog.count({ where: { action: "ASSIGN_DNS_UNIT", userId: admin.id } })).toBe(1);
@@ -352,7 +374,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const source = await sourceRecord();
     const pending = await requestUnitChange(editor, unitId, changeInput(source));
     await db.dnsUnit.update({ where: { id: unitId }, data: { status: "PENDING" } });
-    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 403 });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 403 });
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
     await reviewUnitRequest(admin, pending.id, "REJECT");
   });
@@ -488,16 +510,16 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const source = await sourceRecord();
     const pending = await requestUnitChange(editor, unitId, changeInput(source));
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
-    await expect(reviewUnitRequest(creator, pending.id, "APPROVE")).rejects.toMatchObject({ status: 403 });
-    await expect(reviewUnitRequest({ ...creator, zoneRoles: { [zone.name]: "ADMIN" } }, pending.id, "APPROVE")).rejects.toMatchObject({ status: 403 });
-    await reviewUnitRequest(admin, pending.id, "APPROVE");
+    await expect(reviewUnitRequest(creator, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 403 });
+    await expect(reviewUnitRequest({ ...creator, zoneRoles: { [zone.name]: "ADMIN" } }, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 403 });
+    await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
     expect(zone.rrsets[0].records.map((record) => record.content)).toEqual(["192.0.2.10", "192.0.2.99"]);
     expect(zone.rrsets[0].comments).toEqual([{ content: "preserve" }]);
     const detail = await unitDetail(viewer, unitId);
     expect(detail.records.map((record) => record.content)).toEqual(["192.0.2.10"]);
     expect(JSON.stringify(detail)).not.toContain("192.0.2.99");
     expect(JSON.stringify(detail)).not.toContain(editor.email);
-    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 409 });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 409 });
   });
   it("prevents duplicate pending changes even with concurrent requests", async () => {
     const source = await sourceRecord();
@@ -509,7 +531,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
   it("serializes concurrent approvals and publishes only once", async () => {
     const source = await sourceRecord();
     const pending = await requestUnitChange(editor, unitId, changeInput(source));
-    const results = await Promise.allSettled([reviewUnitRequest(admin, pending.id, "APPROVE"), reviewUnitRequest(admin, pending.id, "APPROVE")]);
+    const results = await Promise.allSettled([reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password"), reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")]);
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(powerdns.replaceRRSet).toHaveBeenCalledOnce();
   });
@@ -517,7 +539,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const source = await sourceRecord();
     const pending = await requestUnitChange(editor, unitId, changeInput(source));
     zone.rrsets[0].ttl = 600;
-    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 409 });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 409 });
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
     expect((await reviewUnitRequest(admin, pending.id, "REJECT", "DNS 已更新，請重新申請")).status).toBe("REJECTED");
   });
@@ -525,7 +547,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const source = await sourceRecord();
     const pending = await requestUnitChange(editor, unitId, changeInput(source));
     await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: null });
-    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 409 });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 409 });
     await reviewUnitRequest(admin, pending.id, "REJECT");
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
   });
@@ -533,7 +555,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const source = await sourceRecord();
     const pending = await requestUnitChange(editor, unitId, changeInput(source));
     zone.rrsets[0].records[0].content = "192.0.2.10";
-    await reviewUnitRequest(admin, pending.id, "APPROVE");
+    await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
     expect((await unitDetail(viewer, unitId)).records[0].content).toBe("192.0.2.10");
   });
@@ -545,7 +567,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const requests = await db.dnsRecordRequest.findMany({ where: { applicationId: saved.applicationId } });
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
     expect(requests[0].applicantUnit).not.toBe("forged display name");
-    for (const request of requests.reverse()) await reviewUnitRequest(admin, request.id, "APPROVE");
+    for (const request of requests.reverse()) await reviewUnitRequest(admin, request.id, "APPROVE", undefined, "test-delete-password");
     expect((await unitDetail(viewer, unitId)).records).toHaveLength(2);
   });
   it("lets members append inspections without changing ownership, DNS or exposing contact fields", async () => {
@@ -587,8 +609,8 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
     await expect(requestUnitChange(viewer, unitId, input)).rejects.toMatchObject({ status: 409 });
     await expect(requestUnitChange(editor, unitId, { ...changeInput(source), expectedHash })).rejects.toMatchObject({ status: 409 });
-    await expect(reviewUnitRequest(creator, pending.id, "APPROVE")).rejects.toMatchObject({ status: 403 });
-    const results = await Promise.allSettled([reviewUnitRequest(admin, pending.id, "APPROVE"), reviewUnitRequest(admin, pending.id, "APPROVE")]);
+    await expect(reviewUnitRequest(creator, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 403 });
+    const results = await Promise.allSettled([reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password"), reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     if (last) { expect(zone.rrsets).toHaveLength(0); expect(powerdns.deleteRRSet).toHaveBeenCalledOnce(); expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); }
     else { expect(zone.rrsets[0]).toMatchObject({ ttl: 300, comments: [{ content: "preserve" }], records: [{ content: "192.0.2.99", disabled: false }] }); expect(powerdns.replaceRRSet).toHaveBeenCalledOnce(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled(); }
@@ -604,7 +626,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     if (scenario === "reassignment") await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId: null } });
     if (scenario === "disabled") await db.user.update({ where: { id: editor.id }, data: { disabled: true } });
     if (scenario === "cancelled") await db.dnsRecordRequest.update({ where: { id: pending.id }, data: { status: "CANCELLED" } });
-    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 409 });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 409 });
     if (scenario !== "cancelled") expect((await reviewUnitRequest(admin, pending.id, "REJECT")).status).toBe("REJECTED");
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
   });
@@ -615,9 +637,9 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     // Simulate a successful external write whose response failed before DB commit.
     if (last) vi.mocked(powerdns.deleteRRSet).mockImplementationOnce(async () => { zone.rrsets = []; throw new Error("connection lost after write"); });
     else vi.mocked(powerdns.replaceRRSet).mockImplementationOnce(async (_name, rrset) => { zone.rrsets = [structuredClone(rrset)]; throw new Error("connection lost after write"); });
-    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toThrow("connection lost");
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toThrow("connection lost");
     expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("PENDING");
-    await reviewUnitRequest(admin, pending.id, "APPROVE");
+    await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
     expect(last ? powerdns.deleteRRSet : powerdns.replaceRRSet).toHaveBeenCalledOnce();
     expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("APPROVED");
   });
@@ -643,7 +665,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
       expect(request).toMatchObject({ applicantName: "聯絡人", applicantEmail: "service@example.com", applicantExtension: "1234" });
       expect(request.applicantUnit).not.toBe("forged");
       expect(request.notes).toBe(input.records.find((record) => record.recordName === request.recordName)?.notes);
-      await reviewUnitRequest(admin, request.id, "APPROVE");
+      await reviewUnitRequest(admin, request.id, "APPROVE", undefined, "test-delete-password");
       const metadata = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: recordId("local-mock", request) } });
       expect(metadata).toMatchObject({ applicantName: "聯絡人", applicantEmail: "service@example.com", applicantExtension: "1234", applicantUnit: request.applicantUnit, purpose: request.purpose, unitId });
     }
@@ -656,7 +678,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect(await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).toEqual(before);
     const request = await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } });
     expect(request).toMatchObject({ purpose: "服務搬遷", recordPurpose: "實驗室網站", applicantName: ownership.applicantName, applicantEmail: ownership.applicantEmail });
-    await reviewUnitRequest(admin, pending.id, "APPROVE");
+    await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
     const after = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: recordId("local-mock", request) } });
     expect(after).toMatchObject({ purpose: "實驗室網站", applicantName: ownership.applicantName, applicantEmail: ownership.applicantEmail, applicantExtension: "5678", unitId });
     const detail = await unitDetail(viewer, unitId);
@@ -670,91 +692,10 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await expect(requestUnitChange(editor, unitId, { ...changeInput(source), ownership })).rejects.toMatchObject({ status: 409 });
     const pending = await requestUnitChange(editor, unitId, { ...changeInput(source), ownership: { ...ownership, expectedUpdatedAt: before.updatedAt.toISOString() } });
     await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { purpose: "admin update", updatedAt: new Date(before.updatedAt.getTime() + 1000) } });
-    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 409 });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 409 });
     await reviewUnitRequest(admin, pending.id, "REJECT");
     expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).purpose).toBe("admin update");
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
-  });
-
-  it.each(["CREATE", "UPDATE", "DELETE", "DELETE_VALUE"])("restores %s snapshots including TTL, flags and comments and audits once", async (operation) => {
-    await sourceRecord();
-    const before = operation === "CREATE" ? null : { ...structuredClone(zone.rrsets[0]), ttl: 600, records: [{ content: "192.0.2.1", disabled: true }, { content: "192.0.2.99", disabled: false }] };
-    const after = operation === "DELETE" ? null : { ...structuredClone(zone.rrsets[0]), records: operation === "DELETE_VALUE" ? [{ content: "192.0.2.99", disabled: false }] : [{ content: "192.0.2.10", disabled: false }] };
-    const target = before ?? after!;
-    zone.rrsets = after ? [after] : [];
-    const event = await db.auditLog.create({ data: { userId: admin.id, userEmail: admin.email, action: operation.startsWith("DELETE") ? "DELETE_RECORD" : operation + "_RECORD", zone: zone.name, recordName: target.name, recordType: target.type, dnsScope: "local-mock", success: true, oldValue: before as unknown as Prisma.InputJsonValue ?? Prisma.JsonNull, newValue: after as unknown as Prisma.InputJsonValue ?? Prisma.JsonNull } });
-    await expect(restoreDnsChange(viewer, event.id)).rejects.toMatchObject({ status: 403 });
-    const result = await Promise.allSettled([restoreDnsChange(admin, event.id), restoreDnsChange(admin, event.id)]);
-    expect(result.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-    expect(zone.rrsets).toEqual(before ? [before] : []);
-    expect(before ? powerdns.replaceRRSet : powerdns.deleteRRSet).toHaveBeenCalledOnce();
-    expect((await db.dnsChangeRestore.findUniqueOrThrow({ where: { auditId: event.id } })).completedAt).not.toBeNull();
-    expect(await db.auditLog.count({ where: { userId: admin.id, action: "RESTORE_DNS_CHANGE" } })).toBe(1);
-    expect((await listDnsChanges(admin, 1)).events.find((item) => item.id === event.id)).toMatchObject({ canRestore: false, reason: "已復原" });
-  });
-  it.each(["scope", "legacy", "stale", "redacted", "failed"])("refuses unsafe %s restoration without writing DNS", async (scenario) => {
-    await sourceRecord();
-    const after = structuredClone(zone.rrsets[0]);
-    const event = await db.auditLog.create({ data: { userId: admin.id, userEmail: admin.email, action: "CREATE_RECORD", zone: zone.name, recordName: after.name, recordType: after.type, dnsScope: scenario === "scope" ? "other-server" : scenario === "legacy" ? null : "local-mock", success: scenario !== "failed", oldValue: Prisma.JsonNull, newValue: (scenario === "redacted" ? { ...after, records: [{ content: "[REDACTED]", disabled: false }] } : after) as unknown as Prisma.InputJsonValue } });
-    if (scenario === "stale") zone.rrsets[0].ttl = 700;
-    await expect(restoreDnsChange(admin, event.id)).rejects.toMatchObject({ status: scenario === "failed" ? 404 : 409 });
-    expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
-    expect(await db.dnsChangeRestore.findUnique({ where: { auditId: event.id } })).toBeNull();
-  });
-  it("retries a restore interrupted after PowerDNS succeeds without a second write", async () => {
-    await sourceRecord();
-    const after = structuredClone(zone.rrsets[0]);
-    const event = await db.auditLog.create({ data: { userId: admin.id, userEmail: admin.email, action: "CREATE_RECORD", zone: zone.name, recordName: after.name, recordType: after.type, dnsScope: "local-mock", success: true, oldValue: Prisma.JsonNull, newValue: after as unknown as Prisma.InputJsonValue } });
-    vi.mocked(powerdns.deleteRRSet).mockImplementationOnce(async () => { zone.rrsets = []; throw new Error("lost response"); });
-    await expect(restoreDnsChange(admin, event.id)).rejects.toThrow("lost response");
-    expect((await db.dnsChangeRestore.findUniqueOrThrow({ where: { auditId: event.id } })).completedAt).toBeNull();
-    await restoreDnsChange(admin, event.id);
-    expect(powerdns.deleteRRSet).toHaveBeenCalledOnce();
-  });
-  it("protects apex NS deletions and rechecks current administrator status", async () => {
-    zone.rrsets = [{ name: zone.name, type: "NS", ttl: 300, records: [{ content: "ns.example.com.", disabled: false }] }];
-    const event = await db.auditLog.create({ data: { userId: admin.id, userEmail: admin.email, action: "CREATE_RECORD", zone: zone.name, recordName: zone.name, recordType: "NS", dnsScope: "local-mock", success: true, oldValue: Prisma.JsonNull, newValue: zone.rrsets[0] as unknown as Prisma.InputJsonValue } });
-    await expect(restoreDnsChange(admin, event.id)).rejects.toMatchObject({ status: 403 });
-    await db.user.update({ where: { id: admin.id }, data: { globalRole: "USER" } });
-    await expect(restoreDnsChange({ ...admin, globalRole: "SUPER_ADMIN" }, event.id)).rejects.toMatchObject({ status: 403 });
-    expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
-  });
-  it("makes approved unit changes visible and recoverable with scoped snapshots", async () => {
-    const source = await sourceRecord();
-    const before = structuredClone(zone.rrsets);
-    const request = await requestUnitChange(editor, unitId, changeInput(source));
-    await reviewUnitRequest(admin, request.id, "APPROVE");
-    const event = await db.auditLog.findFirstOrThrow({ where: { userId: admin.id, action: "APPLY_UNIT_DNS_REQUEST" } });
-    expect(event).toMatchObject({ dnsScope: "local-mock", zone: zone.name });
-    expect((await listDnsChanges(admin, 1)).events.find((e) => e.id === event.id)).toMatchObject({ operation: "UPDATE", canRestore: true });
-    await restoreDnsChange(admin, event.id);
-    expect(zone.rrsets).toEqual(before);
-    expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: request.id } })).status).toBe("APPROVED");
-  });
-
-  it("journals direct administrator changes with scope and makes them restorable", async () => {
-    vi.mocked(requireActor).mockResolvedValue(admin);
-    const response = await createDnsRecord(new Request("http://localhost/api/zones/example.com/records", { method: "POST", headers: { Origin: "http://localhost" }, body: JSON.stringify({ name: "direct", type: "A", ttl: 300, content: "192.0.2.55" }) }), { params: Promise.resolve({ zone: zone.name }) });
-    expect(response.status).toBe(200);
-    const event = await db.auditLog.findFirstOrThrow({ where: { userId: admin.id, action: "CREATE_RECORD", success: true } });
-    expect(event.dnsScope).toBe("local-mock");
-    await restoreDnsChange(admin, event.id);
-    expect(zone.rrsets).toEqual([]);
-  });
-  it("does not race another in-app DNS writer and remains retryable after the lock is released", async () => {
-    await sourceRecord();
-    const after = structuredClone(zone.rrsets[0]);
-    const event = await db.auditLog.create({ data: { userId: admin.id, userEmail: admin.email, action: "CREATE_RECORD", zone: zone.name, recordName: after.name, recordType: after.type, dnsScope: "local-mock", success: true, oldValue: Prisma.JsonNull, newValue: after as unknown as Prisma.InputJsonValue } });
-    let release!: () => void, acquired!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    const ready = new Promise<void>((resolve) => { acquired = resolve; });
-    const writer = withDnsZoneLock(zone.name, async () => { acquired(); await gate; });
-    await ready;
-    try { await expect(restoreDnsChange(admin, event.id)).rejects.toMatchObject({ status: 409 }); }
-    finally { release(); await writer; }
-    expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
-    await restoreDnsChange(admin, event.id);
-    expect(powerdns.deleteRRSet).toHaveBeenCalledOnce();
   });
 
   it("atomically saves a member's complete inspection form and history without changing DNS or unit assignment", async () => {

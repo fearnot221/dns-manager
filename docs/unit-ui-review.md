@@ -12,7 +12,7 @@
 | `/units` | 單位管理 | 單位管理員管理自身單位；系統管理員查看所有單位 |
 | `/zones` | DNS 管理 | 合併網域與清查，依 domain 分頁籤 |
 | `/admin/application-policy` | 申請規則 | 網域開放設定；全站類型僅系統管理員 |
-| `/admin/dns-changes` | DNS 變更紀錄 | 系統管理員查看與復原 |
+| `/admin/deletion-protection` | 刪除保護 | 管理員查看狀態；最高管理員設定密碼 |
 | `/admin/users` | 帳號管理 | 系統管理員 |
 | `/activity` | 操作紀錄 | 系統管理員 |
 

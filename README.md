@@ -39,7 +39,7 @@
 | `/units` | 單位管理 |
 | `/zones` | DNS 管理與清查 |
 | `/admin/application-policy` | 申請規則與網域開放設定 |
-| `/admin/dns-changes` | DNS 變更紀錄與復原 |
+| `/admin/deletion-protection` | DNS 刪除保護（最高管理員設定密碼） |
 | `/admin/users` | 帳號管理 |
 | `/activity` | 操作紀錄 |
 
@@ -184,3 +184,9 @@ UNIT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test
 ## 授權
 
 本專案原始碼採用 [MIT License](LICENSE)。第三方套件及國立中央大學校徽依其原有授權與使用條件；MIT 授權不包含校徽或商標使用權，詳見 [素材來源](public/ASSET-SOURCES.md)。
+
+### DNS 刪除保護
+
+最高管理員在「刪除保護」設定 12–256 字元的專用密碼（與登入密碼分開）。尚未設定時禁止 DNS 刪除。所有管理員每次刪除解析值、Zone、核准刪除申請，以及移除或替換原解析值時，必須重新輸入密碼；純新增與 TTL 變更不需要。密碼只儲存 scrypt 雜湊，不提供查詢。每個帳號 15 分鐘內連續錯誤 5 次會暫時鎖定驗證，更換密碼不會清除鎖定。
+
+DNS 變更紀錄與復原已移除，舊 API 回傳 410；一般操作稽核及既有歷史資料保留。本次使用既有 SystemSetting，不需資料庫 migration。

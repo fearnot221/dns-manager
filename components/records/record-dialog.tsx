@@ -32,10 +32,10 @@ export function RecordDialog({ zone, dialog, onClose, onSaved }: { zone: string;
       let body: Record<string, unknown>;
       if (dialog.mode === "delete") {
         method = "DELETE";
-        body = { name: rr!.name, type: rr!.type, content: rr!.records[0].content, expectedHash: rr!.hash };
+        body = { name: rr!.name, type: rr!.type, content: rr!.records[0].content, expectedHash: rr!.hash, deletionPassword: data.get("deletionPassword") || undefined };
       } else if (dialog.mode === "edit") {
         method = "PATCH";
-        body = { name: rr!.name, type: rr!.type, ttl: Number(data.get("ttl")), contents: String(data.get("contents")).split("\n").map((value) => value.trim()).filter(Boolean), expectedHash: rr!.hash };
+        body = { name: rr!.name, type: rr!.type, ttl: Number(data.get("ttl")), contents: String(data.get("contents")).split("\n").map((value) => value.trim()).filter(Boolean), expectedHash: rr!.hash, deletionPassword: data.get("deletionPassword") || undefined };
       } else {
         body = { name: data.get("name"), type, ttl: Number(data.get("ttl")), content: contentFor(type, data) };
       }
@@ -64,6 +64,7 @@ export function RecordDialog({ zone, dialog, onClose, onSaved }: { zone: string;
           <DynamicFields type={type} />
           <label>TTL<Select name="ttl" aria-label="TTL" defaultValue="300" options={[{ value: "60", label: "1 分鐘" }, { value: "300", label: "5 分鐘" }, { value: "600", label: "10 分鐘" }, { value: "1800", label: "30 分鐘" }, { value: "3600", label: "1 小時" }]} /></label>
         </>}
+        {dialog.mode !== "add" && <label>刪除保護密碼 <small>{dialog.mode === "edit" ? "移除或替換原解析值時必填" : "必填"}</small><input name="deletionPassword" type="password" autoComplete="off" maxLength={256} required={dialog.mode === "delete"} aria-describedby={error ? errorId : undefined} /></label>}
         {error && <div id={errorId} ref={errorRef} tabIndex={-1} className="form-error" role="alert"><AlertTriangle size={15} aria-hidden="true" />{error}</div>}
       </div><div className="modal-foot"><button className="button" type="button" disabled={pending} onClick={onClose}>取消</button><SubmitButton pending={pending} tone={dialog.mode === "delete" ? "danger" : "primary"} label={dialog.mode === "delete" ? "確認刪除" : dialog.mode === "edit" ? "儲存紀錄組" : "新增紀錄"} /></div></fieldset></form>
   </Dialog>;
