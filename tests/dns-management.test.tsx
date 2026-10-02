@@ -77,3 +77,9 @@ it("allows delegated admins only to their authorized domain deep links", async (
   await expect(ZonePage({ params: Promise.resolve({ zone: "ee.ncu.edu.tw." }), searchParams: Promise.resolve({}) })).rejects.toThrow("not-found");
   await expect(ZonePage({ params: Promise.resolve({ zone: "ce.ncu.edu.tw." }), searchParams: Promise.resolve({}) })).rejects.toThrow("redirect:/zones?domain=ce.ncu.edu.tw.");
 });
+it("offers per-record history and keeps deleted-record history accessible in empty zones", () => {
+  const populated = render("ce.ncu.edu.tw.");
+  expect(populated).toContain('aria-label="歷程 host.ce.ncu.edu.tw. A"');
+  expect(populated).toContain("DNS 歷程（含已刪除）");
+  expect(render("empty.example.")).toContain("DNS 歷程（含已刪除）");
+});

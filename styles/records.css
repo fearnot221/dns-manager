@@ -101,3 +101,8 @@
   .record-results { gap: var(--space-2) var(--space-4); }
   .record-results button, .copy-value { min-height: 44px; }
 }
+
+.dns-history article { padding: var(--space-4); margin: 0; overflow-wrap: anywhere; }
+.dns-history article h3 { font-size: var(--text-body); }
+.dns-history article > div { margin-top: var(--space-3); }
+.dns-history code { white-space: pre-wrap; overflow-wrap: anywhere; }

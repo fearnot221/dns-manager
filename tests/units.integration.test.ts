@@ -1,4 +1,5 @@
-import { DELETE as deleteDnsRecord } from "@/app/api/zones/[zone]/records/route";
+import { GET as dnsHistory } from "@/app/api/dns-history/route";
+import { POST as createDnsRecord, PATCH as updateDnsRecord, DELETE as deleteDnsRecord } from "@/app/api/zones/[zone]/records/route";
 import { PowerDNSError } from "@/lib/powerdns/errors";
 import { lockDnsZone } from "@/lib/dns/lock";
 /** Opt-in: UNIT_TEST_DATABASE_URL must point at a disposable local dns_units_test DB. */
@@ -72,6 +73,38 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await manageAllowlist(creator, unitId, viewer.studentId!);
     await manageAllowlist(creator, unitId, editor.studentId!);
     await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "EDITOR" });
+  });
+  it("retains durable DNS history through create, update, deletion and recreation", async () => {
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    const name = `${unitId}.example.com.`;
+    const ctx = { params: Promise.resolve({ zone: zone.name }) };
+    const mutate = (method: string, body: unknown) => new Request("http://localhost/api/zones/example.com./records", { method, headers: { Origin: "http://localhost", "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const created = await createDnsRecord(mutate("POST", { name, type: "A", content: "192.0.2.1", ttl: 300 }), ctx);
+    expect(created.status).toBe(200);
+    const updated = await updateDnsRecord(mutate("PATCH", { name, type: "A", contents: ["192.0.2.2"], ttl: 600, expectedHash: (await created.json()).hash, deletionPassword: "test-delete-password" }), ctx);
+    expect(updated.status).toBe(200);
+    const deleted = await deleteDnsRecord(mutate("DELETE", { name, type: "A", expectedHash: (await updated.json()).hash, deletionPassword: "test-delete-password" }), ctx);
+    expect(deleted.status).toBe(200);
+    const historyRequest = () => dnsHistory(new Request(`http://localhost/api/dns-history?zone=${zone.name}&name=${name}&type=A`));
+    const removedHistory = await (await historyRequest()).json();
+    expect(removedHistory.total).toBe(3);
+    expect(removedHistory.events[0]).toMatchObject({ operation: "DELETE", after: null, legacyScope: false });
+    expect((await createDnsRecord(mutate("POST", { name, type: "A", content: "192.0.2.3", ttl: 300 }), ctx)).status).toBe(200);
+    const history = await (await historyRequest()).json();
+    expect(history.total).toBe(4);
+    expect(history.events.map((event: { operation: string }) => event.operation)).toEqual(["CREATE", "DELETE", "UPDATE", "CREATE"]);
+    vi.mocked(requireActor).mockResolvedValue(outsider);
+    expect((await historyRequest()).status).toBe(404);
+  });
+  it("includes approved unit changes with their PowerDNS connection scope", async () => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    const response = await dnsHistory(new Request(`http://localhost/api/dns-history?zone=${zone.name}&name=${unitId}.example.com.&type=A`));
+    const history = await response.json();
+    expect(history.total).toBe(1);
+    expect(history.events[0]).toMatchObject({ operation: "UPDATE", legacyScope: false, before: { records: expect.arrayContaining([{ content: "192.0.2.1", disabled: false }]) }, after: { records: expect.arrayContaining([{ content: "192.0.2.10", disabled: false }]) } });
   });
   it("requires a fresh deletion password for approvals and persists throttling across rollbacks", async () => {
     const source = await sourceRecord();
