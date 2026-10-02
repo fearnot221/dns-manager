@@ -70,7 +70,7 @@ describe("unit API boundaries", () => {
   it("validates the target student and routes admin assignment without accepting global role fields", async () => {
     vi.mocked(requireActor).mockResolvedValue({ id: "admin", email: "admin@example.com", globalRole: "ADMIN", zoneRoles: {} });
     vi.mocked(assignUnitManager).mockResolvedValue({ saved: true });
-    for (const managerStudentId of [undefined, " "]) expect((await POST(req({ action: "create", name: "Lab", managerStudentId }))).status).toBe(400);
+    for (const managerStudentId of [null, 123, "x".repeat(101)]) expect((await POST(req({ action: "create", name: "Lab", managerStudentId }))).status).toBe(400);
     for (const body of [{ action: "assign-manager", studentId: " " }, { action: "assign-manager", studentId: "115000001", globalRole: "ADMIN" }]) expect((await PATCH(req(body), ctx)).status).toBe(400);
     expect((await PATCH(req({ action: "assign-manager", studentId: "115000001" }, "https://evil.invalid"), ctx)).status).toBe(403);
     expect(assignUnitManager).not.toHaveBeenCalled();
@@ -157,4 +157,13 @@ it("accepts member/admin roles and removal but rejects the retired viewer role",
     expect((await PATCH(req({ action: "member", userId: "member", role }), ctx)).status).toBe(200);
     expect(manageUnit).toHaveBeenLastCalledWith(expect.anything(), "unit-1", { action: "member", userId: "member", role });
   }
+});
+
+it.each([undefined, "", "   "])("allows system admins to create without a manager (%s)", async (managerStudentId) => {
+  vi.mocked(requireActor).mockResolvedValue({ id: "admin", email: "admin@example.com", globalRole: "ADMIN", zoneRoles: {} });
+  vi.mocked(createUnit).mockResolvedValue({ unit: { id: "unit-1", name: "Lab", status: "APPROVED" } });
+  expect((await POST(req({ action: "create", name: "Lab", managerStudentId }))).status).toBe(201);
+  expect(createUnit).toHaveBeenCalledWith(expect.objectContaining({ id: "admin" }), "Lab", managerStudentId?.trim());
+  vi.mocked(requireActor).mockResolvedValue({ id: "user", email: "user@example.com", globalRole: "USER", zoneRoles: {} });
+  expect((await POST(req({ action: "create", name: "Lab", managerStudentId }))).status).toBe(403);
 });

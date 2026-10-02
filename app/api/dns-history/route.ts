@@ -1,3 +1,6 @@
+import { syncDnsHistory } from "@/lib/dns/history-sync";
+import { powerdns } from "@/lib/powerdns/client";
+import { PowerDNSError } from "@/lib/powerdns/errors";
 import { z } from "zod";
 import { requireActor } from "@/lib/auth/session";
 import { canManageRecord, canManageZone } from "@/lib/auth/permissions";
@@ -19,6 +22,11 @@ export async function GET(request: Request) {
     const type = query.type.toUpperCase();
     if (name && type) notFoundUnless(canManageRecord(actor, zone, name, type));
     const scope = await connectionScope();
+    let syncError = "";
+    let rrsets: Awaited<ReturnType<typeof powerdns.getZone>>["rrsets"] = [];
+    try { rrsets = (await powerdns.getZone(zone)).rrsets.filter((rrset) => canManageRecord(actor, zone, rrset.name, rrset.type)); }
+    catch (error) { if (!(error instanceof PowerDNSError && error.status === 404)) syncError = "PowerDNS 暫時無法讀取；顯示已保存的歷程，尚未同步的紀錄請稍後重試。"; }
+    await syncDnsHistory(zone, scope, rrsets);
     // Legacy snapshots lack a connection scope. Preserve them with an explicit label.
     // Zone deletion snapshots contain multiple identities: expand before filtering and paging.
     const sources: HistorySource[] = process.env.DATABASE_URL ? await db.auditLog.findMany({
@@ -30,7 +38,7 @@ export async function GET(request: Request) {
     const events = sources.filter((source) => source.zone === zone && (!source.dnsScope || source.dnsScope === scope)).flatMap(dnsHistoryEvents)
       .filter((event) => canManageRecord(actor, zone, event.recordName, event.recordType) && (!name || event.recordName === name) && (!type || event.recordType === type)
         && (!q || [event.recordName, event.recordType, ...[event.before, event.after].flatMap((rrset) => rrset?.records.map((r) => r.content) ?? [])].some((value) => value.toLowerCase().includes(q))))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
-    return Response.json({ events: events.slice((query.page - 1) * 50, query.page * 50), total: events.length, page: query.page }, { headers: { "Cache-Control": "private, no-store" } });
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || Number(a.operation === "SYNC") - Number(b.operation === "SYNC") || b.id.localeCompare(a.id));
+    return Response.json({ events: events.slice((query.page - 1) * 50, query.page * 50), total: events.length, page: query.page, syncError }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return apiError(error); }
 }

@@ -8,7 +8,7 @@ import { isGlobalAdmin } from "@/lib/auth/owner";
 import { ApiError } from "@/lib/api/respond";
 
 const schema =
-  z.object({ action: z.literal("create"), name: z.string().trim().min(1).max(100), managerStudentId: z.string().trim().min(1).max(100) }).strict();
+  z.object({ action: z.literal("create"), name: z.string().trim().min(1).max(100), managerStudentId: z.string().trim().max(100).optional() }).strict();
 export async function GET() {
   try { return Response.json({ units: await listUnits(await requireActor()) }, { headers: { "Cache-Control": "no-store" } }); }
   catch (error) { return apiError(error); }

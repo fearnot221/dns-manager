@@ -1,3 +1,4 @@
+import { isDataAccount } from "@/lib/users/data-account";
 import { auditMutation } from "@/lib/audit/mutation";
 import { accountPresentation } from "@/lib/users/presentation";
 import { z } from "zod";
@@ -20,6 +21,7 @@ async function PATCHHandler(request: Request, { params }: { params: Promise<{ id
     const noteOnly = Object.keys(input).length === 1 && typeof input.note === "string";
     if (!isGlobalAdmin(actor)) throw new ApiError("僅管理員可管理使用者。", 403);
     const check = (user: { email: string; name?: string | null; removedAt?: Date | null; portalIdentifier?: string | null; note?: string; disabled?: boolean; globalRole: "USER" | "ADMIN" | "SUPER_ADMIN"; zoneAdmin?: boolean }) => {
+      if (isDataAccount(user.email) && (input.disabled === false || input.globalRole && input.globalRole !== "USER")) throw new ApiError("資料帳號不可啟用登入或授予管理員角色。", 409);
       if (user.removedAt) throw new ApiError("已移除帳號不可重新啟用或修改。", 409);
       const protectedNote = user.portalIdentifier === OWNER_IDENTIFIER && isGlobalAdmin(actor) && noteOnly;
       if (!protectedNote && !mayManageUser(actor, user)) throw new ApiError("此帳號受保護，僅能修改備註。", 403);

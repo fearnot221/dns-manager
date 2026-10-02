@@ -1,3 +1,7 @@
+import { createDataAccount } from "@/lib/users/create";
+import { GET as contactOptions } from "@/app/api/users/contacts/route";
+import { POST as createAccount } from "@/app/api/users/route";
+import { syncDnsHistory } from "@/lib/dns/history-sync";
 import { GET as dnsHistory } from "@/app/api/dns-history/route";
 import { POST as createDnsRecord, PATCH as updateDnsRecord, DELETE as deleteDnsRecord } from "@/app/api/zones/[zone]/records/route";
 import { PowerDNSError } from "@/lib/powerdns/errors";
@@ -50,6 +54,10 @@ async function sourceRecord() {
   zone.rrsets = [{ name: source.recordName, type: "A", ttl: 300, records: [{ content: source.content, disabled: false }, { content: "192.0.2.99", disabled: false }], comments: [{ content: "preserve" }] }];
   return { id, expectedHash: rrsetHash(zone.rrsets[0]) };
 }
+async function removeMembers(id = unitId, actor = admin) {
+  const members = await db.unitMember.findMany({ where: { unitId: id } });
+  for (const member of members) await manageUnit(actor, id, { action: "member", userId: member.userId, role: null });
+}
 const changeInput = (source: { id: string; expectedHash: string }) => ({ recordId: source.id, expectedHash: source.expectedHash, content: "192.0.2.10", purpose: "服務搬遷" });
 
 describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", () => {
@@ -74,6 +82,37 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await manageAllowlist(creator, unitId, editor.studentId!);
     await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "EDITOR" });
   });
+  it("creates non-login data accounts, scopes contact options and rejects activation and admin grants", async () => {
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    const input = { name: "資料聯絡人", email: "contact@example.com", unitId, note: "填入用" };
+    const response = await createAccount(new Request("http://localhost/api/users", { method: "POST", headers: { Origin: "http://localhost" }, body: JSON.stringify(input) }));
+    expect(response.status).toBe(201);
+    const { user } = await response.json();
+    expect(user).toMatchObject({ dataOnly: true, email: input.email, disabled: true, globalRole: "USER" });
+    expect(user.passwordHash).toBeUndefined();
+    const stored = await db.user.findUniqueOrThrow({ where: { id: user.id }, include: { accounts: true } });
+    expect(stored).toMatchObject({ passwordHash: null, disabled: true, accounts: [], studentId: null });
+    for (const body of [{ disabled: false }, { globalRole: "ADMIN" }]) {
+      expect((await patchUser(new Request("http://localhost/api/users/" + user.id, { method: "PATCH", headers: { Origin: "http://localhost" }, body: JSON.stringify(body) }), { params: Promise.resolve({ id: user.id }) })).status).toBe(409);
+    }
+    vi.mocked(requireActor).mockResolvedValue(editor);
+    expect((await (await contactOptions()).json()).contacts).toContainEqual(expect.objectContaining({ id: user.id, name: input.name, email: input.email }));
+    vi.mocked(requireActor).mockResolvedValue(outsider);
+    expect((await (await contactOptions()).json()).contacts).not.toContainEqual(expect.objectContaining({ id: user.id }));
+    await expect(createDataAccount(editor, input)).rejects.toMatchObject({ status: 403 });
+    await db.user.update({ where: { id: admin.id }, data: { globalRole: "USER" } });
+    await expect(createDataAccount(admin, input)).rejects.toMatchObject({ status: 403 });
+  });
+  it("deduplicates concurrent PowerDNS synchronization and retains the initial snapshot after updates", async () => {
+    await sourceRecord();
+    await Promise.all([syncDnsHistory(zone.name, "local-mock", zone.rrsets), syncDnsHistory(zone.name, "local-mock", zone.rrsets)]);
+    const where = { zone: zone.name, recordName: zone.rrsets[0].name, action: "SYNC_RECORD" };
+    expect(await db.auditLog.count({ where })).toBe(1);
+    const first = await db.auditLog.findFirstOrThrow({ where });
+    zone.rrsets[0].ttl = 600;
+    await syncDnsHistory(zone.name, "local-mock", zone.rrsets);
+    expect(await db.auditLog.findFirstOrThrow({ where })).toEqual(first);
+  });
   it("retains durable DNS history through create, update, deletion and recreation", async () => {
     vi.mocked(requireActor).mockResolvedValue(admin);
     const name = `${unitId}.example.com.`;
@@ -87,12 +126,12 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect(deleted.status).toBe(200);
     const historyRequest = () => dnsHistory(new Request(`http://localhost/api/dns-history?zone=${zone.name}&name=${name}&type=A`));
     const removedHistory = await (await historyRequest()).json();
-    expect(removedHistory.total).toBe(3);
+    expect(removedHistory.total).toBe(4);
     expect(removedHistory.events[0]).toMatchObject({ operation: "DELETE", after: null, legacyScope: false });
     expect((await createDnsRecord(mutate("POST", { name, type: "A", content: "192.0.2.3", ttl: 300 }), ctx)).status).toBe(200);
     const history = await (await historyRequest()).json();
-    expect(history.total).toBe(4);
-    expect(history.events.map((event: { operation: string }) => event.operation)).toEqual(["CREATE", "DELETE", "UPDATE", "CREATE"]);
+    expect(history.total).toBe(5);
+    expect(history.events.map((event: { operation: string }) => event.operation)).toEqual(["CREATE", "DELETE", "UPDATE", "CREATE", "SYNC"]);
     vi.mocked(requireActor).mockResolvedValue(outsider);
     expect((await historyRequest()).status).toBe(404);
   });
@@ -103,7 +142,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     vi.mocked(requireActor).mockResolvedValue(admin);
     const response = await dnsHistory(new Request(`http://localhost/api/dns-history?zone=${zone.name}&name=${unitId}.example.com.&type=A`));
     const history = await response.json();
-    expect(history.total).toBe(1);
+    expect(history.total).toBe(2);
     expect(history.events[0]).toMatchObject({ operation: "UPDATE", legacyScope: false, before: { records: expect.arrayContaining([{ content: "192.0.2.1", disabled: false }]) }, after: { records: expect.arrayContaining([{ content: "192.0.2.10", disabled: false }]) } });
   });
   it("requires a fresh deletion password for approvals and persists throttling across rollbacks", async () => {
@@ -141,7 +180,43 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await expect(editUnit(admin, unitId, { action: "rename", name: other.unit.name })).rejects.toMatchObject({ status: 409 });
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
   });
-  it("deletes an unused unit with memberships and allowlist, retaining users and audit", async () => {
+  it.each([false, true])("blocks deletion with members, including disabled accounts (%s)", async (disabled) => {
+    if (disabled) await db.user.updateMany({ where: { id: { in: [creator.id, viewer.id, editor.id] } }, data: { disabled: true } });
+    await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toThrow("仍有 3 位成員");
+    expect(await db.unitMember.count({ where: { unitId } })).toBe(3);
+    expect(await db.unitAllowlist.count({ where: { unitId } })).toBe(3);
+    expect(await db.auditLog.count({ where: { action: "DELETE_DNS_UNIT", userId: admin.id } })).toBe(0);
+  });
+  it.each(["member", "allowlist"])("only current system admins can remove the last manager through %s", async (method) => {
+    const remove = (actor: Actor) => method === "member"
+      ? manageUnit(actor, unitId, { action: "member", userId: creator.id, role: null })
+      : manageAllowlist(actor, unitId, creator.studentId!, true);
+    await expect(remove(creator)).rejects.toMatchObject({ status: 409 });
+    await db.user.update({ where: { id: admin.id }, data: { globalRole: "USER" } });
+    await expect(remove(admin)).rejects.toMatchObject({ status: 403 });
+    await db.user.update({ where: { id: admin.id }, data: { globalRole: "ADMIN" } });
+    await remove(admin);
+    expect(await db.unitMember.count({ where: { unitId, role: "ADMIN" } })).toBe(0);
+    expect(await db.unitAllowlist.count({ where: { unitId, userId: creator.id } })).toBe(0);
+    await enrollAllowlistedUser(creator.id);
+    expect(await db.unitMember.count({ where: { unitId, userId: creator.id } })).toBe(0);
+    await assignUnitManager(admin, unitId, editor.studentId!);
+    expect(await unitAccess(editor, unitId, "manage")).toBe("ADMIN");
+  });
+  it.each([undefined, "   "])("creates an empty unit and later assigns a manager (%s)", async (studentId) => {
+    const name = "empty-" + crypto.randomUUID();
+    const created = await createUnit(admin, name, studentId);
+    expect(await db.unitMember.count({ where: { unitId: created.unit.id } })).toBe(0);
+    expect(await db.unitAllowlist.count({ where: { unitId: created.unit.id } })).toBe(0);
+    await assignUnitManager(admin, created.unit.id, creator.studentId!);
+    expect(await unitAccess(creator, created.unit.id, "manage")).toBe("ADMIN");
+    await db.user.update({ where: { id: admin.id }, data: { globalRole: "USER" } });
+    await expect(createUnit(admin, name + "-revoked")).rejects.toMatchObject({ status: 403 });
+    await db.user.update({ where: { id: admin.id }, data: { globalRole: "ADMIN", disabled: true } });
+    await expect(createUnit(admin, name + "-disabled")).rejects.toMatchObject({ status: 403 });
+  });
+  it("deletes an unused unit after removing memberships, retaining users and audit", async () => {
+    await removeMembers();
     await editUnit(admin, unitId, { action: "delete" });
     expect(await db.dnsUnit.findUnique({ where: { id: unitId } })).toBeNull();
     expect(await db.unitMember.count({ where: { unitId } })).toBe(0);
@@ -157,6 +232,8 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const pending = await requestUnitChange(editor, unitId, changeInput(source));
     await reviewUnitRequest(admin, pending.id, "REJECT");
     expect(await db.unitMember.count({ where: { unitId } })).toBe(3);
+    await removeMembers();
+    await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toThrow("仍有 DNS 解析值");
     zone.rrsets = [];
     await editUnit(admin, unitId, { action: "delete" });
     expect(await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).toMatchObject({ unitId: null, status: "REJECTED" });
@@ -173,6 +250,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect(response.status).toBe(200);
     expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
     vi.mocked(powerdns.replaceRRSet).mockClear();
+    await removeMembers();
     await editUnit(admin, unitId, { action: "delete" });
     expect(await db.dnsUnit.findUnique({ where: { id: unitId } })).toBeNull();
     expect(await db.dnsInspection.findUniqueOrThrow({ where: { id: inspected.id } })).toMatchObject({ recordId: source.id, note: "歷史清查" });
@@ -197,6 +275,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const pending = await requestUnitChange(editor, unitId, { operation: "DELETE", recordId: source.id, expectedHash: rrsetHash(zone.rrsets[0]), purpose: "退役" });
     const before = await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } });
     await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
+    await removeMembers();
     await editUnit(admin, unitId, { action: "delete" });
     const after = await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } });
     expect(after).toMatchObject({ status: "APPROVED", unitId: null, applicantUnit: before.applicantUnit, expectedRRSet: before.expectedRRSet, sourceRecordId: source.id });
@@ -206,10 +285,11 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const source = await sourceRecord();
     const pending = await requestUnitChange(editor, unitId, changeInput(source));
     zone.rrsets = [];
+    await removeMembers();
     await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toThrow("待審核申請");
     expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).unitId).toBe(unitId);
     expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
-    expect(await db.unitMember.count({ where: { unitId } })).toBe(3);
+    expect(await db.unitMember.count({ where: { unitId } })).toBe(0);
   });
   it.each(["offline", "scope", "disabled-live"])("fails closed for %s DNS without unlinking history", async (scenario) => {
     const source = await sourceRecord();
@@ -218,10 +298,11 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     if (scenario === "offline") vi.mocked(powerdns.getZone).mockRejectedValueOnce(new PowerDNSError("offline", 503));
     if (scenario === "scope") await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { id: "other-scope-" + source.id } });
     if (scenario === "disabled-live") zone.rrsets[0].records[0].disabled = true;
+    await removeMembers();
     await expect(editUnit(admin, unitId, { action: "delete" })).rejects.toMatchObject({ status: scenario === "offline" ? 503 : 409 });
     expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).unitId).toBe(unitId);
     expect(await db.dnsRecordMetadata.count({ where: { unitId } })).toBe(1);
-    expect(await db.unitMember.count({ where: { unitId } })).toBe(3);
+    expect(await db.unitMember.count({ where: { unitId } })).toBe(0);
   });
   it("allows a confirmed deleted Zone and fills missing historical unit names", async () => {
     const source = await sourceRecord();
@@ -230,12 +311,14 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     const unit = await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } });
     await db.dnsRecordRequest.update({ where: { id: pending.id }, data: { applicantUnit: null } });
     vi.mocked(powerdns.getZone).mockRejectedValueOnce(new PowerDNSError("Zone not found", 404));
+    await removeMembers();
     await editUnit(admin, unitId, { action: "delete" });
     expect(await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).toMatchObject({ unitId: null, applicantUnit: unit.name });
   });
   it("does not detach DNS ownership while another application writer holds the zone lock", async () => {
     const source = await sourceRecord();
     zone.rrsets = [];
+    await removeMembers();
     let release!: () => void, acquired!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const ready = new Promise<void>((resolve) => { acquired = resolve; });
@@ -253,6 +336,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await editUnit(owner, unitId, { action: "rename", name: "Owner-" + unitId });
     const created = await createUnit(owner, "Owner-created-" + unitId, creator.studentId!);
     await assignUnitManager(owner, created.unit.id, editor.studentId!);
+    await removeMembers(created.unit.id, owner);
     await editUnit(owner, created.unit.id, { action: "delete" });
     expect(await db.dnsUnit.findUnique({ where: { id: created.unit.id } })).toBeNull();
     await db.user.update({ where: { id: owner.id }, data: { disabled: true } });
@@ -563,7 +647,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await manageAllowlist(creator, unitId, outsider.studentId!, true);
     await enrollAllowlistedUser(outsider.id);
     await expect(unitAccess(outsider, unitId, "view")).rejects.toMatchObject({ status: 403 });
-    await expect(manageAllowlist(admin, unitId, creator.studentId!, true)).rejects.toMatchObject({ status: 409 });
+    await expect(manageAllowlist(creator, unitId, creator.studentId!, true)).rejects.toMatchObject({ status: 409 });
   });
   it("supports pre-registration allowlisting and concurrent enrollment once", async () => {
     const studentId = crypto.randomUUID();

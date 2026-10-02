@@ -1,4 +1,5 @@
 "use client";
+import { ContactPicker } from "@/components/units/contact-picker";
 import { useFormDraft, type FormDrafts } from "@/lib/client/form-draft";
 import { useResource } from "@/lib/client/use-resource";
 import { Select } from "@/components/ui/select";
@@ -46,6 +47,7 @@ export function OwnershipDialog({ drafts, record, inspection = false, systemAdmi
       <div className="review-record"><strong>{record.recordName}</strong><span>{record.recordType} · {record.zoneName}</span><code>{record.content}</code></div>
       {inspection && <div><p className="description">所屬單位：{owner.unitId ? owner.unitName || owner.applicantUnit : "尚未指派"}</p>{canAssignUnit && <button type="button" className="button" onClick={() => { setAssigning(true); setError(""); }}>指派單位</button>}</div>}
       <h3>歸屬資料</h3>
+      <ContactPicker />
       <div className="field-grid four"><label>申請人姓名<input name="applicantName" defaultValue={owner.applicantName} maxLength={100} /></label><label>申請人電子郵件<input name="applicantEmail" type="email" defaultValue={owner.applicantEmail} /></label><label>申請單位<input name="applicantUnit" defaultValue={owner.applicantUnit} maxLength={200} /></label><label>單位分機<input name="applicantExtension" defaultValue={owner.applicantExtension} maxLength={30} /></label></div>
       <label>用途<textarea name="purpose" defaultValue={owner.purpose} maxLength={1000} rows={3} /></label>
       {owner.updatedAt && <p className="description">最近更新：{new Date(owner.updatedAt).toLocaleString("zh-TW")} · {owner.updatedByName || (owner.updatedBy.endsWith("@accounts.invalid") ? "未提供姓名" : owner.updatedBy)}</p>}

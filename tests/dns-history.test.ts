@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+vi.mock("@/lib/dns/history-sync", () => ({ syncDnsHistory: vi.fn() }));
+vi.mock("@/lib/powerdns/client", () => ({ powerdns: { getZone: vi.fn(async () => ({ rrsets: [] })) } }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class extends Error {} }));
 vi.mock("@/lib/audit/service", () => ({ localAuditEvents: vi.fn() }));
@@ -67,7 +69,7 @@ it("searches deleted values, separates types and paginates without truncating hi
   expect((await (await request("&type=AAAA")).json()).total).toBe(0);
   expect((await request("&page=0")).status).toBe(400);
 });
-it("queries durable production snapshots without contacting PowerDNS or changing data", async () => {
+it("queries durable production snapshots with the current connection scope", async () => {
   vi.stubEnv("DATABASE_URL", "postgresql://unused");
   vi.mocked(db.auditLog.findMany).mockResolvedValue([{ ...source({ dnsScope: "current-server" }), user: { name: "管理員" } }] as never);
   expect((await (await request()).json()).events[0].userName).toBe("管理員");

@@ -1,4 +1,5 @@
 "use client";
+import { ContactPicker } from "@/components/units/contact-picker";
 
 import Link from "next/link";
 import { useUnitWorkspace } from "@/components/units/unit-workspace";
@@ -148,6 +149,7 @@ export function DnsApplicationForm() {
         <legend>申請人資料</legend>
         <p className="application-help">本次申請歸屬「{selectedUnit.name}」。核准的 DNS 與申請紀錄會供單位成員查看。</p>
         <div className="applicant-grid">
+          <ContactPicker />
           <label>申請人姓名<input name="applicantName" autoComplete="name" required maxLength={100} placeholder="請填寫姓名" /></label>
           <label>申請單位<input value={selectedUnit?.name || "請先選擇單位"} readOnly /></label>
           <label>申請人電子郵件<input name="applicantEmail" type="email" required autoComplete="email" maxLength={320} placeholder="可聯絡的電子郵件" /></label>

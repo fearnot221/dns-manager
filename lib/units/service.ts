@@ -53,7 +53,7 @@ async function resolveUnitManager(tx: Prisma.TransactionClient, studentId: strin
   return users[0].id;
 }
 // Recheck stored privileges while retaining the verified Logto owner's resolved role.
-async function isCurrentUnitAdmin(tx: Prisma.TransactionClient, actor: Actor) {
+export async function isCurrentUnitAdmin(tx: Prisma.TransactionClient, actor: Actor) {
   const current = await tx.user.findUniqueOrThrow({ where: { id: actor.id }, select: {
     globalRole: true, logtoName: true, accounts: { where: { provider: "logto" }, select: { provider: true, providerAccountId: true } },
   } });
@@ -66,15 +66,20 @@ async function lockManagerAndActor(tx: Prisma.TransactionClient, actor: Actor, u
   const user = await tx.user.findUnique({ where: { id: userId }, select: { studentId: true } });
   if (user?.studentId !== studentId.trim()) throw new ApiError("管理人的學號資料已更新，請重新確認。", 409);
 }
-export async function createUnit(actor: Actor, name: string, managerStudentId: string) {
+export async function createUnit(actor: Actor, name: string, managerStudentId?: string) {
   requireUnitCreator(actor);
   requireUnitDatabase();
   try {
     const unit = await db.$transaction(async (tx) => {
-      const managerId = await resolveUnitManager(tx, managerStudentId);
-      await lockManagerAndActor(tx, actor, managerId, managerStudentId);
-      const unit = await tx.dnsUnit.create({ data: { name, status: "APPROVED", allowlist: { create: { studentId: managerStudentId.trim(), userId: managerId } }, members: { create: { userId: managerId, role: "ADMIN" } } }, select: { id: true, name: true, status: true } });
-      await unitAudit(tx, actor, "CREATE_DNS_UNIT", null, { ...unit, creatorId: actor.id, managerId, managerStudentId: managerStudentId.trim() });
+      const studentId = managerStudentId?.trim() || null;
+      const managerId = studentId ? await resolveUnitManager(tx, studentId) : null;
+      if (managerId && studentId) await lockManagerAndActor(tx, actor, managerId, studentId);
+      else {
+        await lockActiveUser(tx, actor.id);
+        if (!await isCurrentUnitAdmin(tx, actor)) throw new ApiError("只有系統管理員可以建立單位。", 403);
+      }
+      const unit = await tx.dnsUnit.create({ data: { name, status: "APPROVED", ...(managerId && studentId ? { allowlist: { create: { studentId, userId: managerId } }, members: { create: { userId: managerId, role: "ADMIN" as const } } } : {}) }, select: { id: true, name: true, status: true } });
+      await unitAudit(tx, actor, "CREATE_DNS_UNIT", null, { ...unit, creatorId: actor.id, managerId, managerStudentId: studentId });
       return unit;
     });
     return { unit };
@@ -102,6 +107,8 @@ export async function manageUnit(actor: Actor, id: string, input: { action: "mem
   requireUnitDatabase();
   return db.$transaction(async (tx) => {
     await lockActiveUser(tx, actor.id);
+    const systemAdmin = isGlobalAdmin(actor);
+    if (systemAdmin && !await isCurrentUnitAdmin(tx, actor)) throw new ApiError("系統管理員權限已變更，請重新登入。", 403);
     await lockUnit(tx, id);
     await unitAccess(actor, id, "manage", tx);
     const where = { unitId_userId: { unitId: id, userId: input.userId } };
@@ -109,7 +116,7 @@ export async function manageUnit(actor: Actor, id: string, input: { action: "mem
     if (!before) throw new ApiError("此成員已不在單位內，請重新載入。", 404);
     const targetUser = await tx.user.findUnique({ where: { id: input.userId }, select: { disabled: true, studentId: true } });
     const count = await tx.unitMember.count({ where: { unitId: id, role: "ADMIN", user: { disabled: false } } });
-    if (!targetUser?.disabled && wouldRemoveLastAdmin(before.role, input.role, count)) throw new ApiError("必須保留至少一位可登入的單位管理員。", 409);
+    if (!(systemAdmin && input.role === null) && !targetUser?.disabled && wouldRemoveLastAdmin(before.role, input.role, count)) throw new ApiError("必須保留至少一位可登入的單位管理員。", 409);
     if (input.role === "ADMIN" && targetUser?.disabled !== false) throw new ApiError("停用帳號不可指派為單位管理員。", 400);
     const after = input.role ? await tx.unitMember.update({ where, data: { role: input.role } }) : (await tx.unitMember.delete({ where }), null);
     if (!input.role) await tx.unitAllowlist.deleteMany({ where: { unitId: id, OR: [{ userId: input.userId }, ...(targetUser?.studentId ? [{ studentId: targetUser.studentId, userId: null }] : [])] } });
@@ -134,6 +141,8 @@ export async function editUnit(actor: Actor, id: string, input: { action: "renam
         await unitAudit(tx, actor, "RENAME_DNS_UNIT", before, unit);
         return { saved: true };
       }
+      const memberCount = await tx.unitMember.count({ where: { unitId: id } });
+      if (memberCount) throw new ApiError(`此單位仍有 ${memberCount} 位成員，請先移除所有成員後再刪除單位。`, 409);
       // Closed requests and retired inspection notifications are history, not active dependencies.
       const pending = await tx.dnsRecordRequest.count({ where: { unitId: id, status: "PENDING" } });
       if (pending) throw new ApiError(`此單位仍有 ${pending} 筆待審核申請，請先完成審核後再刪除。`, 409);

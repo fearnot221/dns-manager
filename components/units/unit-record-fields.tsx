@@ -1,8 +1,10 @@
 "use client";
+import { ContactPicker } from "@/components/units/contact-picker";
 
 type ContactRecord = { applicantName?: string; applicantEmail?: string; applicantUnit?: string; applicantExtension?: string; purpose: string };
 export function UnitRecordFields({ record, purposeName = "purpose" }: { record: ContactRecord; purposeName?: string }) {
   return <>
+    <ContactPicker />
     <div className="field-grid">
       <label>申請人姓名<input name="applicantName" defaultValue={record.applicantName || ""} maxLength={100} autoComplete="name" /></label>
       <label>申請人電子郵件<input name="applicantEmail" type="email" defaultValue={record.applicantEmail || ""} maxLength={320} autoComplete="email" /></label>

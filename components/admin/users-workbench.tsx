@@ -1,4 +1,5 @@
 "use client";
+import { groupAccounts, type AccountUnit } from "@/lib/users/grouping";
 import { useEffect, useId, useRef, useState } from "react";
 import { RefreshCw, Search, X } from "lucide-react";
 import { toast } from "sonner";
@@ -10,19 +11,24 @@ import { ResourceError } from "@/components/ui/resource-error";
 import { ScrollRegion } from "@/components/ui/scroll-region";
 import { personDisplay } from "@/lib/users/display";
 import { Select } from "@/components/ui/select";
-type UserRow = { id: string; name: string; email: string | null; studentId?: string | null; account: string; note: string; globalRole: "USER" | "ADMIN" | "SUPER_ADMIN"; disabled: boolean; protected: boolean; zoneAdmin: boolean };
+type UserRow = { id: string; name: string; email: string | null; studentId?: string | null; account: string; note: string; globalRole: "USER" | "ADMIN" | "SUPER_ADMIN"; disabled: boolean; protected: boolean; zoneAdmin: boolean; dataOnly?: boolean; units?: AccountUnit[] };
 export function UsersWorkbench() {
   const { data, loading, error, reload } = useResource<{ users: UserRow[]; canAssignAdmin: boolean; canRemoveUsers: boolean }>("/api/users");
-  const [query, setQuery] = useState(""); const [editing, setEditing] = useState<UserRow | null>(null);
+  const [query, setQuery] = useState(""); const [editing, setEditing] = useState<UserRow | null>(null); const [creating, setCreating] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const clearSearch = () => { setQuery(""); searchInput.current?.focus(); };
   const canEdit = (user: UserRow) => user.protected || data?.canAssignAdmin || (user.globalRole === "USER" && !user.zoneAdmin);
-  const rows = (data?.users || []).filter((u) => `${u.studentId || ""} ${u.email || ""} ${u.name} ${u.account} ${u.note}`.toLowerCase().includes(query.trim().toLowerCase()));
-  return <><div className="admin-toolbar users-toolbar"><div className="filter-input"><Search size={16} aria-hidden="true" /><input ref={searchInput} type="search" placeholder="搜尋姓名、帳號、電子郵件或備註" aria-label="搜尋使用者" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); clearSearch(); } }} />{query && <button type="button" className="search-clear" aria-label="清除使用者搜尋" onClick={clearSearch}><X size={15} /></button>}</div><button type="button" className="button" disabled={loading} onClick={() => void reload()}><RefreshCw size={15} aria-hidden="true" className={loading ? "spin" : ""} />重新整理</button><span className="users-toolbar-hint muted">帳號於 Portal 首次登入後建立</span></div>
+  const rows = (data?.users || []).filter((u) => `${u.studentId || ""} ${u.email || ""} ${u.name} ${u.account} ${u.note} ${(u.units ?? []).map((unit) => unit.name).join(" ")}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const groups = groupAccounts(rows);
+  return <><div className="admin-toolbar users-toolbar"><div className="filter-input"><Search size={16} aria-hidden="true" /><input ref={searchInput} type="search" placeholder="搜尋姓名、帳號、電子郵件、單位或備註" aria-label="搜尋使用者" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); clearSearch(); } }} />{query && <button type="button" className="search-clear" aria-label="清除使用者搜尋" onClick={clearSearch}><X size={15} /></button>}</div><button type="button" className="button" disabled={loading} onClick={() => void reload()}><RefreshCw size={15} aria-hidden="true" className={loading ? "spin" : ""} />重新整理</button><button type="button" className="button primary" onClick={() => setCreating(true)}>新增資料帳號</button></div>
     {!loading && !error && <p className="record-results" role="status">顯示 {rows.length} / {data?.users.length ?? 0} 個帳號</p>}
-    {error ? <ResourceError message={error} retry={reload} /> : loading ? <p role="status" className="record-results">正在載入使用者…</p> : <div className="card table-card"><ScrollRegion className="table-wrap" label="使用者清單，可水平捲動"><table><thead><tr><th scope="col">姓名／帳號</th><th scope="col">電子郵件</th><th scope="col">角色</th><th scope="col">狀態</th><th scope="col">操作</th></tr></thead><tbody>{rows.map((user) => <tr key={user.id}><td className="user-account-cell"><strong>{user.name}</strong><p className="user-note muted">{personDisplay(user).secondary || "未提供帳號"}</p>{user.note.length > 100 ? <details className="user-note-detail"><summary aria-label={`展開 ${user.account} 的完整備註`}>{user.note.slice(0, 100)}…</summary><p>{user.note}</p></details> : <p className="user-note muted">{user.note || "尚無備註"}</p>}</td><td>{user.email || "未提供"}</td><td>{user.protected ? "管理員" : user.globalRole === "ADMIN" || user.zoneAdmin ? "管理員" : "一般使用者"}</td><td><Badge tone={user.disabled ? "neutral" : "green"}>{user.disabled ? "已停用" : "使用中"}</Badge></td><td>{<button className="button" disabled={!canEdit(user)} title={!canEdit(user) ? "需要管理員指派權限" : "管理使用者"} onClick={() => setEditing(user)}>管理</button>}</td></tr>)}</tbody></table></ScrollRegion>{!rows.length && <div className="empty"><p>{query.trim() ? "沒有符合搜尋條件的帳號。" : "目前沒有使用者帳號。"}</p>{query && <button type="button" className="button" onClick={clearSearch}>清除搜尋</button>}</div>}</div>}
+    {error ? <ResourceError message={error} retry={reload} /> : loading ? <p role="status" className="record-results">正在載入使用者…</p> : <div className="card table-card"><ScrollRegion className="table-wrap" label="使用者清單，可水平捲動"><table><thead><tr><th scope="col">姓名／帳號</th><th scope="col">電子郵件</th><th scope="col">角色</th><th scope="col">狀態</th><th scope="col">操作</th></tr></thead>{groups.map((group) => <AccountGroup key={group.id} name={group.name} count={group.users.length}>{group.users.map((user) => <tr key={user.id}><td className="user-account-cell"><strong>{user.name}</strong><p className="user-note muted">{personDisplay(user).secondary || "未提供帳號"}</p>{user.note.length > 100 ? <details className="user-note-detail"><summary aria-label={`展開 ${user.account} 的完整備註`}>{user.note.slice(0, 100)}…</summary><p>{user.note}</p></details> : <p className="user-note muted">{user.note || "尚無備註"}</p>}</td><td>{user.email || "未提供"}</td><td>{user.protected ? "管理員" : user.globalRole === "ADMIN" || user.zoneAdmin ? "管理員" : "一般使用者"}</td><td><Badge tone={user.disabled ? "neutral" : "green"}>{user.dataOnly ? "資料帳號" : user.disabled ? "已停用" : "使用中"}</Badge></td><td>{<button className="button" disabled={!canEdit(user)} title={!canEdit(user) ? "需要管理員指派權限" : "管理使用者"} onClick={() => setEditing(user)}>管理</button>}</td></tr>)}</AccountGroup>)}</table></ScrollRegion>{!rows.length && <div className="empty"><p>{query.trim() ? "沒有符合搜尋條件的帳號。" : "目前沒有使用者帳號。"}</p>{query && <button type="button" className="button" onClick={clearSearch}>清除搜尋</button>}</div>}</div>}
+    {creating && <CreateAccountDialog onClose={() => setCreating(false)} onSaved={async () => { setCreating(false); await reload(); }} />}
     {editing && <UserDialog user={editing} canAssignAdmin={!!data?.canAssignAdmin} canRemoveUsers={!!data?.canRemoveUsers} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await reload(); }} />}
   </>;
+}
+function AccountGroup({ name, count, children }: { name: string; count: number; children: React.ReactNode }) {
+  return <tbody><tr><th colSpan={5} scope="rowgroup">{name} · {count} 個帳號</th></tr>{children}</tbody>;
 }
 function UserDialog({ user, canAssignAdmin, canRemoveUsers, onClose, onSaved }: { user: UserRow; canAssignAdmin: boolean; canRemoveUsers: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
    const [pending, setPending] = useState(false); const [error, setError] = useState(""); const sending = useRef(false);
@@ -32,10 +38,37 @@ function UserDialog({ user, canAssignAdmin, canRemoveUsers, onClose, onSaved }: 
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (sending.current) return; sending.current = true; setPending(true); setError(""); const data = new FormData(event.currentTarget);
-    const body = user.protected ? { note: data.get("note") } : { note: data.get("note"), disabled: data.get("disabled") === "true", ...(canAssignAdmin ? { globalRole: data.get("globalRole") } : {}) };
+    const body = user.protected || user.dataOnly ? { note: data.get("note") } : { note: data.get("note"), disabled: data.get("disabled") === "true", ...(canAssignAdmin ? { globalRole: data.get("globalRole") } : {}) };
     try { await apiRequest(`/api/users/${user.id}`, jsonRequest("PATCH", body)); toast.success("已更新帳號。"); await onSaved(); }
     catch (error) { setError(error instanceof Error ? error.message : "無法儲存使用者。"); }
     finally { sending.current = false; setPending(false); }
   }
-  return <Dialog title={"管理帳號"} description="管理帳號資訊與備註；角色與狀態依權限開放調整。" onClose={onClose} pending={pending}><form onSubmit={submit}><fieldset className="dialog-fields" disabled={pending}><div className="modal-body"><label>姓名<input value={user.name} readOnly /></label><label>帳號<input value={user.studentId || "未提供帳號"} readOnly /></label><label>電子郵件<input value={user.email || "未提供電子郵件"} readOnly /></label><label>帳號備註<textarea name="note" value={note} onChange={(event) => setNote(event.target.value)} aria-describedby={noteHelp} data-dialog-initial-focus maxLength={1000} rows={3} placeholder="僅供管理用途，不影響帳號權限" /><small id={noteHelp} className="user-note-help"><span>管理用途，不影響權限</span><span>{note.length} / 1000 字</span></small></label>{(canAssignAdmin || user.protected) && <label>角色<Select name="globalRole" aria-label="角色" disabled={user.protected} defaultValue={user.protected ? "ADMIN" : user.globalRole} options={[{ value: "USER", label: "一般使用者" }, { value: "ADMIN", label: "管理員" }]} /></label>}{<label>帳號狀態<Select name="disabled" aria-label="帳號狀態" disabled={user.protected} defaultValue={String(user.disabled)} options={[{ value: "false", label: "使用中" }, { value: "true", label: "停用" }]} /></label>}{error && <div ref={errorRef} tabIndex={-1} className="form-error" role="alert">{error}</div>}</div><div className="modal-foot"><button className="button" type="button" onClick={onClose} disabled={pending}>取消</button><SubmitButton pending={pending} label={"儲存變更"} />{canRemoveUsers && !user.protected && <button className="button danger" type="button" disabled={pending} onClick={async () => { if (!window.confirm("移除此帳號？將撤銷登入及所有單位的使用權限，保留歷史。單位最後一位管理員須先移交。")) return; setPending(true); setError(""); try { await apiRequest(`/api/users/${user.id}`, jsonRequest("DELETE", { confirmId: user.id })); await onSaved(); } catch (e) { setError(e instanceof Error ? e.message : "移除失敗"); } finally { setPending(false); } }}>移除帳號</button>}</div></fieldset></form></Dialog>;
+  return <Dialog title={"管理帳號"} description="管理帳號資訊與備註；角色與狀態依權限開放調整。" onClose={onClose} pending={pending}><form onSubmit={submit}><fieldset className="dialog-fields" disabled={pending}><div className="modal-body"><label>姓名<input value={user.name} readOnly /></label><label>帳號<input value={user.dataOnly ? user.account : user.studentId || "未提供帳號"} readOnly /></label><label>電子郵件<input value={user.email || "未提供電子郵件"} readOnly /></label><label>帳號備註<textarea name="note" value={note} onChange={(event) => setNote(event.target.value)} aria-describedby={noteHelp} data-dialog-initial-focus maxLength={1000} rows={3} placeholder="僅供管理用途，不影響帳號權限" /><small id={noteHelp} className="user-note-help"><span>管理用途，不影響權限</span><span>{note.length} / 1000 字</span></small></label>{!user.dataOnly && (canAssignAdmin || user.protected) && <label>角色<Select name="globalRole" aria-label="角色" disabled={user.protected} defaultValue={user.protected ? "ADMIN" : user.globalRole} options={[{ value: "USER", label: "一般使用者" }, { value: "ADMIN", label: "管理員" }]} /></label>}{!user.dataOnly && <label>帳號狀態<Select name="disabled" aria-label="帳號狀態" disabled={user.protected} defaultValue={String(user.disabled)} options={[{ value: "false", label: "使用中" }, { value: "true", label: "停用" }]} /></label>}{error && <div ref={errorRef} tabIndex={-1} className="form-error" role="alert">{error}</div>}</div><div className="modal-foot"><button className="button" type="button" onClick={onClose} disabled={pending}>取消</button><SubmitButton pending={pending} label={"儲存變更"} />{canRemoveUsers && !user.protected && <button className="button danger" type="button" disabled={pending} onClick={async () => { if (!window.confirm("移除此帳號？將撤銷登入及所有單位的使用權限，保留歷史。單位最後一位管理員須先移交。")) return; setPending(true); setError(""); try { await apiRequest(`/api/users/${user.id}`, jsonRequest("DELETE", { confirmId: user.id })); await onSaved(); } catch (e) { setError(e instanceof Error ? e.message : "移除失敗"); } finally { setPending(false); } }}>移除帳號</button>}</div></fieldset></form></Dialog>;
+}
+
+function CreateAccountDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => Promise<void> }) {
+  const { data, loading, error: unitsError } = useResource<{ units: AccountUnit[] }>("/api/units");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const sending = useRef(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const errorId = useId();
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
+  return <Dialog title="新增資料帳號" description="僅供 DNS 聯絡資料等欄位選用，沒有登入功能或管理權限。" onClose={onClose} pending={pending}><form onSubmit={async (event) => {
+    event.preventDefault(); if (sending.current) return;
+    const form = new FormData(event.currentTarget);
+    sending.current = true; setPending(true); setError("");
+    try {
+      await apiRequest("/api/users", jsonRequest("POST", { name: form.get("name"), email: form.get("email"), note: form.get("note"), ...(form.get("unitId") ? { unitId: form.get("unitId") } : {}) }));
+      toast.success("已新增資料帳號。"); await onSaved();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "新增失敗，請重試。"); }
+    finally { sending.current = false; setPending(false); }
+  }}><fieldset className="dialog-fields" disabled={pending}><div className="modal-body">
+    <label>姓名<input name="name" required maxLength={100} autoComplete="name" data-dialog-initial-focus aria-invalid={!!error} aria-describedby={error ? errorId : undefined} /></label>
+    <label>聯絡電子郵件（選填）<input name="email" type="email" maxLength={320} autoComplete="email" aria-invalid={!!error} aria-describedby={error ? errorId : undefined} /></label>
+    <label>所屬單位（選填）<Select name="unitId" aria-label="所屬單位" defaultValue="" disabled={loading || !!unitsError} options={[{ value: "", label: "未加入單位" }, ...(data?.units ?? []).map((unit) => ({ value: unit.id, label: unit.name }))]} /></label>
+    {unitsError && <p role="status">單位清單暫時無法讀取，可先建立未加入單位的資料帳號。</p>}
+    <label>備註<textarea name="note" maxLength={1000} rows={3} /></label>
+    {error && <p id={errorId} ref={errorRef} tabIndex={-1} className="form-error" role="alert">{error}</p>}
+    </div><div className="modal-foot"><button type="button" className="button" onClick={onClose}>取消</button><SubmitButton pending={pending} label="新增資料帳號" /></div></fieldset></form></Dialog>;
 }

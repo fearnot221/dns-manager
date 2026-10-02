@@ -1,6 +1,6 @@
 import type { RRSet } from "./types";
 
-export const DNS_HISTORY_ACTIONS = ["CREATE_RECORD", "UPDATE_RECORD", "DELETE_RECORD", "APPLY_APPROVED_DNS_RECORD", "APPLY_UNIT_DNS_REQUEST", "DELETE_ZONE"];
+export const DNS_HISTORY_ACTIONS = ["SYNC_RECORD", "CREATE_RECORD", "UPDATE_RECORD", "DELETE_RECORD", "APPLY_APPROVED_DNS_RECORD", "APPLY_UNIT_DNS_REQUEST", "DELETE_ZONE"];
 export type HistorySource = {
   id: string; createdAt: string | Date; zone: string; recordName?: string | null; recordType?: string | null;
   action: string; success: boolean; oldValue?: unknown; newValue?: unknown; userEmail: string; userName?: string | null;
@@ -8,7 +8,7 @@ export type HistorySource = {
 };
 export type DnsHistoryEvent = {
   id: string; createdAt: string; zone: string; recordName: string; recordType: string;
-  operation: "CREATE" | "UPDATE" | "DELETE"; userEmail: string; userName?: string | null;
+  operation: "SYNC" | "CREATE" | "UPDATE" | "DELETE"; userEmail: string; userName?: string | null;
   before: RRSet | null; after: RRSet | null; legacyScope: boolean;
 };
 function snapshot(value: unknown): RRSet | null {
@@ -36,6 +36,6 @@ export function dnsHistoryEvents(source: HistorySource): DnsHistoryEvent[] {
 function event(source: HistorySource, before: RRSet | null, after: RRSet | null, id: string): DnsHistoryEvent {
   const identity = after ?? before!;
   return { id, createdAt: new Date(source.createdAt).toISOString(), zone: source.zone, recordName: identity.name, recordType: identity.type,
-    operation: !before ? "CREATE" : !after ? "DELETE" : "UPDATE", userEmail: source.userEmail, userName: source.userName,
+    operation: source.action === "SYNC_RECORD" ? "SYNC" : !before ? "CREATE" : !after ? "DELETE" : "UPDATE", userEmail: source.userEmail, userName: source.userName,
     before, after, legacyScope: !source.dnsScope };
 }
