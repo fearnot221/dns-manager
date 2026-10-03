@@ -2,6 +2,9 @@ export type NavIcon = "apply" | "requests" | "dns" | "units" | "zones" | "invent
 export type NavItem = { href: string; label: string; icon: NavIcon; nested?: boolean };
 export type NavGroup = { id: string; label: string; items: NavItem[] };
 
+/** Cookie holding the desktop sidebar state ("open" | "collapsed") so the server renders it on first paint. */
+export const navigationCookie = "dns-manager-navigation";
+
 // Presentation only. Server routes remain responsible for authorization.
 export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAdmin = false): NavGroup[] {
   const items: NavItem[] = [
@@ -9,17 +12,18 @@ export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAd
     { href: "/requests", label: admin ? "申請審核" : "申請紀錄", icon: "requests" },
   ];
   if (unitAdmin || systemAdmin) items.push({ href: "/units", label: "單位管理", icon: "units" });
-  if (admin) items.push(
-    { href: "/zones", label: "DNS 管理", icon: "zones", nested: true },
+  if (admin) items.push({ href: "/zones", label: "DNS 管理", icon: "zones", nested: true });
+  const settings: NavItem[] = [];
+  if (admin) settings.push(
     { href: "/admin/application-policy", label: "申請規則", icon: "settings" },
     { href: "/admin/deletion-protection", label: "刪除保護", icon: "protection" },
   );
-  if (systemAdmin) items.push(
+  if (systemAdmin) settings.push(
     { href: "/admin/inspection-events", label: "清查活動", icon: "inventory" },
     { href: "/admin/users", label: "帳號管理", icon: "users" },
     { href: "/activity", label: "操作紀錄", icon: "activity" },
   );
-  return [{ id: "navigation", label: "功能導覽", items }];
+  return [{ id: "workflow", label: "日常作業", items }, ...(settings.length ? [{ id: "settings", label: "系統設定", items: settings }] : [])];
 }
 export function isNavActive(pathname: string, item: NavItem) {
   return pathname === item.href || !!item.nested && pathname.startsWith(`${item.href}/`);

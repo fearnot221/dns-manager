@@ -1,18 +1,21 @@
 "use client";
 
 import { UnitWorkspaceProvider, useUnitWorkspace, type UnitWorkspace } from "@/components/units/unit-workspace";
-import { Building2, ClipboardCheck, FileCheck2, FilePlus2, Globe2, History, LogOut, Menu, Monitor, Moon, Network, PanelLeftClose, PanelLeftOpen, ShieldCheck, SlidersHorizontal, Sun, UserCog, X, ChevronDown } from "lucide-react";
+import { Building2, ClipboardCheck, FileCheck2, FilePlus2, Globe2, History, LogOut, Menu, Monitor, Moon, Network, PanelLeftClose, PanelLeftOpen, ShieldCheck, SlidersHorizontal, Sun, SunMoon, UserCog, X, ChevronDown } from "lucide-react";
 import { Brand } from "@/components/brand";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { logoutAction } from "@/lib/auth/logout-action";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
-import { workspaceNavigation, isNavActive, type NavIcon } from "@/lib/client/navigation";
+import { workspaceNavigation, isNavActive, navigationCookie, type NavIcon } from "@/lib/client/navigation";
 import { IdleSession } from "@/components/auth/idle-session";
 
 const navIcons: Record<NavIcon, typeof Globe2> = { dns: Network, apply: FilePlus2, requests: FileCheck2, units: Building2, zones: Globe2, inventory: ClipboardCheck, users: UserCog, settings: SlidersHorizontal, protection: ShieldCheck, activity: History };
-const navigationStorageKey = "dns-manager-navigation-collapsed";
+const legacyNavigationStorageKey = "dns-manager-navigation-collapsed";
+const themeCycle = { system: "light", light: "dark", dark: "system" } as const;
+const themeNames = { system: "跟隨系統", light: "淺色", dark: "深色" } as const;
+const subscribeNothing = () => () => {};
 
 type ShellProps = {
   children: React.ReactNode;
@@ -21,17 +24,20 @@ type ShellProps = {
   systemAdmin: boolean;
   demo: boolean;
   units: UnitWorkspace[];
+  navigationCollapsed?: boolean;
 };
 export function AppShell(props: ShellProps) {
   return <UnitWorkspaceProvider units={props.units}><ShellContent {...props} /></UnitWorkspaceProvider>;
 }
-function ShellContent({ children, identity, admin, systemAdmin, demo }: ShellProps) {
+function ShellContent({ children, identity, admin, systemAdmin, demo, navigationCollapsed = false }: ShellProps) {
   const workspace = useUnitWorkspace();
   const router = useRouter();
   const pathname = usePathname();
-  const { resolvedTheme, setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
+  const mounted = useSyncExternalStore(subscribeNothing, () => true, () => false);
+  const themeChoice = mounted && (theme === "light" || theme === "dark") ? theme : "system";
   const [mobile, setMobile] = useState(false);
-  const [desktopOpen, setDesktopOpen] = useState(true);
+  const [desktopOpen, setDesktopOpen] = useState(!navigationCollapsed);
   const sidebar = useRef<HTMLElement>(null);
   const menu = useRef<HTMLButtonElement>(null);
   const switcher = useRef<HTMLDetailsElement>(null);
@@ -40,13 +46,21 @@ function ShellContent({ children, identity, admin, systemAdmin, demo }: ShellPro
   const sectionLabel = groups.flatMap((group) => group.items).find((item) => isNavActive(pathname, item))?.label || "DNS 管理";
   const zone = zones && pathname.split("/")[2] ? decodeURIComponent(pathname.split("/")[2]) : null;
 
+  // The preference lives in a cookie so the server renders the right layout on the first paint.
+  function saveNavigation(open: boolean) {
+    document.cookie = `${navigationCookie}=${open ? "open" : "collapsed"}; path=/; max-age=31536000; samesite=lax`;
+  }
   useEffect(() => {
-    try { if (localStorage.getItem(navigationStorageKey) === "1") setDesktopOpen(false); } catch { /* Preference is optional. */ }
-  }, []);
+    try {
+      if (localStorage.getItem(legacyNavigationStorageKey) === null) return;
+      if (localStorage.getItem(legacyNavigationStorageKey) === "1" && !navigationCollapsed) { setDesktopOpen(false); saveNavigation(false); }
+      localStorage.removeItem(legacyNavigationStorageKey);
+    } catch { /* Preference is optional. */ }
+  }, [navigationCollapsed]);
   function toggleDesktopNavigation() {
     const next = !desktopOpen;
     setDesktopOpen(next);
-    try { localStorage.setItem(navigationStorageKey, next ? "0" : "1"); } catch { /* Keep the preference in memory. */ }
+    saveNavigation(next);
   }
 
   useEffect(() => {
@@ -85,13 +99,15 @@ function ShellContent({ children, identity, admin, systemAdmin, demo }: ShellPro
         <summary><span><small>切換工作區</small><strong>{workspace.active?.name}</strong></span><ChevronDown size={16} aria-hidden="true" /></summary>
         <div>{workspace.units.map((unit) => <button type="button" key={unit.id} data-leave-workspace aria-pressed={unit.id === workspace.active?.id} onClick={() => { workspace.select(unit.id); if (switcher.current) switcher.current.open = false; router.push("/dns"); setMobile(false); }}><span>{unit.name}</span>{unit.id === workspace.active?.id && <span aria-hidden="true">✓</span>}</button>)}</div>
       </details> : !systemAdmin && workspace.active ? <p className="sidebar-unit" title={workspace.active.name}>{workspace.active.name}</p> : <p className={`sidebar-unit ${systemAdmin ? "is-system" : ""}`}>{systemAdmin ? "全部單位與網域" : "尚未加入單位"}</p>}
-      <p className="nav-label" aria-hidden="true">功能選單</p>
       <nav className="nav" aria-label="功能導覽">
-        {groups.flatMap((group) => group.items).map((item) => {
-          const active = isNavActive(pathname, item);
-          const Icon = navIcons[item.icon];
-          return <Link key={item.href} href={item.href} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={() => setMobile(false)}><Icon size={18} aria-hidden="true" /><span>{item.label}</span></Link>;
-        })}
+        {groups.map((group) => <div className="nav-group" key={group.id} role="group" aria-labelledby={`nav-group-${group.id}`}>
+          <p className="nav-label" id={`nav-group-${group.id}`}>{group.label}</p>
+          {group.items.map((item) => {
+            const active = isNavActive(pathname, item);
+            const Icon = navIcons[item.icon];
+            return <Link key={item.href} href={item.href} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={() => setMobile(false)}><Icon size={18} aria-hidden="true" /><span>{item.label}</span></Link>;
+          })}
+        </div>)}
       </nav>
       <div className="sidebar-bottom">
         {demo && <div className="demo-label"><Monitor size={15} /><span>Local demo</span></div>}
@@ -109,7 +125,7 @@ function ShellContent({ children, identity, admin, systemAdmin, demo }: ShellPro
           <span className="crumb-system">DNS 管理系統</span><span className="crumb-separator" aria-hidden="true">/</span>
           {zone ? <><Link href="/zones">{sectionLabel}</Link><span className="crumb-separator" aria-hidden="true">/</span><strong>{zone}</strong></> : <strong>{sectionLabel}</strong>}
         </div>
-        <div className="topbar-tools"><button className="icon-button theme-toggle" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")} aria-label="切換明暗模式" title="切換明暗模式"><Sun size={18} className="theme-sun" /><Moon size={18} className="theme-moon" /></button></div>
+        <div className="topbar-tools"><button className="icon-button theme-toggle" onClick={() => setTheme(themeCycle[themeChoice])} aria-label={`顯示主題：${themeNames[themeChoice]}，點擊切換為${themeNames[themeCycle[themeChoice]]}`} title={`顯示主題：${themeNames[themeChoice]}`}>{themeChoice === "light" ? <Sun size={18} aria-hidden="true" /> : themeChoice === "dark" ? <Moon size={18} aria-hidden="true" /> : <SunMoon size={18} aria-hidden="true" />}</button></div>
       </header>
       <main id="workspace-content" tabIndex={-1}>{children}</main>
       <IdleSession />

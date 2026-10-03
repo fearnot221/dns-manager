@@ -1,5 +1,7 @@
 import { memberWorkspaces } from "@/lib/units/workspace";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { navigationCookie } from "@/lib/client/navigation";
 import { isGlobalAdmin } from "@/lib/auth/owner";
 import { AppShell } from "@/components/app-shell";
 import { AuthError, requireActor } from "@/lib/auth/session";
@@ -12,7 +14,8 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
     throw error;
   });
   const person = personDisplay({ name: actor.name, email: actor.portalEmail || actor.email, studentId: actor.studentId });
-  return <AppShell units={await memberWorkspaces(actor)} systemAdmin={isGlobalAdmin(actor)} admin={canAccessZoneManagement(actor)} demo={process.env.NODE_ENV !== "production" && process.env.PDNS_MOCK === "true"}
+  const navigationCollapsed = (await cookies()).get(navigationCookie)?.value === "collapsed";
+  return <AppShell navigationCollapsed={navigationCollapsed} units={await memberWorkspaces(actor)} systemAdmin={isGlobalAdmin(actor)} admin={canAccessZoneManagement(actor)} demo={process.env.NODE_ENV !== "production" && process.env.PDNS_MOCK === "true"}
     identity={{ name: person.primary, email: person.secondary }}>
     {children}
   </AppShell>;

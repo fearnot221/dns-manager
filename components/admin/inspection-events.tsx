@@ -45,7 +45,7 @@ export function InspectionEvents() {
     } finally { saving.current = false; setPending(false); }
   }
 
-  return <div>
+  return <div className="card table-card">
     {!editor && <ActionFeedback feedback={feedback} />}
     <div className="table-tools">
       <button type="button" className="button primary" onClick={() => open({ kind: "create" })}><Plus size={16} aria-hidden="true" />新增清查活動</button>
@@ -53,7 +53,7 @@ export function InspectionEvents() {
       <button type="button" className="button" disabled={resource.loading || pending} onClick={() => void resource.reload()}><RefreshCw size={16} aria-hidden="true" />重新整理</button>
     </div>
     {resource.error ? <ResourceError message={resource.error} retry={resource.reload} /> : <ScrollRegion className="table-wrap" label="清查活動，可水平捲動"><table className="inspection-events-table"><thead><tr><th scope="col">活動名稱</th><th scope="col">開始日期</th><th scope="col">結束日期</th><th scope="col">狀態</th><th scope="col">操作</th></tr></thead><tbody>
-      {resource.loading ? <LoadingRows columns={5} /> : resource.data?.events.map((event) => {
+      {resource.loading && !resource.data ? <LoadingRows columns={5} /> : resource.data?.events.map((event) => {
         const status = eventStatus(event, resource.data!.today);
         return <tr key={event.id}><td>{event.name}</td><td><time dateTime={event.startsOn}>{event.startsOn}</time></td><td><time dateTime={event.endsOn}>{event.endsOn}</time></td><td><Badge tone={status === "進行中" ? "green" : "neutral"}>{status}</Badge></td><td><div className="page-actions">
           <button type="button" className="icon-button" title="編輯" aria-label={`編輯 ${event.name}`} onClick={() => open({ kind: "edit", event })}><Pencil size={16} aria-hidden="true" /></button>

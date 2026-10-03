@@ -1,15 +1,15 @@
-.login-page { display: grid; place-items: center; min-height: 100dvh; padding: var(--space-12) var(--space-6); background: linear-gradient(180deg, var(--chrome) 0 280px, var(--bg) 280px); }
-.login-card { width: min(440px,100%); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-dialog); box-shadow: var(--shadow-overlay); overflow: hidden; }
-.login-identity { padding: var(--space-6) var(--space-8); background: var(--chrome-raised); color: var(--chrome-ink); border-bottom: 3px solid var(--brand-yellow); }
-.login-identity > p { margin-top: var(--space-3); color: var(--chrome-muted); font-size: var(--text-caption); letter-spacing: .04em; }
+.login-page { display: grid; place-items: center; min-height: 100dvh; padding: var(--space-12) var(--space-6); background: var(--bg); }
+.login-card { width: min(440px,100%); position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-dialog); box-shadow: var(--shadow-overlay); overflow: hidden; }
+.login-identity { padding: var(--space-6) var(--space-8) var(--space-5); color: var(--ink); border-bottom: 1px solid var(--border); }
+.login-identity > p { margin-top: var(--space-3); color: var(--muted); font-size: var(--text-caption); letter-spacing: .04em; }
 .login-brand { display: flex; align-items: center; gap: var(--space-4); }
-.login-brand .brandmark { width: 56px; height: 56px; padding: 6px; border-radius: 50%; background: #fff; }
-.login-brand .brand-name strong { color: var(--chrome-muted); font-size: .8125rem; }
+.login-brand .brandmark { width: 52px; height: 52px; padding: 5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px var(--border); }
+.login-brand .brand-name strong { color: var(--muted); font-size: .8125rem; }
 .login-brand .brand-name > span { font-size: 1.25rem; }
 .login-form-panel { padding: var(--space-8); }
 .login-copy { padding: 0 0 var(--space-6); }
 .login-copy h1 { font-size: 1.375rem; line-height: 1.4; }
-.login-copy > p:last-child { margin-top: var(--space-2); color: var(--muted); font-size: var(--text-body); }
+.login-copy > p:last-child { margin-top: var(--space-1); color: var(--muted); font-size: var(--text-body); }
 .credentials-form { display: grid; gap: var(--space-5); }
 .portal-sign-in { display: grid; gap: var(--space-3); }
 .portal-sign-in > .button { width: 100%; min-height: 46px; white-space: normal; font-size: .9375rem; }
@@ -18,17 +18,18 @@
 .password-visibility:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
 .password-visibility:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 .login-input > svg, .login-error > svg { flex-shrink: 0; }
-.login-input { display: flex; align-items: center; gap: var(--space-3); height: 46px; padding: 0 var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--panel); color: var(--muted); transition: border-color .15s,box-shadow .15s; }
-.login-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent); }
+.login-input { display: flex; align-items: center; gap: var(--space-3); height: 46px; padding: 0 var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-control); background: var(--panel); color: var(--subtle); transition: border-color .15s var(--ease), box-shadow .15s var(--ease); }
+.login-input:hover { border-color: var(--muted); }
+.login-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 .login-input input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 1rem; }
-.credentials-button { display: flex; align-items: center; justify-content: center; gap: 9px; height: 46px; margin-top: var(--space-2); border: 0; border-radius: var(--radius-control); background: var(--accent); color: var(--on-accent); font-size: .9375rem; font-weight: 600; transition: background .15s; }
-.credentials-button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 86%, #000); }
-.login-error { padding: var(--space-3); display: flex; align-items: center; gap: var(--space-2); color: var(--red); background: color-mix(in srgb,var(--red) 7%,var(--panel)); border-left: 4px solid var(--red); border-radius: var(--radius-control); font-size: var(--text-body); }
-.login-foot { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--muted); font-size: .75rem; margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--border); }
-.login-divider { display: flex; align-items: center; gap: var(--space-3); color: var(--muted); font-size: .75rem; margin: var(--space-5) 0; }
+.credentials-button { display: flex; align-items: center; justify-content: center; gap: var(--space-2); height: 46px; box-shadow: var(--shadow-sm); margin-top: var(--space-2); border: 0; border-radius: var(--radius-control); background: var(--accent); color: var(--on-accent); font-size: .9375rem; font-weight: 600; transition: background .15s; }
+.credentials-button:hover:not(:disabled) { background: var(--accent-hover); }
+.login-error { padding: var(--space-3); display: flex; align-items: center; gap: var(--space-2); color: var(--red); background: color-mix(in srgb,var(--red) 7%,var(--panel)); border: 1px solid color-mix(in srgb, var(--red) 30%, var(--border)); border-radius: var(--radius-control); font-size: var(--text-body); }
+.login-foot { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--muted); font-size: var(--text-small); margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+.login-divider { display: flex; align-items: center; gap: var(--space-3); color: var(--muted); font-size: var(--text-small); margin: var(--space-5) 0; }
 .login-divider::before, .login-divider::after { content: ""; height: 1px; flex: 1; background: var(--border); }
 @media (max-width: 600px) {
-  .login-page { padding: var(--space-8) var(--space-4); background: linear-gradient(180deg, var(--chrome) 0 200px, var(--bg) 200px); }
+  .login-page { padding: var(--space-8) var(--space-4); }
   .login-identity { padding: var(--space-5) var(--space-6); }
   .login-form-panel { padding: var(--space-6); }
   .login-brand { gap: var(--space-3); }
