@@ -32,7 +32,7 @@ export function DnsManagementWorkbench({ initialDomain = "", systemAdmin, canDel
   if (loading && !data) return <LoadingPanel label="正在載入網域…" />;
   if (!active) return <EmptyState title="目前沒有可管理的網域" description="請確認網域授權或稍後重新整理。" action={<button className="button" onClick={() => void reload()}>重新整理</button>} />;
   return <>
-    <div className="zone-category-tabs inventory-domain-tabs" role="tablist" aria-label="DNS 管理網域">{zones.map((zone, index) => <button key={zone.name} type="button" role="tab" id={`${tabsId}-tab-${index}`} aria-controls={`${tabsId}-panel`} aria-selected={active.name === zone.name} tabIndex={active.name === zone.name ? 0 : -1} onClick={() => selectDomain(zone.name)} onKeyDown={(event) => {
+    <div className="zone-category-tabs inventory-domain-tabs tab-strip" role="tablist" aria-label="DNS 管理網域">{zones.map((zone, index) => <button key={zone.name} type="button" role="tab" id={`${tabsId}-tab-${index}`} aria-controls={`${tabsId}-panel`} aria-selected={active.name === zone.name} tabIndex={active.name === zone.name ? 0 : -1} onClick={() => selectDomain(zone.name)} onKeyDown={(event) => {
       let next = index;
       if (event.key === "ArrowRight") next = (index + 1) % zones.length;
       else if (event.key === "ArrowLeft") next = (index + zones.length - 1) % zones.length;

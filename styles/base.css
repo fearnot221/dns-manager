@@ -10,26 +10,34 @@ html::-webkit-scrollbar, body::-webkit-scrollbar, *::-webkit-scrollbar {
   height: 0;
   display: none;
 }
-/* Wide data regions keep a slim horizontal bar so off-screen columns stay discoverable
-   for mouse users without a trackpad. */
-:is(.table-wrap, .unit-record-scroll, .board-scroll) { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
-:is(.table-wrap, .unit-record-scroll, .board-scroll)::-webkit-scrollbar { display: block; height: 8px; }
-:is(.table-wrap, .unit-record-scroll, .board-scroll)::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-geist), "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; font-size: .875rem; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+/* Wide data regions and horizontal tab strips keep a slim bar so off-screen columns and tabs
+   stay discoverable for mouse users without a trackpad. */
+:is(.table-wrap, .unit-record-scroll) { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+:is(.table-wrap, .unit-record-scroll)::-webkit-scrollbar { display: block; height: 6px; }
+:is(.table-wrap, .unit-record-scroll)::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+@media (pointer: fine) {
+  .tab-strip { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+  .tab-strip::-webkit-scrollbar { display: block; height: 6px; }
+  .tab-strip::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+}
+
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-size: var(--text-body); line-height: 1.6; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 button, input, select, textarea { font: inherit; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
-button:disabled { cursor: not-allowed; opacity: .6; }
+button:disabled { cursor: not-allowed; opacity: .55; }
 a { color: inherit; }
 svg { flex-shrink: 0; }
-h1, h2, h3, p { margin: 0; }
+h1, h2, h3, h4, p { margin: 0; }
 h1, h2, h3, h4 { text-wrap: balance; }
 p, .description, .field-help { text-wrap: pretty; }
-h1 { font-size: 1.375rem; letter-spacing: -.01em; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
+h1 { font-size: var(--text-title); letter-spacing: -.015em; line-height: 1.3; font-weight: 650; overflow-wrap: anywhere; }
 h2 { font-size: var(--text-section); font-weight: 600; line-height: 1.4; }
-h3 { font-size: 1rem; font-weight: 600; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.mono, code { font-family: var(--font-mono), monospace; font-size: var(--text-body); }
+h3 { font-size: 1rem; font-weight: 600; line-height: 1.45; }
+h4 { font-size: var(--text-body); font-weight: 600; margin: var(--space-3) 0 var(--space-1); }
+strong, b { font-weight: 600; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono, code { font-family: var(--font-mono), ui-monospace, monospace; font-size: .95em; }
 .muted { color: var(--muted); }
 .success { color: var(--green); }
 .danger { color: var(--red); }
@@ -43,13 +51,29 @@ h3 { font-size: 1rem; font-weight: 600; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 
-/* Shared control feedback; do not rely on color alone for focus or errors. */
-strong, b { font-weight: 600; }
+/* One text-field language for every form: dialogs, application form, settings and filters.
+   Focus adds a ring as well as a color change, and errors keep a red outline (not color alone with the message). */
+:is(.modal, .dns-application, .form-surface) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), textarea) {
+  width: 100%; min-width: 0; min-height: var(--control-height); padding: var(--control-padding);
+  border: 1px solid var(--border-control); border-radius: var(--radius-control); background: var(--panel); color: var(--ink);
+  font-size: var(--control-font); font-weight: 400; line-height: 1.5;
+  transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+:is(.modal, .dns-application, .form-surface) textarea { resize: vertical; min-height: 96px; }
+:is(input, textarea):not([type="checkbox"]):not([type="radio"]):hover:not(:disabled):not(:read-only) { border-color: var(--muted); }
+:is(input, textarea):not([type="checkbox"]):not([type="radio"]):focus-visible,
+.custom-select-trigger:focus-visible, select:focus-visible {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.filter-input input:focus-visible, .login-input input:focus-visible { box-shadow: none; }
+:is(input, textarea):disabled { opacity: .65; background: var(--surface-soft); cursor: not-allowed; }
+:is(input, textarea):read-only:not([type="checkbox"]):not([type="radio"]) { color: var(--muted); background: var(--surface-soft); }
 input, textarea { accent-color: var(--accent); }
-:is(input, textarea)[aria-invalid="true"], .custom-select-trigger[aria-invalid="true"] { border-color: var(--red); }
-:is(input, textarea):read-only { color: var(--muted); }
+input::placeholder, textarea::placeholder { color: var(--subtle); opacity: 1; }
+:is(input, textarea)[aria-invalid="true"], .custom-select-trigger[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--red); }
+:is(input, textarea)[aria-invalid="true"]:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 25%, transparent); }
 :is(button, a) { touch-action: manipulation; }
 @media (forced-colors: active) {
-  :focus-visible { outline-color: Highlight; }
-  :is(button, a)[aria-selected="true"], .nav a.active { outline: 2px solid Highlight; outline-offset: -2px; }
+  :focus-visible, :is(input, textarea, select):focus-visible, .custom-select-trigger:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+  :is(button, a)[aria-selected="true"], :is(button, a)[aria-pressed="true"], .nav a.active { outline: 2px solid Highlight; outline-offset: -2px; }
 }

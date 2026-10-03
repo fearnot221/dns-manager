@@ -1,4 +1,5 @@
 "use client";
+import { AlertTriangle } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { useResource } from "@/lib/client/use-resource";
 import { apiRequest, jsonRequest } from "@/lib/client/api";
@@ -16,9 +17,10 @@ export function DeletionProtectionSettings({ canConfigure }: { canConfigure: boo
   if (resource.error) return <ResourceError message={resource.error} retry={resource.reload} />;
   if (!resource.data) return <p role="status">載入刪除保護設定…</p>;
   return <section className="card">
-    <header className="workflow-panel-head"><div><h2>DNS 刪除保護密碼</h2><p role="status">{resource.data.configured ? "已設定；每次刪除都必須輸入密碼。" : "尚未設定；所有 DNS 刪除操作暫停。"}</p></div></header>
-    <div id={feedbackId}><ActionFeedback feedback={feedback} /></div>
-    <p className="form-surface">適用於刪除 DNS 解析值、Zone 及核准刪除申請。編輯紀錄組時移除或替換既有解析值，也需要驗證。此密碼與登入密碼分開管理。</p>
+    <header className="workflow-panel-head"><div><h2>DNS 刪除保護密碼</h2>{resource.data.configured && <p role="status">已設定；每次刪除都必須輸入密碼。</p>}</div></header>
+    {!resource.data.configured && <div className="workflow-feedback"><div className="warning" role="status"><AlertTriangle size={18} aria-hidden="true" /><div><strong>尚未設定刪除保護密碼</strong><p>設定完成前，所有 DNS 刪除操作暫停。</p></div></div></div>}
+    <div id={feedbackId} className="workflow-feedback"><ActionFeedback feedback={feedback} /></div>
+    <p className="workflow-panel-note">適用於刪除 DNS 解析值、Zone 及核准刪除申請。編輯紀錄組時移除或替換既有解析值，也需要驗證。此密碼與登入密碼分開管理。</p>
     {canConfigure ? <form className="form-surface" onSubmit={async (event) => {
       event.preventDefault();
       if (saving.current) return;
@@ -40,6 +42,6 @@ export function DeletionProtectionSettings({ canConfigure }: { canConfigure: boo
         <label>再次輸入新密碼<input name="confirmation" type="password" required minLength={12} maxLength={256} autoComplete="new-password" aria-describedby={feedbackId} aria-invalid={feedback?.kind === "error" || undefined} /></label>
         <div className="form-actions"><button className="button primary" aria-busy={pending}>{pending ? "儲存中…" : "儲存刪除保護密碼"}</button><button type="button" className="button" onClick={() => void resource.reload()}>重新載入設定</button></div>
       </fieldset>
-    </form> : <p className="form-surface">只有最高管理員可以設定或更換密碼；需要刪除時請向最高管理員取得密碼。</p>}
+    </form> : <p className="workflow-panel-note">只有最高管理員可以設定或更換密碼；需要刪除時請向最高管理員取得密碼。</p>}
   </section>;
 }

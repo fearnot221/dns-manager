@@ -35,7 +35,7 @@ export function DnsRequestsWorkbench({ admin, actorId }: { admin: boolean; actor
   const params=new URLSearchParams({scope,status,q:debouncedQuery});
   if(!admin&&workspace.active)params.set("unitId",workspace.active.id);
   if(cursors.at(-1))params.set("cursor",cursors.at(-1)!);
-  const { data, loading, error, reload: load }=useResource<{requests:DnsRequest[];total?:number;counts?:Record<string,number>;nextCursor?:string|null}>(`/api/dns-requests?${params}`);
+  const { data, loading, refreshing, error, reload: load }=useResource<{requests:DnsRequest[];total?:number;counts?:Record<string,number>;nextCursor?:string|null}>(`/api/dns-requests?${params}`, { keepPreviousData: true });
   const available = useMemo(() => (data?.requests ?? emptyRequests).filter((item) => admin || !!workspace.active && item.unitId === workspace.active.id), [data, admin, workspace.active]);
   const requests = useMemo(() => scopeRequests(available, scope, actorId), [available, scope, actorId]);
   const filtered = useMemo(() => filterRequests(requests, query, status), [query, requests, status]);
@@ -53,20 +53,20 @@ export function DnsRequestsWorkbench({ admin, actorId }: { admin: boolean; actor
       <div className="filter-input request-search"><Search size={15} aria-hidden="true" /><input ref={searchInput} type="search" maxLength={200} value={query} onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); clearSearch(); } }} onChange={(event) => setQuery(event.target.value)} placeholder={admin ? "搜尋名稱、帳號、姓名、單位或用途" : "搜尋名稱、網域、內容或用途"} aria-label="搜尋 DNS 申請" />{query && <button type="button" className="search-clear" onClick={clearSearch} aria-label="清除搜尋"><X size={15} /></button>}</div>
       <button type="button" className="button request-refresh" disabled={loading} onClick={() => void load()}><RefreshCw size={15} className={loading ? "spin" : ""} />重新整理</button>
     </div>
-      <div className="request-status-filter" role="group" aria-label="審核狀態">
-        {statuses.map((item) => <button type="button" key={item.key} className={status === item.key ? "active" : ""} onClick={() => setStatus(item.key)} aria-pressed={status === item.key}>{item.label}<span>{loading || error ? "—" : data?.counts?.[item.key] ?? counts[item.key] ?? 0}</span></button>)}
+      <div className="request-status-filter tab-strip" role="group" aria-label="審核狀態">
+        {statuses.map((item) => <button type="button" key={item.key} className={status === item.key ? "active" : ""} onClick={() => setStatus(item.key)} aria-pressed={status === item.key}>{item.label}<span>{error || !data ? "—" : data.counts?.[item.key] ?? counts[item.key] ?? 0}</span></button>)}
       </div>
 
-    <div className="record-results request-results" aria-live="polite">{loading ? "讀取中…" : error ? "無法取得紀錄" : `顯示 ${filtered.length} / ${data?.total ?? requests.length} 筆紀錄${cursors.length>1?`（第 ${cursors.length} 頁）`:""}`}{!loading && filtered.length > 0 && <span>點選列可展開詳細資料</span>}</div>
-    {error ? <ResourceError message={error} retry={load} /> : loading ? <RequestSkeleton /> : filtered.length === 0 ? <EmptyState title={available.length ? admin && status === "PENDING" && !query.trim() ? "目前沒有待審核申請" : "沒有符合條件的紀錄" : "尚無 DNS 申請"} description={available.length ? "可以清除搜尋條件，或切換其他審核狀態。" : admin ? "收到申請後，可在這裡審核。" : canApply ? "送出申請後，就能在這裡查看進度。" : "單位成員送出申請後，會顯示在這裡。"} action={available.length ? <button className="button" onClick={() => { clearSearch(); setStatus("ALL"); setScope("ALL"); }}>清除篩選</button> : !admin && canApply && <Link className="button primary" href="/requests/new">申請 DNS</Link>} /> : (
-      <div className="request-list"><div className="request-row request-columns" aria-hidden="true"><span>類型</span><span>DNS 名稱</span><span>解析內容</span><span>狀態</span><span>申請日期</span><span /></div>{filtered.map((item) => <RequestCard key={item.id} item={item} admin={admin} onReview={(decision) => setReview({ item, decision })} />)}</div>
+    <div className="record-results request-results" aria-live="polite">{loading && !data ? "讀取中…" : error ? "無法取得紀錄" : refreshing ? "更新中…" : `顯示 ${filtered.length} / ${data?.total ?? requests.length} 筆紀錄${cursors.length>1?`（第 ${cursors.length} 頁）`:""}`}{!refreshing && !(loading && !data) && filtered.length > 0 && <span>點選列可展開詳細資料</span>}</div>
+    {error ? <ResourceError message={error} retry={load} /> : loading && !data ? <RequestSkeleton /> : filtered.length === 0 ? <EmptyState title={available.length ? admin && status === "PENDING" && !query.trim() ? "目前沒有待審核申請" : "沒有符合條件的紀錄" : "尚無 DNS 申請"} description={available.length ? "可以清除搜尋條件，或切換其他審核狀態。" : admin ? "收到申請後，可在這裡審核。" : canApply ? "送出申請後，就能在這裡查看進度。" : "單位成員送出申請後，會顯示在這裡。"} action={available.length ? <button className="button" onClick={() => { clearSearch(); setStatus("ALL"); setScope("ALL"); }}>清除篩選</button> : !admin && canApply && <Link className="button primary" href="/requests/new">申請 DNS</Link>} /> : (
+      <div className={`request-list${refreshing ? " is-refreshing" : ""}`} aria-busy={refreshing}><div className="request-row request-columns" aria-hidden="true"><span>類型</span><span>DNS 名稱</span><span>解析內容</span><span>狀態</span><span>申請日期</span><span /></div>{filtered.map((item) => <RequestCard key={item.id} item={item} admin={admin} onReview={(decision) => setReview({ item, decision })} />)}</div>
     )}
 
-    {(cursors.length>1||data?.nextCursor)&&<div className="request-toolbar" aria-label="申請清單分頁">
+    {(cursors.length>1||data?.nextCursor)&&<nav className="audit-pagination" aria-label="申請清單分頁">
       <button className="button" disabled={loading||cursors.length===1} onClick={()=>setPagination({key:queryKey,cursors:cursors.slice(0,-1)})}>上一頁</button>
-      <span>第 {cursors.length} 頁</span>
+      <span role="status">第 {cursors.length} 頁</span>
       <button className="button" disabled={loading||!data?.nextCursor} onClick={()=>setPagination({key:queryKey,cursors:[...cursors,data!.nextCursor!]})}>下一頁</button>
-    </div>}
+    </nav>}
     {review && <ReviewDialog review={review} onClose={() => setReview(null)} onSaved={async () => { setReview(null); await load(); }} />}
   </>;
 }
