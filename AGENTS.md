@@ -33,7 +33,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## 分支、PR 與發布模式
 
 - 所有功能沿用「本機 agent + 既有 `gh` 登入」模式：本機開 PR、解衝突、等待 GitHub CI、合併。Actions 只負責 Verify，不執行 Codex、不自動開 PR 或合併，不要求 `OPENAI_API_KEY` 或 `BRANCH_AUTOMATION_TOKEN`。完整操作見 [deploy/CI-CD.md](deploy/CI-CD.md)。
-- 不同功能使用獨立分支，新增分支預設 `codex/<功能名稱>`；平行工作使用獨立 worktree，不在其他 agent 的工作目錄切換分支或納入無關變更。沿用適合目前任務的既有分支，不直接在 main 發布功能。
+- 不同功能使用獨立分支，分支名稱可自行指定，不要求固定前綴；使用者指定名稱時優先採用，未指定時由執行者依功能選擇清楚且不與既有分支衝突的名稱。平行工作使用獨立 worktree，不在其他 agent 的工作目錄切換分支或納入無關變更。沿用適合目前任務的既有分支，不直接在 main 發布功能。
 - 修改程式不等於授權發布。使用者在本專案要求「push」，即授權對本次任務執行完整發布流程：提交本次變更、推送功能分支、建立／重用 PR、本機解衝突、等待 CI 成功、合併 main 觸發既有 Server 更新，並追蹤部署驗證；不需再詢問是否合併。不在 push 或開 PR 後就宣告完成。若使用者明確限制為只推分支、不合併或不上線，以該限制為準；討論 push 的規則或詢問狀態不算當次發布指令。
 - 發布前檢查 `git status`、remote、分支與 `gh auth status`，只提交本次範圍。推送功能分支後建立或重用以 main 為 base 的 PR；建立 PR 後將 URL 附加至目前對話（工具可用時）。不掃描或合併其他任務的 PR。
 - 同步最新 origin/main 到功能分支；衝突在本機逐一整合雙方意圖，不能整批選 ours/theirs、覆蓋別人的修改或削弱安全檢查。遇到無法判定的業務語意先詢問。修正後依驗證分級測試，再正常 push，禁止 force push。
