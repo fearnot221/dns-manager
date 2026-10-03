@@ -11,6 +11,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { apiRequest, jsonRequest } from "@/lib/client/api";
 import { zoneCategory } from "@/lib/dns/zone-category";
 import type { InventoryRecord } from "@/lib/inventory/types";
+import { inspectionEventLabel } from "@/lib/inspection-events/model";
 
 export function OwnershipDialog({ drafts, record, inspection = false, systemAdmin = false, canDeleteInspections = false, onClose, onSaved }: { drafts?: FormDrafts; record: InventoryRecord; inspection?: boolean; systemAdmin?: boolean; canDeleteInspections?: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
   const [pending, setPending] = useState(false); const [error, setError] = useState(""); const sending = useRef(false);
@@ -63,7 +64,7 @@ export function OwnershipDialog({ drafts, record, inspection = false, systemAdmi
 }
 
 function InspectionHistory({ record, onDelete }: { record: InventoryRecord; onDelete?: (id: string) => Promise<void> }) {
-  return (<section className="inspection-history"><h3>歷次清查 <span>（{record.ownership.inspections.length}）</span></h3>{record.ownership.inspections.length ? <ol>{record.ownership.inspections.map((item) => <li key={item.id}><strong>{new Date(item.inspectedAt).toLocaleString("zh-TW")}</strong><PersonName name={item.inspectorName} email={item.inspectorEmail} studentId={item.inspectorStudentId} /><p>{item.note || "未填備註"}</p>{onDelete && <button type="button" className="button danger" aria-label={`刪除 ${new Date(item.inspectedAt).toLocaleString("zh-TW")} 的清查紀錄`} onClick={() => void onDelete(item.id)}>刪除</button>}</li>)}</ol> : <p className="description">尚無清查紀錄。</p>}</section>);
+  return (<section className="inspection-history"><h3>歷次清查 <span>（{record.ownership.inspections.length}）</span></h3>{record.ownership.inspections.length ? <ol>{record.ownership.inspections.map((item) => <li key={item.id}><strong>{new Date(item.inspectedAt).toLocaleString("zh-TW")}</strong><PersonName name={item.inspectorName} email={item.inspectorEmail} studentId={item.inspectorStudentId} /><p>{inspectionEventLabel(item)}</p><p>{item.note || "未填備註"}</p>{onDelete && <button type="button" className="button danger" aria-label={`刪除 ${new Date(item.inspectedAt).toLocaleString("zh-TW")} 的清查紀錄`} onClick={() => void onDelete(item.id)}>刪除</button>}</li>)}</ol> : <p className="description">尚無清查紀錄。</p>}</section>);
 }
 
 function UnitAssignmentDialog({ record, onClose, onBack, onSaved }: { record: InventoryRecord; onClose: () => void; onBack: () => void; onSaved: () => Promise<void> }) {

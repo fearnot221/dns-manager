@@ -15,6 +15,7 @@ export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAd
     { href: "/admin/deletion-protection", label: "刪除保護", icon: "settings" },
   );
   if (systemAdmin) items.push(
+    { href: "/admin/inspection-events", label: "清查活動", icon: "inventory" },
     { href: "/admin/users", label: "帳號管理", icon: "users" },
     { href: "/activity", label: "操作紀錄", icon: "activity" },
   );

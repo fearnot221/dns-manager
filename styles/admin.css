@@ -67,6 +67,9 @@
 .audit-detail pre { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: var(--space-3); background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: .75rem; }
 
 .inventory-domain-tabs { overflow-x: auto; flex-wrap: nowrap; margin-bottom: var(--space-4); }
+.inspection-event-notice { padding-block: var(--space-4); margin-bottom: var(--space-4); border-block: 1px solid var(--border); overflow-wrap: anywhere; }
+.inspection-event-notice p { margin-top: var(--space-1); color: var(--muted); }
+.inspection-events-table td:first-child { min-width: 180px; max-width: 28rem; white-space: normal; overflow-wrap: anywhere; }
 .inventory-domain-tabs button { flex: 0 0 auto; white-space: nowrap; }
 
 .inventory-toolbar { padding-inline: 0; padding-top: 0; }
