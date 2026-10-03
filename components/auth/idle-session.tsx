@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
+import { Clock3 } from "lucide-react";
 
 export function IdleSession() {
   const [remaining, setRemaining] = useState<number | null>(null);
@@ -50,5 +51,10 @@ export function IdleSession() {
     void sync(false);
     return () => { stopped = true; clearInterval(timer); channel?.close(); events.forEach((event) => window.removeEventListener(event, activity)); document.removeEventListener("visibilitychange", visible); };
   }, []);
-  return remaining === null ? null : <div className="idle-warning" role="status">閒置登入即將逾時（{remaining} 秒）。請操作畫面以繼續使用；未儲存的內容將不會自動送出。</div>;
+  // The visible countdown ticks every second; assistive tech only hears the 60s and 10s milestones.
+  const announcement = remaining === null ? "" : remaining > 10 ? "閒置登入將在 1 分鐘內逾時，請操作畫面以繼續使用。" : "閒置登入將在 10 秒內逾時。";
+  return <>
+    <div className="sr-only" role="status">{announcement}</div>
+    {remaining !== null && <div className="idle-warning"><Clock3 size={18} aria-hidden="true" /><p aria-hidden="true">閒置登入即將逾時（剩 <strong>{remaining}</strong> 秒）。請操作畫面以繼續使用；未儲存的內容不會自動送出。</p></div>}
+  </>;
 }
