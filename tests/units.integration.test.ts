@@ -1,4 +1,6 @@
 import { createDataAccount } from "@/lib/users/create";
+import { changeInspectionEvent } from "@/lib/inspection-events/service";
+import { taipeiDate } from "@/lib/inspection-events/model";
 import { GET as contactOptions } from "@/app/api/users/contacts/route";
 import { POST as createAccount } from "@/app/api/users/route";
 import { syncDnsHistory } from "@/lib/dns/history-sync";
@@ -924,6 +926,30 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
   it("rejects creation after global admin rights were revoked", async () => {
     await db.user.update({ where: { id: admin.id }, data: { globalRole: "USER" } });
     await expect(createUnit(admin, `revoked-${crypto.randomUUID()}`, creator.studentId!)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("records event snapshots for both member and administrator inspections while allowing inspection at any time", async () => {
+    const source = await sourceRecord();
+    const inspect = () => inspectUnitRecord(viewer, unitId, { recordId: source.id, expectedHash: source.expectedHash, note: "確認" });
+    const outside = await inspect();
+    expect(await db.dnsInspection.findUnique({ where: { id: outside.id } })).toMatchObject({ eventId: null, eventName: null, eventClassified: true });
+    const today = taipeiDate();
+    const event = await changeInspectionEvent(admin, { kind: "create", event: { name: "本次清查", startsOn: today, endsOn: today } });
+    try {
+      const inside = await inspect();
+      expect(await db.dnsInspection.findUnique({ where: { id: inside.id } })).toMatchObject({ eventId: event!.id, eventName: "本次清查", eventClassified: true });
+      const metadata = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+      await saveInventory(admin, { ...metadata, expectedUpdatedAt: metadata.updatedAt.toISOString(), mode: "inspect", note: "管理員清查" });
+      expect(await db.dnsInspection.findFirst({ where: { recordId: source.id, inspectorId: admin.id } })).toMatchObject({ eventId: event!.id, eventName: "本次清查", eventClassified: true });
+      const detail = await unitDetail(viewer, unitId);
+      expect(detail.records[0].inspections).toEqual(expect.arrayContaining([expect.objectContaining({ id: inside.id, eventName: "本次清查", eventClassified: true })]));
+      await changeInspectionEvent(admin, { kind: "update", id: event!.id, expectedRevision: 1, event: { name: "改名後", startsOn: today, endsOn: today } });
+      await changeInspectionEvent(admin, { kind: "delete", id: event!.id, expectedRevision: 2 });
+      const after = await inspect();
+      expect(await db.dnsInspection.findUnique({ where: { id: after.id } })).toMatchObject({ eventId: null, eventClassified: true });
+      expect(await db.dnsInspection.findUnique({ where: { id: inside.id } })).toMatchObject({ eventName: "本次清查" });
+      expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
+    } finally { await db.inspectionEvent.deleteMany({ where: { id: event!.id } }); }
   });
 
 });

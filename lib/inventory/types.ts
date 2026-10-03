@@ -1,4 +1,5 @@
-export type Inspection = { id: string; inspectedAt: string; inspectorId: string; inspectorEmail: string; inspectorName: string; inspectorStudentId?: string | null; note: string };
+import type { InspectionEventSnapshot } from "@/lib/inspection-events/model";
+export type Inspection = InspectionEventSnapshot & { id: string; inspectedAt: string; inspectorId: string; inspectorEmail: string; inspectorName: string; inspectorStudentId?: string | null; note: string };
 export type Ownership = {
   unitId?: string | null; unitName?: string | null;
   id: string; applicantName: string; applicantEmail: string; applicantUnit: string; applicantExtension: string; purpose: string;

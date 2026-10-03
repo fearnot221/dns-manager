@@ -101,7 +101,7 @@ describe("unit API boundaries", () => {
     expect((await inspect(req(inspection), ctx)).status).toBe(201);
     expect(inspectUnitRecord).toHaveBeenCalledWith(expect.objectContaining({ id: "user" }), "unit-1", inspection);
     for (const extra of [{ content: "forged" }, { approved: true }, { unitId: "other" }]) expect((await change(req({ ...deletion, ...extra }), ctx)).status).toBe(400);
-    for (const extra of [{ inspectorId: "admin" }, { inspectedAt: "2000-01-01" }, { unitId: "other" }]) expect((await inspect(req({ ...inspection, ...extra }), ctx)).status).toBe(400);
+    for (const extra of [{ inspectorId: "admin" }, { inspectedAt: "2000-01-01" }, { unitId: "other" }, { eventId: "forged" }, { eventName: "forged" }, { eventClassified: false }]) expect((await inspect(req({ ...inspection, ...extra }), ctx)).status).toBe(400);
     expect((await inspect(req(inspection, "https://evil.invalid"), ctx)).status).toBe(403);
     expect((await change(req(deletion, "https://evil.invalid"), ctx)).status).toBe(403);
     vi.mocked(requireActor).mockRejectedValue(new AuthError());
