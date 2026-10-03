@@ -98,6 +98,8 @@ Docker／Ubuntu 系統資料維持原位；systemd 在系統目錄保留服務�
 
 完成 webhook 設定後，main push 會觸發建置，再以 Compose down/up 更新，保留資料並先執行 migration。部署會短暫中斷服務，不會自動回退資料庫。Webhook 回應 `202` 只代表排隊成功；需確認 `/home/snmg/state/webhook/service.log` 中的 `Healthy deployment`、成功 commit 與 `/healthz`。
 
+功能分支依 [本機 PR 與發布流程](deploy/CI-CD.md)，由本機 agent 使用既有 GitHub CLI 登入開 PR、解衝突、等待 CI，取得合併授權後才合併 main。不需額外的 Actions automation token 或 OpenAI API key；Server 維持上述 push webhook。
+
 ## 登入與資料保護
 
 前端顯示「NCU Portal」，實際使用 Logto OIDC。帳號依驗證後的身份關聯，不依電子郵件自動合併或升權。一般帳號預設 USER，最高權限取決於經驗證的 NCU identifier；設定與身份規則見 [Logto 指南](deploy/LOGTO.md)。Session 採伺服器端 15 分鐘閒置期限。
