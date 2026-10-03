@@ -347,6 +347,10 @@ model UnitMember {
 }
 
 model DnsInspection {
+  // Snapshot fields intentionally survive event rename/deletion.
+  eventId       String?
+  eventName     String?
+  eventClassified Boolean @default(false)
   id            String   @id @default(cuid())
   recordId      String
   inspectedAt   DateTime @default(now())
@@ -356,6 +360,18 @@ model DnsInspection {
   note          String   @db.Text
   record        DnsRecordMetadata @relation(fields: [recordId], references: [id], onDelete: Restrict)
   @@index([recordId, inspectedAt])
+}
+
+model InspectionEvent {
+  id        String   @id @default(cuid())
+  name      String
+  startsOn  DateTime @db.Date
+  endsOn    DateTime @db.Date
+  revision  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([startsOn, endsOn])
 }
 
 model DnsChangeRestore {

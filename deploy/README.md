@@ -105,7 +105,7 @@ Repository → Settings → Webhooks → Add webhook：
 
 ## 6. 備份、更新與限制
 
-升級使用 repository 內完整 migration 序列，不只挑一份執行。目前版本包含 DNS 復原資料、申請備註、管理員直接建立單位，以及單位角色合併。`20260929190000_unit_member_roles` 將原單位 VIEWER 轉成成員 EDITOR（可送出申請），管理員仍為 ADMIN；網域角色不變。`20260929233000_archive_deleted_unit_tasks` 保留已刪除單位的舊清查任務收件對象，讓歷史任務不再阻擋空單位刪除。新 web 應在 migration 成功後才啟動。舊制未啟用單位不會自動變成啟用，單位審核入口也已移除。
+升級使用 repository 內完整 migration 序列，不只挑一份執行。目前版本包含 DNS 復原資料、申請備註、管理員直接建立單位，以及單位角色合併。`20260929190000_unit_member_roles` 將原單位 VIEWER 轉成成員 EDITOR（可送出申請），管理員仍為 ADMIN；網域角色不變。`20260929233000_archive_deleted_unit_tasks` 保留已刪除單位的舊清查任務收件對象，讓歷史任務不再阻擋空單位刪除。`20261004000000_inspection_events` 新增清查活動與清查紀錄的活動快照欄位，保留既有清查資料且不回填推測的活動歸屬。新 web 應在 migration 成功後才啟動。舊制未啟用單位不會自動變成啟用，單位審核入口也已移除。
 
 目前功能與權限以 [README](../README.md) 和 [權限表](../docs/access-matrix.md) 為準；舊 UI／驗證歷史不作升級指令。
 
