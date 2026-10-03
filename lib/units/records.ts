@@ -12,6 +12,7 @@ import { normalizeRecordContent } from "@/lib/dns/names";
 import { rrsetHash } from "@/lib/dns/rrset";
 import { assertUnitRequestBudget } from "@/lib/requests/limits";
 import { assertApplicationPolicy } from "@/lib/requests/policy";
+import { inspectionEventSnapshot } from "@/lib/inspection-events/service";
 
 type UnitOwnershipInput = { expectedUpdatedAt: string; applicantName: string; applicantEmail: string; applicantExtension: string; purpose: string };
 
@@ -25,7 +26,7 @@ export async function unitDetail(actor: Actor, unitId: string, mode: "dns" | "ma
   const allowlist = role === "ADMIN" ? await db.unitAllowlist.findMany({ where: { unitId }, select: { studentId: true, userId: true }, orderBy: { studentId: "asc" } }) : [];
   const summary = { allowlist, unit: { id: unit.id, name: unit.name, status: unit.status }, role, systemAdmin: isGlobalAdmin(actor), canApply: unit.status === "APPROVED" && unit.members.some((m) => m.userId === actor.id && ["EDITOR", "ADMIN"].includes(m.role)), members };
   if (mode === "manage" && !isGlobalAdmin(actor) || unit.status !== "APPROVED") return { ...summary, records: [], recordsError: "" };
-  const saved = await db.dnsRecordMetadata.findMany({ where: { unitId }, include: { inspections: { orderBy: { inspectedAt: "desc" }, select: { id: true, inspectedAt: true, inspectorName: true, note: true } } } });
+  const saved = await db.dnsRecordMetadata.findMany({ where: { unitId }, include: { inspections: { orderBy: { inspectedAt: "desc" }, select: { id: true, inspectedAt: true, inspectorName: true, note: true, eventName: true, eventClassified: true } } } });
   const scope = await connectionScope();
   const scoped = saved.filter((record) => record.id === recordId(scope, record));
   const zones = new Map<string, RRSet[]>();
@@ -99,8 +100,10 @@ export async function inspectUnitRecord(actor: Actor, unitId: string, input: { r
       fields = { ...contact, applicantUnit: unit.name };
       await tx.dnsRecordMetadata.update({ where: { id: source.id }, data: { ...fields, updatedBy: actor.email } });
     }
-    const saved = await tx.dnsInspection.create({ data: { recordId: source.id, inspectorId: actor.id, inspectorEmail: actor.email, inspectorName: actor.name || actor.studentId || "單位成員", note: input.note } });
-    await unitAudit(tx, actor, "INSPECT_UNIT_DNS", input.ownership ? { applicantName: source.applicantName, applicantEmail: source.applicantEmail, applicantUnit: source.applicantUnit, applicantExtension: source.applicantExtension, purpose: source.purpose } : null, { ...fields, unitId, recordId: source.id, inspectionId: saved.id, note: input.note });
+    const inspectedAt = new Date();
+    const eventSnapshot = await inspectionEventSnapshot(inspectedAt, tx);
+    const saved = await tx.dnsInspection.create({ data: { recordId: source.id, inspectedAt, ...eventSnapshot, inspectorId: actor.id, inspectorEmail: actor.email, inspectorName: actor.name || actor.studentId || "單位成員", note: input.note } });
+    await unitAudit(tx, actor, "INSPECT_UNIT_DNS", input.ownership ? { applicantName: source.applicantName, applicantEmail: source.applicantEmail, applicantUnit: source.applicantUnit, applicantExtension: source.applicantExtension, purpose: source.purpose } : null, { ...fields, ...eventSnapshot, unitId, recordId: source.id, inspectionId: saved.id, note: input.note });
     return { id: saved.id };
   }, { timeout: 30000 });
 }

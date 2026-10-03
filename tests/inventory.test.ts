@@ -96,6 +96,9 @@ describe("DNS ownership and inspection", () => {
   it.each(["inspect", "inspect-and-metadata"] as const)("rejects client-supplied inspector/date in %s mode and blocks ordinary users", async (mode) => {
     const response = await PUT(new Request("http://localhost/api/inventory", { method: "PUT", headers: { Origin: "http://localhost" }, body: JSON.stringify({ ...input, mode, inspectedAt: "2000-01-01T00:00:00.000Z", inspectorEmail: "forged@example.com" }) }));
     expect(response.status).toBe(400); expect((await current()).inspections).toEqual([]);
+    for (const extra of [{ eventId: "forged" }, { eventName: "forged" }, { eventClassified: false }]) {
+      expect((await PUT(new Request("http://localhost/api/inventory", { method: "PUT", headers: { Origin: "http://localhost" }, body: JSON.stringify({ ...input, mode, ...extra }) }))).status).toBe(400);
+    }
     vi.mocked(requireActor).mockResolvedValue({ ...actor, globalRole: "USER" }); expect((await GET()).status).toBe(403);
   });
 });
