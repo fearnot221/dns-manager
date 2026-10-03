@@ -1,4 +1,4 @@
-export type NavIcon = "apply" | "requests" | "dns" | "units" | "zones" | "inventory" | "users" | "settings" | "activity";
+export type NavIcon = "apply" | "requests" | "dns" | "units" | "zones" | "inventory" | "users" | "settings" | "protection" | "activity";
 export type NavItem = { href: string; label: string; icon: NavIcon; nested?: boolean };
 export type NavGroup = { id: string; label: string; items: NavItem[] };
 
@@ -12,7 +12,7 @@ export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAd
   if (admin) items.push(
     { href: "/zones", label: "DNS 管理", icon: "zones", nested: true },
     { href: "/admin/application-policy", label: "申請規則", icon: "settings" },
-    { href: "/admin/deletion-protection", label: "刪除保護", icon: "settings" },
+    { href: "/admin/deletion-protection", label: "刪除保護", icon: "protection" },
   );
   if (systemAdmin) items.push(
     { href: "/admin/inspection-events", label: "清查活動", icon: "inventory" },

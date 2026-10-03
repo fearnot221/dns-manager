@@ -3,7 +3,7 @@ import { ContactPicker } from "@/components/units/contact-picker";
 
 import Link from "next/link";
 import { useUnitWorkspace } from "@/components/units/unit-workspace";
-import { EmptyState } from "@/components/ui";
+import { EmptyState, LoadingPanel } from "@/components/ui";
 import { ResourceError } from "@/components/ui/resource-error";
 import { AlertTriangle, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -27,6 +27,7 @@ export function DnsApplicationForm() {
   const workspace = useUnitWorkspace();
   const { data, loading, error: zoneError, reload } = useResource<{ zones: { name: string }[] }>("/api/dns-requests/zones");
   const zones = data?.zones ?? [];
+  const onlyZone = zones.length === 1 ? zones[0].name : "";
   const policyResource = useResource<{ policy: ApplicationPolicy }>("/api/application-policy");
   const requestTypes = policyResource.data?.policy.allowedTypes || [];
   const unitResource = useResource<{ units: { id: string; name: string; role: UnitRole; canApply: boolean }[] }>("/api/units");
@@ -46,6 +47,10 @@ export function DnsApplicationForm() {
   const [errorRecordId, setErrorRecordId] = useState<number | null>(null);
   const errorTarget = useRef<HTMLParagraphElement>(null);
   useEffect(() => { if (error) errorTarget.current?.focus(); }, [error]);
+  // With a single open domain there is nothing to choose; fill blank rows without marking the form dirty.
+  useEffect(() => {
+    if (onlyZone) setRecords((previous) => previous.some((record) => !record.zoneName) ? previous.map((record) => record.zoneName ? record : { ...record, zoneName: onlyZone }) : previous);
+  }, [onlyZone]);
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (dirty.current) { event.preventDefault(); event.returnValue = ""; }
@@ -139,11 +144,11 @@ export function DnsApplicationForm() {
     }
   }
 
-  if (unitResource.loading) return <p role="status">正在確認單位與申請權限…</p>;
+  if (unitResource.loading) return <LoadingPanel label="正在確認單位與申請權限…" />;
   if (unitResource.error) return <ResourceError message={unitResource.error} retry={unitResource.reload} />;
   if (!selectedUnit) return <EmptyState title={workspace.active ? "此單位目前無法申請" : "尚未加入單位"} description={workspace.active ? "須加入已啟用的單位才能申請。請聯絡單位管理員確認權限。" : "請提供學號給單位管理員或系統管理員，由管理員將你加入單位。"} action={<Link className="button" href="/dns">查看單位 DNS</Link>} />;
 
-  return <>{policyResource.error && <ResourceError message="無法取得申請規則，暫時無法送出申請。" retry={policyResource.reload} />}<p className="record-results" role="status">{policyResource.error || (policyResource.loading ? "載入申請規則…" : "必須加入已啟用的單位，才能申請 DNS。")}</p><form className="card dns-application" onSubmit={submit} onChange={() => { dirty.current = true; }} aria-label="申請 DNS" aria-busy={pending}>
+  return <>{policyResource.error && <ResourceError message="無法取得申請規則，暫時無法送出申請。" retry={policyResource.reload} />}<p className="sr-only" role="status">{policyResource.loading ? "載入申請規則…" : ""}</p><form className="card dns-application" onSubmit={submit} onChange={() => { dirty.current = true; }} aria-label="申請 DNS" aria-busy={pending}>
     <div className="modal-body">
       <fieldset className="application-section" disabled={pending}>
         <legend>申請人資料</legend>
@@ -169,7 +174,7 @@ export function DnsApplicationForm() {
           <div className="application-record-head"><h3>紀錄 {index + 1}</h3><button className="icon-button danger-hover" type="button" disabled={records.length === 1 || pending} aria-label={"移除第 " + (index + 1) + " 筆"} title="移除此筆，可復原" onClick={() => removeRecord(record.id)}><Trash2 size={16} /></button></div>
           <div className="dns-fields">
             <label>網域<Select aria-label="網域" value={record.zoneName} required disabled={loading || Boolean(zoneError) || !zones.length} onChange={(value) => update(record.id, { zoneName: value })} options={[{ value: "", label: "選擇網域", disabled: true }, ...(record.zoneName && !zones.some((zone) => zone.name === record.zoneName) ? [{ value: record.zoneName, label: `${record.zoneName}（目前無法使用）`, disabled: true }] : []), ...zones.map((zone) => ({ value: zone.name, label: zone.name.replace(/\.$/, "") }))]} /></label>
-            <label>名稱<input value={record.name} onChange={(event) => update(record.id, { name: event.target.value })} placeholder="www 或 @" required maxLength={253} autoCapitalize="none" spellCheck={false} ref={(node) => { if (node && focusId.current === record.id) { if (!record.zoneName) node.closest("fieldset")?.querySelector<HTMLElement>(".custom-select-trigger")?.focus(); else node.focus(); focusId.current = null; } }} /></label>
+            <label>名稱<input value={record.name} onChange={(event) => update(record.id, { name: event.target.value })} placeholder="www 或 @" required maxLength={253} autoCapitalize="none" spellCheck={false} aria-describedby={`fqdn-${record.id}`} ref={(node) => { if (node && focusId.current === record.id) { if (!record.zoneName) node.closest("fieldset")?.querySelector<HTMLElement>(".custom-select-trigger")?.focus(); else node.focus(); focusId.current = null; } }} /><small id={`fqdn-${record.id}`} className="fqdn-preview">{fqdnPreview(record)}</small></label>
             <label>類型<Select aria-label="DNS 類型" value={record.type} onChange={(value) => update(record.id, { type: value as RecordType })} options={[...(!requestTypes.includes(record.type as typeof requestTypes[number]) ? [{ value: record.type, label: `${record.type}（未開放，請改選）`, disabled: true }] : []), ...requestTypes.map((type) => ({ value: type, label: type }))]} /></label>
             <label className="content-field">解析內容<input value={record.content} onChange={(event) => update(record.id, { content: event.target.value })} placeholder={hints[record.type]} required maxLength={65535} autoCapitalize="none" spellCheck={false} aria-label="解析內容" aria-describedby={`content-help-${record.id}`} /><small id={`content-help-${record.id}`}>{contentHelp(record.type)}</small></label>
             <label>TTL<Select aria-label="TTL" value={record.ttl} onChange={(value) => update(record.id, { ttl: value })} options={[{ value: "60", label: "1 分鐘" }, { value: "300", label: "5 分鐘" }, { value: "600", label: "10 分鐘" }, { value: "1800", label: "30 分鐘" }, { value: "3600", label: "1 小時" }]} /></label>
@@ -186,4 +191,14 @@ export function DnsApplicationForm() {
     </div>
     <div className="modal-foot"><span className="application-count" aria-live="polite">共 {records.length} 筆待送出</span><button className="button" type="button" data-leave-workspace disabled={pending} onClick={() => router.push("/requests")}>返回申請紀錄</button><button type="submit" className="button primary" disabled={pending || loading || Boolean(zoneError) || !zones.length || (!selectedUnit || unitResource.loading || Boolean(unitResource.error) || policyResource.loading || Boolean(policyResource.error))}>{pending && <Loader2 className="spin" size={16} />}{pending ? "送出中…" : "送出 " + records.length + " 筆申請"}</button></div>
   </form>{leaveTarget && <Dialog title="要離開尚未送出的申請嗎？" description="離開後，這次填寫的聯絡資料和 DNS 紀錄不會保留。" onClose={() => setLeaveTarget(null)}><div className="modal-foot"><button type="button" className="button" onClick={() => { dirty.current = false; setLeaveTarget(null); leaveTarget.click(); }}>離開並捨棄</button><button type="button" className="button primary" data-dialog-initial-focus onClick={() => setLeaveTarget(null)}>繼續填寫</button></div></Dialog>}</>;
+}
+
+function fqdnPreview(record: DraftRecord) {
+  // Mirrors normalizeDnsName: "@" is the apex, names already ending in the zone are kept as-is.
+  const zone = record.zoneName.toLowerCase().replace(/\.+$/, "");
+  const name = record.name.trim().toLowerCase().replace(/\.+$/, "");
+  if (!zone) return "選擇網域後顯示完整名稱";
+  if (!name) return `完整名稱：…${zone}`;
+  if (name === "@" || name === zone) return `完整名稱：${zone}`;
+  return `完整名稱：${name.endsWith(zone) ? name : `${name}.${zone}`}`;
 }
