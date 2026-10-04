@@ -15,3 +15,4 @@ work
 .github
 **/*.env
 !**/*.env.example
+tutorial-videos
