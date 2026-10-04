@@ -195,7 +195,7 @@ UNIT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test
 
 ## 文件
 
-- [介面與權限](docs/access-matrix.md)：角色、申請、清查及已停用功能。
+- [介面與權限](docs/access-matrix.md)：角色、申請、清查、DNS 歷程及已停用功能。
 - [介面流程](docs/unit-ui-review.md)：導覽、表單、草稿與操作行為。
 - [整合狀態](docs/pending-integrations.md)：外部服務能力與驗收範圍。
 - [部署指南](deploy/README.md) · [快速安裝](deploy/QUICKSTART.md) · [目錄搬遷](deploy/MIGRATION-HOME.md) · [Logto 設定](deploy/LOGTO.md)。
