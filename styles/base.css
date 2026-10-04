@@ -65,7 +65,8 @@ strong, b { font-weight: 600; }
 .custom-select-trigger:focus-visible, select:focus-visible {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring);
 }
-.filter-input input:focus-visible, .login-input input:focus-visible { box-shadow: none; }
+/* 外框以 :focus-within 呈現焦點；選擇器需高於上方通用規則，避免內層 input 再出現一圈焦點框 */
+:is(.filter-input, .login-input) input:not([type="checkbox"]):not([type="radio"]):focus-visible { box-shadow: none; }
 :is(input, textarea):disabled { opacity: .65; background: var(--surface-soft); cursor: not-allowed; }
 :is(input, textarea):read-only:not([type="checkbox"]):not([type="radio"]) { color: var(--muted); background: var(--surface-soft); }
 input, textarea { accent-color: var(--accent); }
