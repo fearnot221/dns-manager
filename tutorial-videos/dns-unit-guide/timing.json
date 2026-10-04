@@ -1,0 +1,60 @@
+{
+  "total": 268.433,
+  "scenes": [
+    {
+      "id": "s01-hook",
+      "start": 0,
+      "dur": 13.036
+    },
+    {
+      "id": "s02-map",
+      "start": 12.436,
+      "dur": 15.444
+    },
+    {
+      "id": "s03-login",
+      "start": 27.28,
+      "dur": 31.884
+    },
+    {
+      "id": "s04-unit-dns",
+      "start": 58.564,
+      "dur": 23.061
+    },
+    {
+      "id": "s05-inspect",
+      "start": 81.025,
+      "dur": 33.353
+    },
+    {
+      "id": "s06-apply",
+      "start": 113.778,
+      "dur": 45.199
+    },
+    {
+      "id": "s07-change",
+      "start": 158.377,
+      "dur": 30.306
+    },
+    {
+      "id": "s08-records",
+      "start": 188.083,
+      "dur": 18.81
+    },
+    {
+      "id": "s09-unit-admin",
+      "start": 206.293,
+      "dur": 42.6
+    },
+    {
+      "id": "s10-recap",
+      "start": 248.293,
+      "dur": 13.214
+    },
+    {
+      "id": "s11-outro",
+      "start": 260.907,
+      "dur": 7.526
+    }
+  ]
+}

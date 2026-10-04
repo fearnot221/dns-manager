@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "preferences": {
+    "flow": {
+      "value": "automation",
+      "confirmed_in": [
+        "dns-unit-guide"
+      ],
+      "updated_at": "2026-10-04T10:02:32.680Z"
+    },
+    "storyboard": {
+      "value": "yes",
+      "confirmed_in": [
+        "dns-unit-guide"
+      ],
+      "updated_at": "2026-10-04T10:02:32.711Z"
+    }
+  },
+  "sightings": {}
+}
