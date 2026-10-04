@@ -1,6 +1,6 @@
 # NCUEECESNMG DNS Manager
 
-以單位為核心的 PowerDNS Authoritative 管理系統，整合 DNS 申請、審核、歸屬清查與變更復原。成員透過申請維護單位 DNS，管理員集中管理網域與權限，操作保留稽核紀錄。
+以單位為核心的 PowerDNS Authoritative 管理系統，整合 DNS 申請、審核、歸屬清查與唯讀 DNS 歷程。成員透過申請維護單位 DNS，管理員集中管理網域與權限，操作保留稽核紀錄。
 
 **技術組成：** Next.js 16 · React 19 · TypeScript · Auth.js · Prisma 6 · PostgreSQL · PowerDNS
 
@@ -15,7 +15,7 @@
 | DNS 申請 | 多筆、跨開放網域申請；每筆用途必填、備註選填，由系統管理員逐筆審核 |
 | DNS 管理 | 整合網域、紀錄維護與清查；domain 頁籤涵蓋正解／反解，支援以 `@` 搜尋根網域 |
 | DNS 清查 | 聯絡資料、用途、歸屬與清查歷史在同一表單；關閉後於同頁重開可繼續填寫 |
-| 變更復原 | 查看本系統新增、修改、刪除 DNS 的紀錄；條件符合時可一鍵復原 |
+| DNS 歷程 | 唯讀查看每筆紀錄及已刪除紀錄的建立、修改、刪除與重建歷程；不提供復原 |
 | 稽核與匯出 | 操作前後差異、申請歷程，以及含歸屬與清查資料的全部 DNS CSV 匯出 |
 
 ### 單位角色
@@ -107,8 +107,8 @@ Docker／Ubuntu 系統資料維持原位；systemd 在系統目錄保留服務�
 - **後端授權：** API 檢查目前帳號、角色及單位資格；隱藏按鈕不取代權限檢查。
 - **衝突保護：** DNS 快照與資料版本不一致時拒絕覆蓋；PostgreSQL 與 PowerDNS 不屬於同一原子交易。
 - **清查草稿：** 只保存在目前頁面，儲存成功後清除；重整、離開頁面或紀錄版本改變後不還原舊草稿。
-- **復原範圍：** 僅處理 DNS RRset，不回復單位歸屬、清查或申請狀態；缺少完整快照或已有後續變更時不可復原。
-- **備份：** 分別備份 PostgreSQL、PowerDNS backend 與持久密鑰。CSV 匯出與變更復原不能取代完整備份。
+- **DNS 歷程：** 唯讀呈現既有 AuditLog 快照，不回寫 PowerDNS；舊 DNS 變更紀錄與復原 API 回傳 410。
+- **備份：** 分別備份 PostgreSQL、PowerDNS backend 與持久密鑰。CSV 匯出與 DNS 歷程不能取代完整備份。
 
 ## 開發與驗證
 
@@ -153,7 +153,7 @@ UNIT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test
 
 ### 可選 local demo
 
-`npm run demo` 在 `http://localhost:3000` 啟動純本機展示，停用資料庫及外部 SSO。它無法驗證需要 PostgreSQL 的單位制申請、單位管理與 DNS 復原；一般作業維持關閉。
+`npm run demo` 在 `http://localhost:3000` 啟動純本機展示，停用資料庫及外部 SSO。它無法驗證需要 PostgreSQL 的單位制申請與單位管理；一般作業維持關閉。
 
 | Demo 帳號 | 開發密碼 |
 | --- | --- |
@@ -169,7 +169,7 @@ UNIT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test
 | --- | --- |
 | `app/` | App Router 頁面、登入殼層與 API |
 | `components/` | DNS、申請、單位與管理介面，共用控制項 |
-| `lib/` | 身份授權、申請與清查流程、PowerDNS client、復原及前端工具 |
+| `lib/` | 身份授權、申請與清查流程、PowerDNS client、DNS 歷程及前端工具 |
 | `prisma/` | 資料模型、migration 與初始帳號 seed |
 | `styles/` | 共用 tokens、主題與響應式樣式 |
 | `tests/` | 規則、API、元件及隔離資料庫測試 |
@@ -177,7 +177,7 @@ UNIT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test
 
 ## 文件
 
-- [介面與權限](docs/access-matrix.md)：角色、申請、清查、復原及已停用功能。
+- [介面與權限](docs/access-matrix.md)：角色、申請、清查、DNS 歷程及已停用功能。
 - [介面流程](docs/unit-ui-review.md)：導覽、表單、草稿與操作行為。
 - [整合狀態](docs/pending-integrations.md)：外部服務能力與驗收範圍。
 - [部署指南](deploy/README.md) · [快速安裝](deploy/QUICKSTART.md) · [目錄搬遷](deploy/MIGRATION-HOME.md) · [Logto 設定](deploy/LOGTO.md)。
