@@ -1,4 +1,5 @@
 import "server-only";
+import { enqueueDnsMail } from "@/lib/mail/queue";
 import { Prisma } from "@prisma/client";
 import type { Actor } from "@/lib/dns/types";
 import { db } from "@/lib/db/client";
@@ -63,6 +64,7 @@ export async function saveApplication(actor: Actor, input: PreparedApplication, 
           newValue: redactAudit({ ...record, ...applicant, applicationId }) as Prisma.InputJsonValue,
         })) });
       }
+      await enqueueDnsMail(tx, `dns-request:${applicationId}`, { applicationId, applicantName: input.applicantName || actor.name || "未提供", unitName: unit.name, recordCount: String(records.length), operation: "新增" });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
     return { applicationId, count: input.records.length };
   } catch (error) {

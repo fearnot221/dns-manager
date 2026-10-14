@@ -124,3 +124,7 @@ Local demo 預設保持關閉，明確需要時才使用 `npm run demo`；它不
 密碼登入保留，每帳號 15 分鐘 10 次嘗試、全站每分鐘 300 次，包含成功嘗試；budget 存 DB 並自動清除過期鍵，不用永久鎖帳。Logto 不受 password limiter 影響。scope 授權只允許授權範圍內的紀錄，完整 zone 申請開關需完整 zone ADMIN；這是修正越權，未改成禁用所有委派管理。
 
 外部 Caddy 的既有站台不會隨 app 更新自動套用 HSTS；需維運者合併範例設定、validate/reload。Webhook 程式安裝在 checkout 外，也需依原維運方式更新並重啟 systemd service；本次沒有操作正式機器。新 queue 依 signed body SHA-256 去重，保留 legacy UUID jobs 消費；升級前的 UUID-only completed marker 沒有 body digest，無法回推歷史簽章事件；但相同 commit 已健康部署時 webhook 會 no-op。新的失敗事件最多三次嘗試，超過請維運者檢查後手動部署；手動部署仍保留全 stack restart 流程；健康且 commit 未變的 webhook 重播會 no-op。
+
+## 郵件通知
+
+Google SMTP、管理員設定、模板與背景寄送維運請參閱 [MAIL.md](MAIL.md)。

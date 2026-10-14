@@ -390,3 +390,25 @@ model SecurityRateLimit {
   expiresAt DateTime
   @@index([expiresAt])
 }
+
+// One delivery per event and recipient; message snapshots survive template changes.
+model MailDelivery {
+  id          String   @id @default(cuid())
+  eventKey    String
+  recipient   String
+  fromEmail   String
+  fromName    String
+  subject     String
+  text        String   @db.Text
+  status      String   @default("PENDING")
+  attempts    Int      @default(0)
+  availableAt DateTime @default(now())
+  leaseUntil  DateTime?
+  leaseToken  String?
+  lastError   String?
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([eventKey, recipient])
+  @@index([status, availableAt])
+}

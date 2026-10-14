@@ -1,4 +1,5 @@
 import "server-only";
+import { enqueueDnsMail } from "@/lib/mail/queue";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db/client";
 import type { Actor, RecordType, RRSet } from "@/lib/dns/types";
@@ -72,6 +73,7 @@ export async function requestUnitChange(actor: Actor, unitId: string, input: { r
     await assertUnitRequestBudget(tx,unitId,1,Buffer.byteLength(JSON.stringify({source,current,input}))+512);
     const saved = await tx.dnsRecordRequest.create({ data: { operation: deleting ? "DELETE" : "UPDATE", userId: actor.id, unitId, sourceRecordId: source.id, originalContent: source.content, expectedRRSet: current as unknown as Prisma.InputJsonValue, connectionScope: scope, zoneName: source.zoneName, recordName: source.recordName, recordType: source.recordType, ttl: current.ttl, content, purpose: input.purpose, sourceMetadataUpdatedAt: source.updatedAt, recordPurpose: ownership?.purpose ?? source.purpose, applicantName: ownership?.applicantName ?? source.applicantName, applicantEmail: ownership?.applicantEmail ?? source.applicantEmail, applicantExtension: ownership?.applicantExtension ?? source.applicantExtension, applicantUnit: unit.name } });
     await unitAudit(tx, actor, deleting ? "REQUEST_UNIT_DNS_DELETE" : "REQUEST_UNIT_DNS_CHANGE", { recordId: source.id, content: source.content }, { requestId: saved.id, unitId, content, purpose: input.purpose });
+    await enqueueDnsMail(tx, `dns-request:${saved.id}`, { applicationId: saved.id, applicantName: actor.name || saved.applicantName || "未提供", unitName: unit.name, recordCount: "1", operation: deleting ? "刪除" : "修改" });
     return { id: saved.id };
   }, { timeout: 30000 });
 }
