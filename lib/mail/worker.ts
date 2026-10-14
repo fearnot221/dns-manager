@@ -43,15 +43,15 @@ export async function processOneDelivery() {
       disableFileAccess: true, disableUrlAccess: true,
     });
     const result = await transport.sendMail({
-      from: { name: delivery.fromName, address: delivery.fromEmail }, to: delivery.recipient, cc: settings.config.recipients,
+      from: { name: delivery.fromName, address: delivery.fromEmail }, to: delivery.recipient, cc: delivery.ccTeam ? settings.config.recipients : undefined,
       replyTo: settings.config.recipients,
       subject: delivery.subject, text: delivery.text,
       messageId: `<${delivery.id}@${delivery.fromEmail.split("@")[1]}>`,
     });
-    const expected = new Set([delivery.recipient, ...settings.config.recipients].map(address => address.toLowerCase()));
+    const expected = new Set([delivery.recipient, ...(delivery.ccTeam ? settings.config.recipients : [])].map(address => address.toLowerCase()));
     const accepted = new Set(result.accepted.map((address: string | { address: string }) => (typeof address === "string" ? address : address.address).toLowerCase()));
     sent = [...expected].every(address => accepted.has(address));
-    if (!sent) errorMessage = "Google SMTP 未接受全部收件地址（包含網管小組副本）；重試可能讓已接受的地址重複收信。";
+    if (!sent) errorMessage = delivery.ccTeam ? "Google SMTP 未接受全部收件地址（包含網管小組副本）；重試可能讓已接受的地址重複收信。" : "Google SMTP 未接受收件地址，請確認地址後重試。";
   } catch (error) { errorMessage = safeMailError(error); }
   finally { transport?.close(); }
   // Database failures after SMTP success must leave the lease intact, not immediately requeue.
