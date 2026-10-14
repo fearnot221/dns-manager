@@ -43,12 +43,14 @@ export async function processOneDelivery() {
       disableFileAccess: true, disableUrlAccess: true,
     });
     const result = await transport.sendMail({
-      from: { name: delivery.fromName, address: delivery.fromEmail }, to: delivery.recipient,
+      from: { name: delivery.fromName, address: delivery.fromEmail }, to: delivery.recipient, cc: delivery.fromEmail,
       subject: delivery.subject, text: delivery.text,
       messageId: `<${delivery.id}@${delivery.fromEmail.split("@")[1]}>`,
     });
-    sent = result.accepted.length > 0;
-    if (!sent) errorMessage = "Google SMTP 未接受收件地址。";
+    const expected = new Set([delivery.recipient, delivery.fromEmail].map(address => address.toLowerCase()));
+    const accepted = new Set(result.accepted.map((address: string | { address: string }) => (typeof address === "string" ? address : address.address).toLowerCase()));
+    sent = [...expected].every(address => accepted.has(address));
+    if (!sent) errorMessage = "Google SMTP 未接受全部收件地址（包含網管小組副本）；重試可能讓已接受的地址重複收信。";
   } catch (error) { errorMessage = safeMailError(error); }
   finally { transport?.close(); }
   // Database failures after SMTP success must leave the lease intact, not immediately requeue.

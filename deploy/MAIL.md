@@ -27,7 +27,7 @@ Google 官方說明：[SMTP relay 設定](https://support.google.com/a/answer/29
 | `{{submittedAt}}` | 台北時間的送出時間 |
 | `{{reviewUrl}}` | 由伺服器 `AUTH_URL` 產生的 `/requests` 頁面，需要登入並通過原有權限檢查 |
 
-一份申請對每個收件地址產生一筆通知，批次新增不逐筆寄送。申請及通知在同一資料庫交易提交；SMTP 故障不會讓已儲存的申請消失。
+一份申請對每個收件地址產生一筆通知，每封通知及測試信均 CC 到排入當時的網管小組寄件地址，批次新增不逐筆寄送。申請及通知在同一資料庫交易提交；SMTP 故障不會讓已儲存的申請消失。
 
 通知保存排入當時的寄件名稱／地址、收件地址、主旨及內文；修改設定不會改寫既有待辦。worker 使用最新 SMTP 連線設定；寄件地址須符合 Google Workspace relay 政策。
 
@@ -79,3 +79,11 @@ Google 官方說明：[SMTP relay 設定](https://support.google.com/a/answer/29
 PR #11 的初次 Verify 在 production npm audit 失敗：Nodemailer 8 的安全公告涵蓋原本選用版本。更新至 10.1.1，並以 npm override 統一 Auth.js 的 optional peer，避免留下舊版。專案登入不使用郵件 provider。
 
 以修正後依賴重跑：production audit 0 vulnerabilities、472 項測試（隔離 PostgreSQL）、lint 與 production build 全數通過；使用真實 Nodemailer stream transport 產生 MIME 亦通過，沒有網路寄送。未降低 CI 安全門檻。
+
+## CC 與測試輸入修正
+
+網管小組寄件地址同時作為每封通知與測試信的 CC。使用待辦保存的寄件地址，修改設定不會改寫已排入郵件的 CC。To 與 CC 相同時，SMTP envelope 去重；部分地址未被接受時保留重試，不標為成功，已接受的地址可能在重試時重複收到。
+
+測試收件欄位可在通知停用時先填寫；寄送按鈕仍須等待設定儲存並啟用。測試信會寄給指定地址及 CC 網管小組寄件地址。寄件地址必須有可接收郵件的路由，才能收到 CC。
+
+本次驗證狀態：`codex/mail-cc-test-input`，基於 `ab15bb0` 加本次未提交修正。`npm run lint -- --ignore-pattern '.claude/**'` 通過；`UNIT_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55439/dns_units_test npm test -- --exclude '.claude/**'` 共 476 項通過；`npm run build` 在補上 SMTP accepted 地址型別後通過，worker 的 ESLint 亦再次通過；`git diff --check` 通過。新增涵蓋停用狀態下輸入欄位、通知及測試信 CC、部分收件拒收、To/CC 相同的實際 MIME/envelope 去重。未啟動 demo、未做瀏覽器視覺驗證或真實寄信，尚未 push／部署。

@@ -1,3 +1,4 @@
+import nodemailer from "nodemailer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { publicMailSettings } from "@/lib/mail/settings";
@@ -6,7 +7,7 @@ import { safeMailError } from "@/lib/mail/worker";
 import { workspaceNavigation } from "@/lib/client/navigation";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
-import { MailSettingsForm } from "@/components/admin/mail-settings";
+import { MailSettingsForm, MailDeliveryPanel } from "@/components/admin/mail-settings";
 afterEach(() => vi.unstubAllEnvs());
 describe("mail settings validation and secrets", () => {
   it("only allows Google endpoints and encrypted ports", () => {
@@ -23,6 +24,20 @@ describe("mail settings validation and secrets", () => {
     const html = renderToStaticMarkup(createElement(MailSettingsForm, { initial: { config: relay, revision: null }, onSaved: async () => {} }));
     expect(html).toContain("IP 白名單驗證（免帳密）");
     expect(html).not.toContain('type="password"');
+  });
+  it("allows typing a test recipient before enabling mail while preventing premature sending", () => {
+    const html = renderToStaticMarkup(createElement(MailDeliveryPanel, { data: { settings: { config: defaultMailConfig, revision: null }, deliveries: [] }, reload: async () => {} }));
+    expect(html).not.toMatch(/<fieldset[^>]*disabled/);
+    expect(html).not.toMatch(/<input[^>]*disabled/);
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>寄送測試信/);
+    expect(html).toContain("CC 到網管小組寄件地址");
+  });
+  it("includes a visible CC and deduplicates the SMTP envelope when To equals CC", async () => {
+    const transport = nodemailer.createTransport({ streamTransport: true, buffer: true });
+    const result = await transport.sendMail({ from: "team@example.com", to: "team@example.com", cc: "team@example.com", subject: "test", text: "test" });
+    expect(result.envelope.to).toEqual(["team@example.com"]);
+    expect(result.message.toString()).toContain("Cc: team@example.com");
+    transport.close();
   });
   it("validates variables without evaluating injected template code", () => {
     expect(validTemplate("{{constructor}} {{unknown}}")).toBe(false);

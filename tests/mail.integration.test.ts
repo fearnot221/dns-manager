@@ -51,7 +51,7 @@ describe.skipIf(!url)("mail settings and delivery in disposable PostgreSQL", () 
     await db.mailDelivery.deleteMany(); await db.systemSetting.deleteMany({ where: { key: mailSettingsKey } });
     await db.securityRateLimit.deleteMany({ where: { key: { startsWith: "mail-actions:" } } });
     vi.mocked(requireActor).mockResolvedValue(actor);
-    send.mockReset().mockResolvedValue({ accepted: ["team@example.com"] });
+    send.mockReset().mockImplementation(async ({ to, cc }) => ({ accepted: [...new Set([to, cc])] }));
     vi.mocked(nodemailer.createTransport).mockReturnValue({ sendMail: send, close: vi.fn() } as never);
   });
   afterAll(async () => {
@@ -140,6 +140,25 @@ describe.skipIf(!url)("mail settings and delivery in disposable PostgreSQL", () 
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "team@example.com", text: expect.stringContaining("https://dns.example.com/requests") }));
     expect((await db.mailDelivery.findFirstOrThrow()).status).toBe("SENT");
     expect(await processOneDelivery()).toBe(false); expect(send).toHaveBeenCalledTimes(1);
+  });
+  it("CCs the snapshotted group sender on notification and test messages", async () => {
+    const saved = await enable(); await enqueue();
+    await POST(request({ action: "test", recipient: "test@example.com", expectedRevision: saved.revision }, "POST"));
+    await saveMailSettings({ config: { ...config, fromEmail: "changed@example.com" }, expectedRevision: saved.revision }, actor);
+    await processOneDelivery(); await processOneDelivery();
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "team@example.com", cc: "sender@example.com" }));
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "test@example.com", cc: "sender@example.com" }));
+    expect(await db.mailDelivery.count({ where: { status: "SENT" } })).toBe(2);
+  });
+  it("does not mark a message sent when only its To or CC was accepted", async () => {
+    await enable(); await enqueue();
+    for (const accepted of [["team@example.com"], ["sender@example.com"]]) {
+      send.mockResolvedValueOnce({ accepted });
+      await db.mailDelivery.updateMany({ data: { availableAt: new Date(0) } });
+      await processOneDelivery();
+      expect((await db.mailDelivery.findFirstOrThrow()).status).toBe("PENDING");
+      expect((await db.mailDelivery.findFirstOrThrow()).lastError).toContain("副本");
+    }
   });
   it("pauses disabled mail and applies bounded retries with redacted errors", async () => {
     const saved = await enable(); await enqueue();
