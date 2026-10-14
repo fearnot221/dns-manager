@@ -18,7 +18,8 @@ import { requireActor } from "@/lib/auth/session";
 import { GET, POST, PUT } from "@/app/api/admin/mail/route";
 import { defaultMailConfig } from "@/lib/mail/model";
 import { mailSettingsKey, readMailSettings, saveMailSettings } from "@/lib/mail/settings";
-import { enqueueDnsMail } from "@/lib/mail/queue";
+import { enqueueDnsMail, enqueueReviewMail } from "@/lib/mail/queue";
+import { changeInspectionEvent } from "@/lib/inspection-events/service";
 import { claimDelivery, processOneDelivery } from "@/lib/mail/worker";
 import { saveApplication } from "@/lib/requests/save-application";
 import { requestUnitChange } from "@/lib/units/records";
@@ -48,10 +49,10 @@ describe.skipIf(!url)("mail settings and delivery in disposable PostgreSQL", () 
   });
   beforeEach(async () => {
     vi.clearAllMocks();
-    await db.mailDelivery.deleteMany(); await db.systemSetting.deleteMany({ where: { key: mailSettingsKey } });
+    await db.mailDelivery.deleteMany(); await db.systemSetting.deleteMany({ where: { key: mailSettingsKey } }); await db.inspectionEvent.deleteMany();
     await db.securityRateLimit.deleteMany({ where: { key: { startsWith: "mail-actions:" } } });
     vi.mocked(requireActor).mockResolvedValue(actor);
-    send.mockReset().mockImplementation(async ({ to, cc }) => ({ accepted: [...new Set([to, ...cc])] }));
+    send.mockReset().mockImplementation(async ({ to, cc }) => ({ accepted: [...new Set([to, ...(cc ?? [])])] }));
     vi.mocked(nodemailer.createTransport).mockReturnValue({ sendMail: send, close: vi.fn() } as never);
   });
   afterAll(async () => {
@@ -185,5 +186,81 @@ describe.skipIf(!url)("mail settings and delivery in disposable PostgreSQL", () 
     await db.mailDelivery.update({ where: { id: row.id }, data: { status: "FAILED", attempts: 5 } });
     expect((await POST(request({ action: "retry", id: row.id }, "POST"))).status).toBe(200);
     expect((await db.mailDelivery.findUniqueOrThrow({ where: { id: row.id } })).attempts).toBe(0);
+  });
+  async function scenarioConfig(patch: Partial<typeof config.templates>, extra: Partial<typeof config> = {}) {
+    return saveMailSettings({ config: { ...config, ...extra, templates: { ...config.templates, ...patch } }, expectedRevision: (await readMailSettings()).revision }, actor);
+  }
+  async function unitWithAdmins() {
+    const admin = await db.user.create({ data: { name: "管理員甲", email: `portal-${crypto.randomUUID()}@accounts.invalid`, portalEmail: `admin-${crypto.randomUUID()}@example.com` } });
+    const hidden = await db.user.create({ data: { email: `portal-${crypto.randomUUID()}@accounts.invalid` } });
+    const disabled = await db.user.create({ data: { email: `off-${crypto.randomUUID()}@example.com`, disabled: true } });
+    const editor = await db.user.create({ data: { email: `editor-${crypto.randomUUID()}@example.com` } });
+    const unit = await db.dnsUnit.create({ data: { name: `單位-${crypto.randomUUID()}`, members: { create: [{ userId: admin.id, role: "ADMIN" }, { userId: hidden.id, role: "ADMIN" }, { userId: disabled.id, role: "ADMIN" }, { userId: editor.id, role: "EDITOR" }] } } });
+    return { unit, admin, editor };
+  }
+  it("upgrades stored single-template settings on read", async () => {
+    const { templates: _templates, customTemplates: _custom, ...legacy } = config;
+    void _templates; void _custom;
+    await db.systemSetting.create({ data: { key: mailSettingsKey, value: { config: { ...legacy, subject: "Legacy {{unitName}}", body: "Legacy body {{operation}}" }, revision: crypto.randomUUID() } } });
+    const settings = await readMailSettings();
+    expect(settings.config.templates.requestDelete.subject).toBe("Legacy {{unitName}}");
+    await enqueue();
+    expect((await db.mailDelivery.findFirstOrThrow()).subject).toBe("Legacy Unit");
+  });
+  it("uses the operation's own template and skips scenarios that are switched off", async () => {
+    await scenarioConfig({ requestDelete: { ...config.templates.requestDelete, subject: "刪除 {{unitName}}" }, requestUpdate: { ...config.templates.requestUpdate, enabled: false } });
+    await db.$transaction(tx => enqueueDnsMail(tx, "delete", { ...event, operation: "刪除" }));
+    await db.$transaction(tx => enqueueDnsMail(tx, "update", { ...event, operation: "修改" }));
+    expect(await db.mailDelivery.findMany({ select: { eventKey: true, subject: true } })).toEqual([{ eventKey: "delete", subject: "刪除 Unit" }]);
+  });
+  it("notifies the applicant of review results without copying the team unless configured", async () => {
+    const reviewed = { id: "req-1", operation: "CREATE", status: "REJECTED", recordName: "www.example.com.", recordType: "A", content: "192.0.2.1", reviewNote: "用途不明", reviewedAt: new Date(), applicantName: "申請人", applicantEmail: "applicant@example.com", applicantUnit: null, user: { name: "User", email: "u@accounts.invalid", portalEmail: null } };
+    await enable();
+    expect(await db.$transaction(tx => enqueueReviewMail(tx, reviewed, "資工系"))).toBe(0);
+    await scenarioConfig({ reviewRejected: { ...config.templates.reviewRejected, enabled: true } });
+    expect(await db.$transaction(tx => enqueueReviewMail(tx, reviewed, "資工系"))).toBe(1);
+    expect(await db.$transaction(tx => enqueueReviewMail(tx, { ...reviewed, applicantEmail: null }, "資工系"))).toBe(0);
+    const row = await db.mailDelivery.findFirstOrThrow();
+    expect(row).toMatchObject({ eventKey: "dns-review:req-1", recipient: "applicant@example.com", ccTeam: false });
+    expect(row.text).toContain("退回原因：用途不明");
+    await processOneDelivery();
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "applicant@example.com", cc: undefined, replyTo: ["team@example.com"] }));
+    expect((await db.mailDelivery.findFirstOrThrow()).status).toBe("SENT");
+  });
+  it("notifies active unit administrators with deliverable addresses when an inspection event is created", async () => {
+    const { unit, admin } = await unitWithAdmins();
+    await scenarioConfig({ inspectionCreated: { ...config.templates.inspectionCreated, enabled: true, ccTeam: true } });
+    await changeInspectionEvent(actor, { kind: "create", event: { name: "秋季清查", startsOn: "2026-11-01", endsOn: "2026-11-30" } });
+    const rows = await db.mailDelivery.findMany({ where: { eventKey: { startsWith: "inspection:" } } });
+    expect(rows.map(row => row.recipient)).toEqual([admin.portalEmail]);
+    expect(rows[0]).toMatchObject({ ccTeam: true, eventKey: expect.stringMatching(new RegExp(`:${unit.id}$`)) });
+    expect(rows[0].text).toContain("管理員甲"); expect(rows[0].text).toContain("2026-11-01");
+  });
+  it("sends a manual message to the selected units' administrators", async () => {
+    const first = await unitWithAdmins(); const second = await unitWithAdmins();
+    await enable();
+    const listed = await (await GET()).json();
+    expect(listed.units.find((unit: { id: string }) => unit.id === first.unit.id).admins).toEqual(expect.arrayContaining([{ name: "管理員甲", email: first.admin.portalEmail }, { name: "", email: null }]));
+    const body = { action: "send", unitIds: [first.unit.id, second.unit.id], subject: "通知 {{unitName}}", body: "{{recipientName}} 您好 {{dnsUrl}}", ccTeam: false };
+    const response = await POST(request(body, "POST"));
+    expect(response.status).toBe(200); expect(await response.json()).toEqual({ queued: 2 });
+    const rows = await db.mailDelivery.findMany({ orderBy: { recipient: "asc" } });
+    expect(rows.map(row => row.recipient).sort()).toEqual([first.admin.portalEmail, second.admin.portalEmail].sort());
+    expect(rows.every(row => !row.ccTeam && row.eventKey.startsWith("manual:"))).toBe(true);
+    expect(rows.find(row => row.recipient === first.admin.portalEmail)?.subject).toBe(`通知 ${first.unit.name}`);
+    expect(rows[0].text).toContain("https://dns.example.com/dns");
+    expect((await POST(request({ ...body, body: "{{reviewUrl}}" }, "POST"))).status).toBe(400);
+    const empty = await db.dnsUnit.create({ data: { name: `空-${crypto.randomUUID()}` } });
+    expect((await POST(request({ ...body, unitIds: [empty.id] }, "POST"))).status).toBe(400);
+    expect(await db.auditLog.count({ where: { action: "SEND_UNIT_MAIL" } })).toBe(1);
+  });
+  it("tests a selected scenario or custom template with sample data", async () => {
+    const custom = { id: "notice", name: "公告", subject: "公告 {{unitName}}", body: "{{recipientName}}" };
+    const saved = await saveMailSettings({ config: { ...config, customTemplates: [custom] }, expectedRevision: null }, actor);
+    expect((await POST(request({ action: "test", recipient: "t@example.com", template: "custom:notice", expectedRevision: saved.revision }, "POST"))).status).toBe(200);
+    expect((await POST(request({ action: "test", recipient: "t2@example.com", template: "reviewApproved", expectedRevision: saved.revision }, "POST"))).status).toBe(200);
+    expect((await POST(request({ action: "test", recipient: "t3@example.com", template: "custom:missing", expectedRevision: saved.revision }, "POST"))).status).toBe(404);
+    const subject = async (recipient: string) => (await db.mailDelivery.findFirstOrThrow({ where: { recipient } })).subject;
+    expect(await subject("t@example.com")).toBe("[測試] 公告 資訊工程學系"); expect(await subject("t2@example.com")).toContain("已核准");
   });
 });
