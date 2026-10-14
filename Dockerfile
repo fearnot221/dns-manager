@@ -5,6 +5,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM base AS deps
 COPY package.json package-lock.json ./
+COPY tooling/next-eslint-glob ./tooling/next-eslint-glob
 COPY prisma ./prisma
 RUN npm ci
 
