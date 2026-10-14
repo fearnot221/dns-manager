@@ -1,6 +1,6 @@
 .unit-toolbar, .unit-heading, .unit-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
 .unit-toolbar { margin-bottom: var(--space-5); }
-.unit-toolbar > p { color: var(--muted); max-width: 580px; }
+.unit-toolbar { justify-content: flex-end; }
 .unit-actions { justify-content: flex-start; }
 .unit-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: var(--space-5); align-items: start; }
 .unit-layout-single { grid-template-columns: minmax(0, 1fr); }

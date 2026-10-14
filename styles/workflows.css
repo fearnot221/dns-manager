@@ -6,6 +6,8 @@
 .workflow-feedback:has(p) { padding: var(--space-4) var(--space-6) 0; }
 .workflow-panel-head { display: flex; gap: var(--space-3); padding: var(--space-5) var(--space-6); border-bottom: 1px solid var(--border); }
 .workflow-panel-head > svg { flex-shrink: 0; color: var(--accent); margin-top: 2px; }
+.workflow-panel-head > div { flex: 1; min-width: 0; }
+.workflow-panel-head > :is(.badge, .icon-button) { align-self: center; }
 .workflow-panel-head h2 { font-size: 1rem; }
 .workflow-panel-head p { color: var(--muted); font-size: var(--text-body); margin-top: var(--space-1); line-height: 1.7; }
 .workflow-panel-note { padding: var(--space-5) var(--space-6) 0; color: var(--muted); font-size: var(--text-body); line-height: 1.7; }
