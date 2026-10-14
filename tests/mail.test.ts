@@ -30,7 +30,7 @@ describe("mail settings validation and secrets", () => {
     expect(html).not.toMatch(/<fieldset[^>]*disabled/);
     expect(html).not.toMatch(/<input[^>]*disabled/);
     expect(html).toMatch(/<button[^>]*disabled[^>]*>寄送測試信/);
-    expect(html).toContain("CC 到網管小組寄件地址");
+    expect(html).toContain("CC 到網管小組收件地址");
   });
   it("includes a visible CC and deduplicates the SMTP envelope when To equals CC", async () => {
     const transport = nodemailer.createTransport({ streamTransport: true, buffer: true });
