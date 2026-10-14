@@ -8,6 +8,7 @@ vi.mock("@/lib/db/client", async () => {
 import { db } from "@/lib/db/client";
 import { requireActor } from "@/lib/auth/session";
 import type { Actor } from "@/lib/dns/types";
+import { OWNER_IDENTIFIER } from "@/lib/auth/owner";
 import { changeInspectionEvent, currentInspectionEvent, inspectionEventSnapshot, listInspectionEvents } from "@/lib/inspection-events/service";
 import { GET, POST, PATCH, DELETE } from "@/app/api/admin/inspection-events/route";
 import { GET as current } from "@/app/api/inspection-events/current/route";
@@ -84,5 +85,46 @@ describe.skipIf(!url)("inspection events with isolated PostgreSQL", () => {
   it("rejects revoked admin privileges even with a previously authenticated actor", async () => {
     await db.user.update({ where: { id: admin.id }, data: { globalRole: "USER" } });
     await expect(changeInspectionEvent(admin, { kind: "create", event: { ...event, startsOn: "2041-01-01", endsOn: "2041-01-02" } })).rejects.toMatchObject({ status: 403 });
+  });
+  async function ownerAccount(): Promise<Actor> {
+    const stored = await db.user.create({ data: {
+      email: `${crypto.randomUUID()}@event-test.invalid`, globalRole: "USER", logtoName: OWNER_IDENTIFIER,
+      accounts: { create: { provider: "logto", type: "oidc", providerAccountId: crypto.randomUUID() } },
+    } });
+    return { id: stored.id, email: stored.email, globalRole: "SUPER_ADMIN", portalIdentifier: OWNER_IDENTIFIER, zoneRoles: {} };
+  }
+  it("lets the verified Logto owner create, update and delete with a stored USER role", async () => {
+    const owner = await ownerAccount();
+    vi.mocked(requireActor).mockResolvedValue(owner);
+    const ownerEvent = { ...event, startsOn: "2042-01-01", endsOn: "2042-01-02" };
+    const created = await POST(request("POST", ownerEvent));
+    expect(created.status).toBe(201);
+    const saved = (await created.json()).event; ids.push(saved.id);
+    const updated = await PATCH(request("PATCH", { id: saved.id, expectedRevision: 1, event: { ...ownerEvent, name: "Owner event" } }));
+    expect(updated.status).toBe(200);
+    expect((await updated.json()).event).toMatchObject({ name: "Owner event", revision: 2 });
+    expect((await DELETE(request("DELETE", { id: saved.id, expectedRevision: 2 }))).status).toBe(200);
+    expect(await db.user.findUnique({ where: { id: owner.id } })).toMatchObject({ globalRole: "USER" });
+    expect(await db.auditLog.count({ where: { userId: owner.id, action: { startsWith: "INSPECTION_EVENT_" } } })).toBe(3);
+  });
+  it.each(["renamed", "unlinked", "disabled", "removed", "missing", "unverified-session"] as const)("rejects %s owner writes without changing events or recording success", async (reason) => {
+    const owner = await ownerAccount();
+    if (reason === "renamed") await db.user.update({ where: { id: owner.id }, data: { logtoName: "different-identifier" } });
+    if (reason === "unlinked") await db.account.deleteMany({ where: { userId: owner.id } });
+    if (reason === "disabled") await db.user.update({ where: { id: owner.id }, data: { disabled: true } });
+    if (reason === "removed") await db.user.update({ where: { id: owner.id }, data: { removedAt: new Date() } });
+    if (reason === "missing") await db.user.delete({ where: { id: owner.id } });
+    if (reason === "unverified-session") owner.portalIdentifier = null;
+    const saved = await db.inspectionEvent.create({ data: { name: "Unchanged", startsOn: new Date("2043-01-01"), endsOn: new Date("2043-01-02") } });
+    ids.push(saved.id);
+    for (const change of [
+      { kind: "create" as const, event: { ...event, startsOn: "2044-01-01", endsOn: "2044-01-02" } },
+      { kind: "update" as const, id: saved.id, expectedRevision: 1, event },
+      { kind: "delete" as const, id: saved.id, expectedRevision: 1 },
+    ]) await expect(changeInspectionEvent(owner, change)).rejects.toMatchObject({ status: 403 });
+    expect(await db.inspectionEvent.findUnique({ where: { id: saved.id } })).toEqual(saved);
+    expect(await db.inspectionEvent.count({ where: { startsOn: new Date("2044-01-01") } })).toBe(0);
+    expect(await db.auditLog.count({ where: { userId: owner.id, action: { startsWith: "INSPECTION_EVENT_" } } })).toBe(0);
+    await db.inspectionEvent.delete({ where: { id: saved.id } });
   });
 });

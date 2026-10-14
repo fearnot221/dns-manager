@@ -3,7 +3,7 @@ import type { InspectionEvent, Prisma } from "@prisma/client";
 import { db } from "@/lib/db/client";
 import { isLocalDemo } from "@/lib/db/local-store";
 import { ApiError } from "@/lib/api/respond";
-import { isGlobalAdmin } from "@/lib/auth/owner";
+import { accountOwnerIdentifier, isGlobalAdmin, isOwner, OWNER_IDENTIFIER } from "@/lib/auth/owner";
 import type { Actor } from "@/lib/dns/types";
 import { eventFields, taipeiDate, type EventFields } from "./model";
 
@@ -48,8 +48,15 @@ export async function changeInspectionEvent(actor: Actor, change: Change) {
     // Serialize all schedule changes so two concurrent creates cannot overlap.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(61004001)`;
     await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${actor.id} FOR UPDATE`;
-    const user = await tx.user.findUnique({ where: { id: actor.id } });
-    if (!user || user.disabled || user.removedAt || !["ADMIN", "SUPER_ADMIN"].includes(user.globalRole)) throw new ApiError("管理權限已變更，請重新登入。", 403);
+    const user = await tx.user.findUnique({ where: { id: actor.id }, select: {
+      disabled: true, removedAt: true, globalRole: true, logtoName: true,
+      accounts: { where: { provider: "logto" }, select: { provider: true, providerAccountId: true } },
+    } });
+    // The verified Logto owner may have a stored USER role. Recheck the current
+    // identity as well as the authenticated actor before retaining owner access.
+    const currentAdmin = user && (isGlobalAdmin({ ...actor, globalRole: user.globalRole }) ||
+      (isOwner(actor) && accountOwnerIdentifier(user.accounts, user.globalRole, user.logtoName) === OWNER_IDENTIFIER));
+    if (!user || user.disabled || user.removedAt || !currentAdmin) throw new ApiError("管理權限已變更，請重新登入。", 403);
     const before = change.kind === "create" ? null : await tx.inspectionEvent.findUnique({ where: { id: change.id } });
     if (change.kind !== "create") {
       if (!before) throw new ApiError("找不到清查活動。", 404);
