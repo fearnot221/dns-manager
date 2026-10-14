@@ -86,13 +86,13 @@ it("offers per-record history and keeps deleted-record history accessible in emp
 
 it("exposes assignment beside each forward record and shows unassigned status", () => {
   const html = render();
-  expect(html).toContain('aria-label="指派單位 host.ee.ncu.edu.tw. 192.0.2.1"');
+  expect(html).toContain('aria-label="歸屬 host.ee.ncu.edu.tw. 192.0.2.1"');
   expect(html).toContain("尚未指派單位");
-  expect(render("2.0.192.in-addr.arpa.")).not.toContain('aria-label="指派單位');
+  expect(render("2.0.192.in-addr.arpa.")).not.toContain('aria-label="歸屬');
 });
 
 it("hides unit assignment from delegated administrators", () => {
   const html = renderToStaticMarkup(createElement(DnsManagementWorkbench, { systemAdmin: false, canDeleteInspections: false }));
   expect(html).toContain("清查</button>");
-  expect(html).not.toContain('aria-label="指派單位');
+  expect(html).not.toContain('aria-label="歸屬');
 });

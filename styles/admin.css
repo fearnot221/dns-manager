@@ -25,15 +25,16 @@
 .inventory-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(140px,.5fr) auto; align-items: center; gap: var(--space-5); padding: var(--space-4) var(--space-5); border-top: 1px solid var(--border); transition: background .12s var(--ease); }
 .inventory-group > h2 + .inventory-row { border-top: 0; }
 .inventory-row:hover { background: var(--row-hover); }
-.inventory-row-managed { grid-template-columns: minmax(0, 1fr) minmax(120px, .35fr) minmax(200px, 300px); }
+.inventory-row-managed { grid-template-columns: minmax(0, 1fr) minmax(120px, .35fr) auto; }
 .inventory-row strong, .inventory-row code, .inventory-row span { display: block; overflow-wrap: anywhere; }
 .inventory-row > div:first-child > strong { font-size: var(--text-body); font-weight: 600; }
 .inventory-row code { width: fit-content; max-width: 100%; margin: var(--space-1) 0; padding: 1px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-soft); color: var(--ink); font-size: var(--text-caption); }
 .inventory-row p, .inventory-row span { font-size: var(--text-caption); color: var(--muted); margin-top: 2px; }
-.inventory-actions { gap: var(--space-1); justify-content: flex-end; }
+.inventory-actions { gap: var(--space-1); justify-content: flex-end; flex-wrap: nowrap; min-width: 0; max-width: 100%; overflow-x: auto; padding: 2px; }
+.inventory-actions > .button { flex-shrink: 0; }
 .inspection-last { font-size: var(--text-caption); }
 .inspection-last strong { font-size: var(--text-body); font-weight: 500; font-variant-numeric: tabular-nums; }
-.inspection-last > span:first-child { display: inline-block; width: fit-content; padding: 0 6px; border: 1px solid color-mix(in srgb, var(--amber) 30%, var(--border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--amber) 7%, var(--panel)); color: var(--amber); }
+.inspection-last > .inspection-status { display: block; width: fit-content; padding: 0 6px; border: 1px solid color-mix(in srgb, var(--amber) 30%, var(--border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--amber) 7%, var(--panel)); color: var(--amber); }
 .inspection-history { border-top: 1px solid var(--border); padding-top: var(--space-4); }
 .inspection-history ol { list-style: none; padding: 0; margin: var(--space-3) 0 0; display: grid; gap: var(--space-4); }
 .inspection-history li { border-left: 1px solid var(--border-strong); padding-left: var(--space-3); overflow-wrap: anywhere; }
