@@ -35,6 +35,9 @@ async function main() {
 
     const result = await db.$transaction(async (tx) => {
       await tx.$executeRaw`LOCK TABLE "User" IN SHARE ROW EXCLUSIVE MODE`;
+      await tx.$queryRaw`SELECT "id" FROM "DnsRecordRequest" WHERE "status" = 'PENDING' ORDER BY "id" FOR UPDATE`;
+      const unresolved = await db.$queryRaw<{ count: bigint }[]>`SELECT count(*) FROM "DnsRequestPublication" p JOIN "DnsRecordRequest" r ON r."id" = p."requestId" WHERE p."completedAt" IS NULL AND r."status" = 'PENDING'`;
+      if (Number(unresolved[0].count)) throw new Error("Resolve pending DNS publications before resetting accounts; DNS may already be applied.");
       const targets = await tx.user.findMany({ select: { id: true } });
       const now = new Date();
       await tx.session.deleteMany();

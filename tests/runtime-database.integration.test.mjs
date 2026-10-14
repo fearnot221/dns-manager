@@ -28,6 +28,11 @@ describe.skipIf(!url)('least-privilege database provisioning in a disposable dat
    await client.user.update({where:{id:user.id},data:{note:'fixture'}});
    await client.session.create({data:{userId:user.id,sessionToken:crypto.randomUUID(),expires:new Date(Date.now()+60000)}});
    await client.securityRateLimit.create({data:{key:'runtime:'+crypto.randomUUID(),count:1,expiresAt:new Date(Date.now()+60000)}});
+   // External-write intents must work on the real least-privilege connection too.
+   const requestId=crypto.randomUUID();
+   await client.dnsRequestPublication.create({data:{requestId,connectionScope:'test-only',actorId:user.id,beforeRRSet:null,afterRRSet:{name:'fixture'}}});
+   await client.$transaction(async tx=>{await tx.dnsRequestPublication.update({where:{requestId},data:{completedAt:new Date()}});});
+   expect((await client.dnsRequestPublication.findUniqueOrThrow({where:{requestId}})).completedAt).not.toBeNull();
    const owner=await client.$queryRaw`SELECT tableowner FROM pg_tables WHERE schemaname='public' AND tablename='User'`;
    expect(owner[0].tableowner).not.toBe('dns_app');
   }finally{await rm(directory,{recursive:true,force:true});}

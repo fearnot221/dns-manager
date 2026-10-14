@@ -236,6 +236,20 @@ model DnsRecordRequest {
   @@index([status, createdAt])
 }
 
+// Intentionally no foreign key: the intent must commit on a separate connection
+// while the review transaction holds request/user locks. Keep it for recovery.
+model DnsRequestPublication {
+  requestId       String   @id
+  connectionScope String
+  beforeRRSet     Json?
+  afterRRSet      Json?
+  actorId         String
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+
+  @@index([completedAt])
+}
+
 model DnsRecordMetadata {
   id                 String   @id
   zoneName           String

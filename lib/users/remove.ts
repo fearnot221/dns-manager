@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/api/respond";
 import { isOwner, accountOwnerIdentifier, OWNER_IDENTIFIER } from "@/lib/auth/owner";
 import type { Actor } from "@/lib/dns/types";
 import { lockUnit, unitAudit } from "@/lib/units/service";
+import { assertNoUnresolvedPublications } from "@/lib/requests/publication";
 
 export async function removeUser(actor: Actor, id: string) {
   if (!isOwner(actor)) throw new ApiError("此操作需要帳號移除權限。", 403);
@@ -19,6 +20,12 @@ export async function removeUser(actor: Actor, id: string) {
       if (membership.role === "ADMIN" && await tx.unitMember.count({ where: { unitId: membership.unitId, role: "ADMIN", userId: { not: id }, user: { disabled: false, removedAt: null } } }) === 0) throw new ApiError("此帳號是單位唯一管理員，請先指派其他管理員。", 409);
 
     }
+    // Legacy reviews lock the request row; unit reviews also lock this user.
+    // Inspect intents only after waiting for any active review to finish.
+    await tx.$queryRaw`SELECT "id" FROM "DnsRecordRequest" WHERE "userId" = ${id} AND "status" = 'PENDING' ORDER BY "id" FOR UPDATE`;
+    // Read the durable journal on a fresh snapshot, even if this Serializable
+    // transaction began before the review released the user/request locks.
+    await assertNoUnresolvedPublications(db, id);
     const now = new Date();
     await tx.user.update({ where: { id }, data: { disabled: true, removedAt: now, passwordHash: null, globalRole: "USER" } });
     await tx.session.deleteMany({ where: { userId: id } });

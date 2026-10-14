@@ -1,5 +1,6 @@
 import { PUT as saveOwnership } from "@/app/api/inventory/route";
 import { createDataAccount } from "@/lib/users/create";
+import { spawnSync } from "node:child_process";
 import { changeInspectionEvent } from "@/lib/inspection-events/service";
 import { taipeiDate } from "@/lib/inspection-events/model";
 import { GET as contactOptions } from "@/app/api/users/contacts/route";
@@ -867,9 +868,103 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     else vi.mocked(powerdns.replaceRRSet).mockImplementationOnce(async (_name, rrset) => { zone.rrsets = [structuredClone(rrset)]; throw new Error("connection lost after write"); });
     await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toThrow("connection lost");
     expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("PENDING");
+    expect(await db.dnsRequestPublication.findUniqueOrThrow({ where: { requestId: pending.id } })).toMatchObject({ completedAt: null, actorId: admin.id });
+    await expect(reviewUnitRequest(admin, pending.id, "REJECT", "失敗後退回")).rejects.toMatchObject({ status: 409 });
     await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
     expect(last ? powerdns.deleteRRSet : powerdns.replaceRRSet).toHaveBeenCalledOnce();
     expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("APPROVED");
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBeNull();
+    expect((await db.dnsRequestPublication.findUniqueOrThrow({ where: { requestId: pending.id } })).completedAt).not.toBeNull();
+  });
+  it.each(["active", "removed-member", "disabled"])("reconciles an applied update after interrupted response with applicant %s", async (scenario) => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    vi.mocked(powerdns.replaceRRSet).mockImplementationOnce(async (_zone, rrset) => {
+      // The intent must already be visible on an independent DB connection.
+      expect(await db.dnsRequestPublication.findUnique({ where: { requestId: pending.id } })).not.toBeNull();
+      zone.rrsets = [structuredClone(rrset)];
+      throw new Error("connection lost after write");
+    });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toThrow("connection lost");
+    if (scenario === "removed-member") await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: null });
+    if (scenario === "disabled") await db.user.update({ where: { id: editor.id }, data: { disabled: true } });
+    await expect(reviewUnitRequest(admin, pending.id, "REJECT")).rejects.toMatchObject({ status: 409 });
+    const owner = { ...admin, globalRole: "SUPER_ADMIN" as const, portalIdentifier: "115502532" };
+    await expect(removeUser(owner, editor.id)).rejects.toMatchObject({ status: 409 });
+    expect((await db.user.findUniqueOrThrow({ where: { id: editor.id } })).removedAt).toBeNull();
+    await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
+    expect(powerdns.replaceRRSet).toHaveBeenCalledOnce();
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBeNull();
+    const target = recordId("local-mock", { zoneName: zone.name, recordName: zone.rrsets[0].name, recordType: "A", content: "192.0.2.10" });
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: target } })).unitId).toBe(unitId);
+  });
+  it("keeps intent when mail persistence fails after successful DNS write and safely completes on retry", async () => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    const previous = await db.systemSetting.findUnique({ where: { key: "mail.settings.v1" } });
+    try {
+      await db.systemSetting.upsert({ where: { key: "mail.settings.v1" }, create: { key: "mail.settings.v1", value: { config: {} } }, update: { value: { config: {} } } });
+      await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toThrow();
+      expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("PENDING");
+      expect((await db.dnsRequestPublication.findUniqueOrThrow({ where: { requestId: pending.id } })).completedAt).toBeNull();
+      await expect(reviewUnitRequest(admin, pending.id, "REJECT")).rejects.toMatchObject({ status: 409 });
+    } finally {
+      if (previous) await db.systemSetting.update({ where: { key: previous.key }, data: { value: previous.value! } });
+      else await db.systemSetting.delete({ where: { key: "mail.settings.v1" } });
+    }
+    await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
+    expect(powerdns.replaceRRSet).toHaveBeenCalledOnce();
+    expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("APPROVED");
+  });
+  it("retries an unapplied publication from its saved snapshot and blocks rejection even after later DNS changes", async () => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    vi.mocked(powerdns.replaceRRSet).mockRejectedValueOnce(new Error("offline before write"));
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toThrow("offline");
+    await expect(reviewUnitRequest(admin, pending.id, "REJECT")).rejects.toMatchObject({ status: 409 });
+    const original = structuredClone(zone.rrsets);
+    zone.rrsets[0].ttl = 600;
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 409 });
+    await expect(reviewUnitRequest(admin, pending.id, "REJECT")).rejects.toMatchObject({ status: 409 });
+    expect(powerdns.replaceRRSet).toHaveBeenCalledOnce();
+    zone.rrsets = original;
+    await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
+    expect(powerdns.replaceRRSet).toHaveBeenCalledTimes(2);
+    expect((await db.dnsRequestPublication.findUniqueOrThrow({ where: { requestId: pending.id } })).completedAt).not.toBeNull();
+  });
+  it("does not contact PowerDNS to publish when durable intent storage fails", async () => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    const spy = vi.spyOn(db.dnsRequestPublication, "create").mockRejectedValueOnce(new Error("journal unavailable"));
+    try {
+      await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toThrow("journal unavailable");
+      expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+    } finally { spy.mockRestore(); }
+  });
+  it("reconciles an applied CREATE with a null before snapshot without duplicating the write", async () => {
+    const recordName = `create-${crypto.randomUUID()}.example.com.`;
+    const application = await saveApplication(editor, { unitId, applicantName: "測試", applicantEmail: "contact@example.com", applicantUnit: "單位", applicantExtension: "1234", records: [{ zoneName: zone.name, recordName, recordType: "A", content: "192.0.2.40", ttl: 300, purpose: "新增測試" }] }, httpRequest());
+    const pending = await db.dnsRecordRequest.findFirstOrThrow({ where: { applicationId: application.applicationId } });
+    vi.mocked(powerdns.replaceRRSet).mockImplementationOnce(async (_zone, rrset) => { zone.rrsets = [structuredClone(rrset)]; throw new Error("response lost"); });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toThrow("response lost");
+    expect((await db.dnsRequestPublication.findUniqueOrThrow({ where: { requestId: pending.id } })).beforeRRSet).toBeNull();
+    await expect(reviewUnitRequest(admin, pending.id, "REJECT")).rejects.toMatchObject({ status: 409 });
+    await reviewUnitRequest(admin, pending.id, "APPROVE");
+    expect(powerdns.replaceRRSet).toHaveBeenCalledOnce();
+    expect((await unitDetail(viewer, unitId)).records.map(r => r.content)).toEqual(["192.0.2.40"]);
+  });
+  it("refuses operator account reset before it can cancel unresolved DNS publications", async () => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, changeInput(source));
+    vi.mocked(powerdns.replaceRRSet).mockRejectedValueOnce(new Error("interrupted"));
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toThrow("interrupted");
+    const count = await db.user.count();
+    const result = spawnSync(process.execPath, ["--import", "tsx", "scripts/reset-all-users.ts", "--apply", "--confirm", "RESET-ALL-USERS"], { env: { ...process.env, DATABASE_URL: url! }, encoding: "utf8", timeout: 20000 });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Resolve pending DNS publications");
+    expect(await db.user.count()).toBe(count);
+    expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("PENDING");
+    expect((await db.user.findUniqueOrThrow({ where: { id: editor.id } })).disabled).toBe(false);
   });
   it("rejects stale deletion submissions and protected record types", async () => {
     const source = await sourceRecord();
