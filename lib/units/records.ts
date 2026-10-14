@@ -20,11 +20,11 @@ export async function unitDetail(actor: Actor, unitId: string, mode: "dns" | "ma
   requireUnitDatabase();
   const role = await unitAccess(actor, unitId, "view");
   if (mode === "manage" && role !== "ADMIN") throw new ApiError("只有單位管理員或系統管理員可以管理單位。", 403);
-  const unit = await db.dnsUnit.findUnique({ where: { id: unitId }, select: { id: true, name: true, status: true, members: { select: { userId: true, role: true, user: { select: { name: true, studentId: true, disabled: true } } } } } });
+  const unit = await db.dnsUnit.findUnique({ where: { id: unitId }, select: { id: true, name: true, note: true, status: true, members: { select: { userId: true, role: true, user: { select: { name: true, studentId: true, disabled: true } } } } } });
   if (!unit) throw new ApiError("找不到單位。", 404);
   const members = unit.members.map((m) => ({ userId: m.userId, role: m.role, label: m.user.name || m.user.studentId || "未提供姓名", studentId: m.user.studentId, disabled: m.user.disabled }));
   const allowlist = role === "ADMIN" ? await db.unitAllowlist.findMany({ where: { unitId }, select: { studentId: true, userId: true }, orderBy: { studentId: "asc" } }) : [];
-  const summary = { allowlist, unit: { id: unit.id, name: unit.name, status: unit.status }, role, systemAdmin: isGlobalAdmin(actor), canApply: unit.status === "APPROVED" && unit.members.some((m) => m.userId === actor.id && ["EDITOR", "ADMIN"].includes(m.role)), members };
+  const summary = { allowlist, unit: { id: unit.id, name: unit.name, note: unit.note, status: unit.status }, role, systemAdmin: isGlobalAdmin(actor), canApply: unit.status === "APPROVED" && unit.members.some((m) => m.userId === actor.id && ["EDITOR", "ADMIN"].includes(m.role)), members };
   if (mode === "manage" && !isGlobalAdmin(actor) || unit.status !== "APPROVED") return { ...summary, records: [], recordsError: "" };
   const saved = await db.dnsRecordMetadata.findMany({ where: { unitId }, include: { inspections: { orderBy: { inspectedAt: "desc" }, select: { id: true, inspectedAt: true, inspectorName: true, note: true, eventName: true, eventClassified: true } } } });
   const scope = await connectionScope();

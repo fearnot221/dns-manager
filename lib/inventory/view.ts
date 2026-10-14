@@ -2,13 +2,14 @@ import { matchesDnsRecord } from "@/lib/dns/search";
 import type { InventoryRecord } from "./types";
 
 export type InventoryGroup = "applicantName" | "applicantUnit" | "purpose" | "zoneName";
-export type InventoryFilter = "all" | "unreviewed" | "reviewed" | "missing";
+export type InventoryFilter = "all" | "unassigned" | "unreviewed" | "reviewed" | "missing";
 
 /** View-only filtering; callers supply records already authorized by the server. */
 export function groupInventory(records: InventoryRecord[], group: InventoryGroup, status: InventoryFilter, query: string) {
   const groups = new Map<string, InventoryRecord[]>();
   for (const record of records) {
     const owner = record.ownership;
+    if (status === "unassigned" && owner.unitId) continue;
     if (status === "unreviewed" && owner.inspections.length) continue;
     if (status === "reviewed" && !owner.inspections.length) continue;
     if (status === "missing" && [owner.applicantName, owner.applicantUnit, owner.purpose].every((value) => value.trim())) continue;

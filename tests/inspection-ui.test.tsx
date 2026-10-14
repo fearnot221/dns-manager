@@ -4,7 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("@/lib/client/use-resource", () => ({ useResource: vi.fn() }));
 import { useResource } from "@/lib/client/use-resource";
 import { InventoryWorkbench } from "@/components/admin/inventory-workbench";
-import { OwnershipDialog } from "@/components/records/ownership-dialog";
+import { OwnershipDialog, UnitAssignmentDialog } from "@/components/records/ownership-dialog";
 import type { InventoryRecord } from "@/lib/inventory/types";
 
 const records: InventoryRecord[] = ["192.0.2.1", "192.0.2.2"].map((content) => ({ zoneName: "example.com.", recordName: "lab.example.com.", recordType: "A", content, ttl: 300, disabled: false, ownership: { id: content, applicantName: "申請人", applicantEmail: "", applicantUnit: "實驗室", applicantExtension: "1234", purpose: "研究", updatedAt: null, updatedBy: "", inspections: [] } }));
@@ -25,9 +25,9 @@ it("keeps direct inspection and history without assignment controls for delegate
   expect(html).not.toContain("指派單位"); expect(html).not.toContain("回覆");
 });
 
-it("restores unit assignment inside the system administrator inspection dialog", () => {
+it("keeps assignment separate from the inspection dialog", () => {
   const html = renderToStaticMarkup(createElement(OwnershipDialog, { record: records[0], inspection: true, systemAdmin: true, onClose: vi.fn(), onSaved: vi.fn(async () => {}) }));
-  expect(html).toContain("指派單位"); expect(html).toContain("所屬單位");
+  expect(html).not.toContain("指派單位"); expect(html).toContain("所屬單位");
   expect(html).not.toContain("回覆"); expect(html).not.toContain("通知");
   const reverse = renderToStaticMarkup(createElement(OwnershipDialog, { record: records[0], inspection: false, systemAdmin: true, onClose: vi.fn(), onSaved: vi.fn(async () => {}) }));
   expect(reverse).not.toContain("指派單位"); expect(reverse).not.toContain('name="note"'); expect(reverse).not.toContain("儲存並記錄清查"); expect(reverse).toContain("儲存歸屬資料");
@@ -67,4 +67,14 @@ it("places ee and ce first and initially shows ee, ahead of reverse domains", ()
   const labels = [...html.matchAll(/role="tab"[^>]*>([^<]+)<\/button>/g)].map((match) => match[1]);
   expect(labels).toEqual(["EE.NCU.EDU.TW.", "ce.ncu.edu.tw.", "2.0.192.in-addr.arpa.", "a.example.", "z.example."]);
   expect(html).toContain('aria-label="清查 host.EE.NCU.EDU.TW. 192.0.2.1"');
+});
+
+it("opens a standalone assignment dialog with a cancel action and approved units only", () => {
+  vi.mocked(useResource).mockReturnValue({ data: { units: [{ id: "active", name: "可指派單位", status: "APPROVED" }, { id: "inactive", name: "不可指派單位", status: "PENDING" }] }, error: "", loading: false, reload: vi.fn() } as never);
+  const html = renderToStaticMarkup(createElement(UnitAssignmentDialog, { record: records[0], onClose: vi.fn(), onSaved: vi.fn(async () => {}) }));
+  expect(html).toContain("確認指派單位");
+  expect(html).toContain("取消");
+  expect(html).not.toContain("返回清查");
+  expect(html).not.toContain("不可指派單位");
+  expect(html).not.toContain('name="applicantName"');
 });

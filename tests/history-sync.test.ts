@@ -27,3 +27,9 @@ it("never overwrites an existing initial snapshot", async () => {
   await syncDnsHistory("example.com.", "one", [{ ...rrset, ttl: 600 }]);
   expect(db.auditLog.createMany).not.toHaveBeenCalled();
 });
+
+it("does not treat ownership edits as DNS baselines", async () => {
+  vi.mocked(db.auditLog.findMany).mockResolvedValue([{ id: "metadata", createdAt: new Date("2026-01-01"), zone: "example.com.", recordName: rrset.name, recordType: "A", dnsScope: "one", action: "UPDATE_DNS_OWNERSHIP", success: true, newValue: { purpose: "網站" }, userEmail: "admin" }] as never);
+  await syncDnsHistory("example.com.", "one", [rrset]);
+  expect(db.auditLog.createMany).toHaveBeenCalledWith(expect.objectContaining({ data: [expect.objectContaining({ newValue: rrset, userEmail: "PowerDNS" })] }));
+});

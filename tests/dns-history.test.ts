@@ -76,3 +76,17 @@ it("queries durable production snapshots with the current connection scope", asy
   expect(db.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ zone, success: true, OR: [{ dnsScope: "current-server" }, { dnsScope: null }] }) }));
   expect(localAuditEvents).not.toHaveBeenCalled();
 });
+
+it("includes ownership and assignment history with sanitized fields and searchable metadata", async () => {
+  const update = source({ action: "UPDATE_DNS_OWNERSHIP", oldValue: { applicantName: "原申請人" }, newValue: { applicantName: "新申請人", content: "192.0.2.1", purpose: "研究網站", secret: "hidden", inspections: [{ note: "private" }] } });
+  vi.mocked(localAuditEvents).mockResolvedValue([update] as never);
+  const { events, total } = await (await request("&q=" + encodeURIComponent("研究網站"))).json();
+  expect(total).toBe(1);
+  expect(events[0]).toMatchObject({ operation: "OWNERSHIP", before: null, after: null, ownership: { before: { applicantName: "原申請人" }, after: { applicantName: "新申請人", purpose: "研究網站" } } });
+  expect(JSON.stringify(events)).not.toMatch(/hidden|private/);
+  expect(dnsHistoryEvents({ ...update, action: "ASSIGN_DNS_UNIT" })[0].operation).toBe("ASSIGNMENT");
+  expect(dnsHistoryEvents({ ...update, success: false })).toEqual([]);
+  expect(dnsHistoryEvents({ ...update, recordName: null })).toEqual([]);
+  vi.mocked(localAuditEvents).mockResolvedValue([{ ...update, dnsScope: "other-server" }] as never);
+  expect((await (await request()).json()).total).toBe(0);
+});

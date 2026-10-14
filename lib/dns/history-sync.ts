@@ -14,7 +14,8 @@ export async function syncDnsHistory(zone: string, scope: string, rrsets: RRSet[
     const key = (rrset: Pick<RRSet, "name" | "type">) => JSON.stringify([rrset.name, rrset.type]);
     for (const source of [...sources].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id.localeCompare(b.id))) {
       for (const event of dnsHistoryEvents(source)) {
-        const rrset = event.before ?? event.after!;
+        const rrset = event.before ?? event.after;
+        if (!rrset) continue;
         if (event.operation === "SYNC") synced.add(key(rrset));
         if (!states.has(key(rrset))) states.set(key(rrset), { rrset, createdAt: new Date(source.createdAt), recovered: true });
       }

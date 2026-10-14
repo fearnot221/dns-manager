@@ -26,3 +26,8 @@ it("finds only apex records for @ while retaining inspection filters", () => {
   expect(groupInventory([apex, child], "zoneName", "all", " @ ")[0][1]).toEqual([apex]);
   expect(groupInventory([apex, child], "zoneName", "reviewed", "@")).toEqual([]);
 });
+
+it("uses unit assignment rather than free-text applicant unit for unassigned filtering", () => {
+  const assigned = { ...record, ownership: { ...record.ownership, unitId: "unit-1" } };
+  expect(groupInventory([record, assigned], "zoneName", "unassigned", "")[0][1]).toEqual([record]);
+});

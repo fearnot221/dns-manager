@@ -9,17 +9,14 @@ import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Dialog } from "@/components/ui/dialog";
 import { apiRequest, jsonRequest } from "@/lib/client/api";
-import { zoneCategory } from "@/lib/dns/zone-category";
 import type { InventoryRecord } from "@/lib/inventory/types";
 import { inspectionEventLabel } from "@/lib/inspection-events/model";
 
-export function OwnershipDialog({ drafts, record, inspection = false, systemAdmin = false, canDeleteInspections = false, onClose, onSaved }: { drafts?: FormDrafts; record: InventoryRecord; inspection?: boolean; systemAdmin?: boolean; canDeleteInspections?: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
+export function OwnershipDialog({ drafts, record, inspection = false, canDeleteInspections = false, onClose, onSaved }: { drafts?: FormDrafts; record: InventoryRecord; inspection?: boolean; systemAdmin?: boolean; canDeleteInspections?: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
   const [pending, setPending] = useState(false); const [error, setError] = useState(""); const sending = useRef(false);
-  const [assigning, setAssigning] = useState(false);
   const errorId = useId();
   const owner = record.ownership;
   const { attachForm, onChange: captureDraft, clear: clearDraft } = useFormDraft(drafts, JSON.stringify([owner.id, owner.updatedAt, record.zoneName, record.recordName, record.recordType, record.content]));
-  const canAssignUnit = systemAdmin && zoneCategory(record.zoneName) === "forward";
   const errorRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   async function removeInspection(id: string) {
@@ -42,11 +39,10 @@ export function OwnershipDialog({ drafts, record, inspection = false, systemAdmi
     } catch (error) { setError(error instanceof Error ? error.message : "儲存失敗，請重試。"); }
     finally { sending.current = false; setPending(false); }
   }
-  if (assigning && inspection && canAssignUnit) return <UnitAssignmentDialog record={record} onClose={onClose} onBack={() => setAssigning(false)} onSaved={onSaved} />;
   return <Dialog title={inspection ? "DNS 清查" : "DNS 歸屬資料"} description="歸屬與清查資料獨立保存，不會改變 DNS 解析。" pending={pending} onClose={onClose}>
     <form ref={attachForm} onChange={captureDraft} onSubmit={submit} aria-describedby={error ? errorId : undefined}><fieldset disabled={pending} className="dialog-fields"><div className="modal-body">
       <div className="review-record"><strong>{record.recordName}</strong><span>{record.recordType} · {record.zoneName}</span><code>{record.content}</code></div>
-      {inspection && <div><p className="description">所屬單位：{owner.unitId ? owner.unitName || owner.applicantUnit : "尚未指派"}</p>{canAssignUnit && <button type="button" className="button" onClick={() => { setAssigning(true); setError(""); }}>指派單位</button>}</div>}
+      {inspection && <div><p className="description">所屬單位：{owner.unitId ? owner.unitName || owner.applicantUnit : "尚未指派"}</p></div>}
       <h3>歸屬資料</h3>
       <ContactPicker />
       <div className="field-grid four"><label>申請人姓名<input name="applicantName" defaultValue={owner.applicantName} maxLength={100} /></label><label>申請人電子郵件<input name="applicantEmail" type="email" defaultValue={owner.applicantEmail} /></label><label>申請單位<input name="applicantUnit" defaultValue={owner.applicantUnit} maxLength={200} /></label><label>單位分機<input name="applicantExtension" defaultValue={owner.applicantExtension} maxLength={30} /></label></div>
@@ -67,7 +63,7 @@ function InspectionHistory({ record, onDelete }: { record: InventoryRecord; onDe
   return (<section className="inspection-history"><h3>歷次清查 <span>（{record.ownership.inspections.length}）</span></h3>{record.ownership.inspections.length ? <ol>{record.ownership.inspections.map((item) => <li key={item.id}><strong>{new Date(item.inspectedAt).toLocaleString("zh-TW")}</strong><PersonName name={item.inspectorName} email={item.inspectorEmail} studentId={item.inspectorStudentId} /><p>{inspectionEventLabel(item)}</p><p>{item.note || "未填備註"}</p>{onDelete && <button type="button" className="button danger" aria-label={`刪除 ${new Date(item.inspectedAt).toLocaleString("zh-TW")} 的清查紀錄`} onClick={() => void onDelete(item.id)}>刪除</button>}</li>)}</ol> : <p className="description">尚無清查紀錄。</p>}</section>);
 }
 
-function UnitAssignmentDialog({ record, onClose, onBack, onSaved }: { record: InventoryRecord; onClose: () => void; onBack: () => void; onSaved: () => Promise<void> }) {
+export function UnitAssignmentDialog({ record, onClose, onSaved }: { record: InventoryRecord; onClose: () => void; onSaved: () => Promise<void> }) {
   const resource = useResource<{ units: { id: string; name: string; status: string }[] }>("/api/units");
   const units = (resource.data?.units ?? []).filter((unit) => unit.status === "APPROVED");
   const [unitId, setUnitId] = useState(record.ownership.unitId ?? "");
@@ -96,6 +92,6 @@ function UnitAssignmentDialog({ record, onClose, onBack, onSaved }: { record: In
       {resource.loading ? <p role="status">正在載入可指派的單位…</p> : resource.error ? <ResourceError message={resource.error} retry={resource.reload} /> : units.length ? <label>指派給單位<Select aria-label="指派給單位" required value={unitId} onChange={setUnitId} aria-invalid={!!error} aria-describedby={`${helpId}${error ? ` ${errorId}` : ""}`} options={[{ value: "", label: "請選擇單位", disabled: true }, ...units.map((unit) => ({ value: unit.id, label: unit.name }))]} /></label> : <p role="status">目前沒有已啟用的單位，請先至「單位管理」建立單位。</p>}
       <p id={helpId} className="field-help">{record.ownership.unitId && unitId && record.ownership.unitId !== unitId ? "改派後，原單位將無法透過單位 DNS 存取此筆紀錄；原單位尚未核准的變更申請也無法再核准。" : unitId && unitId === record.ownership.unitId ? "此筆 DNS 已屬於選取的單位，無須再次指派。" : "只指派這一筆解析值，其他 DNS 紀錄不受影響。"}</p>
       {error && <p id={errorId} ref={errorRef} tabIndex={-1} className="form-error" role="alert">{error}</p>}
-    </div><div className="modal-foot"><button type="button" className="button" onClick={onBack}>返回清查</button><button type="submit" className="button primary" disabled={pending || resource.loading || !!resource.error || !selected || unitId === record.ownership.unitId}>{pending ? "指派中…" : "確認指派單位"}</button></div></fieldset></form>
+    </div><div className="modal-foot"><button type="button" className="button" onClick={onClose}>取消</button><button type="submit" className="button primary" disabled={pending || resource.loading || !!resource.error || !selected || unitId === record.ownership.unitId}>{pending ? "指派中…" : "確認指派單位"}</button></div></fieldset></form>
   </Dialog>;
 }

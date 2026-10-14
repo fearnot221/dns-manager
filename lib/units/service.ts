@@ -66,7 +66,7 @@ async function lockManagerAndActor(tx: Prisma.TransactionClient, actor: Actor, u
   const user = await tx.user.findUnique({ where: { id: userId }, select: { studentId: true } });
   if (user?.studentId !== studentId.trim()) throw new ApiError("管理人的學號資料已更新，請重新確認。", 409);
 }
-export async function createUnit(actor: Actor, name: string, managerStudentId?: string) {
+export async function createUnit(actor: Actor, name: string, managerStudentId?: string, note = "") {
   requireUnitCreator(actor);
   requireUnitDatabase();
   try {
@@ -78,7 +78,7 @@ export async function createUnit(actor: Actor, name: string, managerStudentId?: 
         await lockActiveUser(tx, actor.id);
         if (!await isCurrentUnitAdmin(tx, actor)) throw new ApiError("只有系統管理員可以建立單位。", 403);
       }
-      const unit = await tx.dnsUnit.create({ data: { name, status: "APPROVED", ...(managerId && studentId ? { allowlist: { create: { studentId, userId: managerId } }, members: { create: { userId: managerId, role: "ADMIN" as const } } } : {}) }, select: { id: true, name: true, status: true } });
+      const unit = await tx.dnsUnit.create({ data: { name, note, status: "APPROVED", ...(managerId && studentId ? { allowlist: { create: { studentId, userId: managerId } }, members: { create: { userId: managerId, role: "ADMIN" as const } } } : {}) }, select: { id: true, name: true, note: true, status: true } });
       await unitAudit(tx, actor, "CREATE_DNS_UNIT", null, { ...unit, creatorId: actor.id, managerId, managerStudentId: studentId });
       return unit;
     });
