@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head><meta charset="UTF-8" /></head>
+  <body>
+    <template>
+      <style>
+@font-face { font-family: "DM Display"; src: local("Songti TC Bold"), local("STSongti-TC-Bold"); font-weight: 700; }
+@font-face { font-family: "DM Sans"; src: local("PingFang TC"), local("PingFangTC-Regular"); font-weight: 400; }
+@font-face { font-family: "DM Sans"; src: local("PingFang TC Semibold"), local("PingFangTC-Semibold"); font-weight: 600 700; }
+@font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono-latin.woff2") format("woff2"); font-weight: 100 900; }
+#root { position: absolute; inset: 0; overflow: hidden; background: #f4f5f7; color: #1a1d23; font-family: "DM Sans", sans-serif; }
+#root * { box-sizing: border-box; }
+.stage { position: absolute; inset: 0; background: #f4f5f7; will-change: transform; }
+.dots { position: absolute; inset: -40px; background-image: radial-gradient(#2457b838 2.4px, transparent 2.6px); background-size: 31px 31px; }
+.ghost { position: absolute; font-family: "DM Display", serif; font-weight: 700; color: #2457b824; line-height: .8; white-space: nowrap; }
+.meta { position: absolute; font-family: "Geist Mono", monospace; font-size: 20px; letter-spacing: .04em; color: #5d6470; }
+.headline { position: absolute; font-family: "DM Display", serif; font-weight: 700; line-height: 1.16; color: #1a1d23; }
+.line { display: block; }
+.cap-wrap { position: absolute; left: 0; right: 0; bottom: 40px; display: flex; justify-content: center; }
+.cap { position: absolute; bottom: 0; max-width: 1360px; text-align: center; font-size: 31px; font-weight: 600; line-height: 1.5; color: #ffffff; background: #1a1d23eb; padding: 14px 32px; border-radius: 14px; opacity: 0; }
+.ticket { position: absolute; background: #fff; border: 3px solid #1a1d23; border-radius: 18px; box-shadow: 10px 10px 0 #1a1d23; padding: 30px 38px; transform-origin: 0 0; }
+.ticket .lbl { font-size: 20px; font-weight: 700; letter-spacing: .14em; color: #5d6470; }
+.ticket .rec { font-family: "Geist Mono", monospace; font-size: 44px; margin: 16px 0 24px; white-space: nowrap; }
+.ticket .rec em { font-style: normal; color: #2457b8; }
+.pills { position: relative; height: 46px; }
+.pill { display: inline-block; font-size: 23px; font-weight: 700; padding: 6px 20px; border-radius: 999px; }
+.pill.wait { color: #a14f05; background: #fdf1e4; border: 2px solid #a14f0559; }
+.pill.ok { color: #15803d; background: #e7f5ec; border: 2px solid #15803d59; }
+.pill.unit { color: #2457b8; background: #ebf1fa; border: 2px solid #2457b84d; margin-left: 12px; }
+.pill.abs { position: absolute; left: 0; top: 0; }
+
+.progress { position: absolute; left: 81px; right: 81px; top: 42px; height: 6px; display: flex; gap: 8px; }
+.progress i { position: relative; flex: 1; background: #cdd2da; border-radius: 6px; overflow: hidden; }
+.progress i.done { background: #2457b88c; }
+.progress i b { position: absolute; inset: 0; background: #2457b8; transform-origin: 0 50%; display: block; }
+.role { position: absolute; right: 81px; top: 64px; height: 44px; }
+.role span { position: absolute; right: 0; top: 0; white-space: nowrap; font-size: 20px; font-weight: 700; color: #2457b8; background: #ebf1fa; border: 2px solid #2457b84d; padding: 6px 18px; border-radius: 999px; }
+.rail { position: absolute; left: 81px; top: 128px; width: 420px; }
+.rail .k { font-size: 20px; font-weight: 700; color: #2457b8; letter-spacing: .14em; }
+.rail h2 { font-family: "DM Display", serif; font-weight: 700; font-size: 60px; line-height: 1.16; margin: 12px 0 40px; }
+.rail ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 18px; }
+.rail li { position: relative; display: flex; gap: 16px; align-items: center; font-size: 25px; color: #5d6470; }
+.rail li b { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 3px solid #cdd2da; font-family: "Geist Mono", monospace; font-size: 18px; color: #5d6470; background: #f4f5f7; }
+.win { position: absolute; left: 547px; top: 104px; width: 1238px; height: 810px; background: #fff; border-radius: 14px; box-shadow: 0 0 0 2px #cdd2da, 0 42px 80px -30px #1a1d2366; overflow: hidden; }
+.bar { position: absolute; left: 0; right: 0; top: 0; height: 36px; background: #eceef2; border-bottom: 2px solid #cdd2da; }
+.bar i { position: absolute; top: 12px; width: 12px; height: 12px; border-radius: 50%; background: #c3c8d1; }
+.url { position: absolute; left: 0; right: 0; top: 6px; margin: 0 auto; width: max-content; font-family: "Geist Mono", monospace; font-size: 15px; color: #5d6470; background: #fff; padding: 3px 26px; border-radius: 999px; }
+.screen { position: absolute; left: 0; top: 36px; width: 1238px; height: 774px; overflow: hidden; background: #f4f5f7; }
+.zoom-outer { position: absolute; inset: 0; transform-origin: 50% 50%; will-change: transform; }
+.zoom-inner { position: absolute; inset: 0; will-change: transform; }
+.footage { position: absolute; left: 0; top: 0; width: 1238px; height: 774px; object-fit: fill; }
+.ring { position: absolute; border: 4px solid #a14f05; border-radius: 10px; box-shadow: 0 0 0 9px #a14f0526; opacity: 0; }
+.stamp { position: absolute; font-family: "DM Display", serif; font-weight: 700; font-size: 46px; color: #15803d; border: 6px solid #15803d; border-radius: 12px; padding: 4px 24px; background: #ffffffe6; opacity: 0; }
+</style>
+      <div id="root" data-composition-id="s07-change" data-width="1920" data-height="1080" data-duration="30.306">
+        <div class="stage">
+        <div class="dots" data-layout-ignore></div>
+        <div class="ghost" id="ghost" data-layout-ignore aria-hidden="true" style="left:38px;bottom:-30px;font-size:288px">05</div>
+        <div class="progress"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class=""><b class="pfill"></b></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i></div>
+        <div class="role"><span id="role-a">單位成員</span></div>
+        <div class="rail">
+          <div class="k" id="rk">第 5 章</div>
+          <h2><span class="line" id="rt-0">申請</span><span class="line" id="rt-1">變更或刪除</span></h2>
+          <ol>
+            <li id="st-0"><b>1</b><span>點選「申請變更」</span></li>
+            <li id="st-1"><b>2</b><span>新內容與原因</span></li>
+            <li id="st-2"><b>3</b><span>送出・刪除同理</span></li>
+          </ol>
+        </div>
+        <div class="win" id="win">
+          <div class="bar"><i style="left:17px"></i><i style="left:35px"></i><i style="left:53px"></i><div class="url">dns.campus.test/dns</div></div>
+          <div class="screen">
+            <div class="zoom-outer" id="zo" data-layout-allow-overflow>
+              <div class="zoom-inner" id="zi" data-layout-allow-overflow>
+                <video class="footage" id="foot" src="assets/clips/s07-change.mp4" muted playsinline data-start="0" data-duration="30.306" data-track-index="0"></video>
+                <div class="ring" id="ring-0" style="left:989.54px;top:450.494px;width:77.375px;height:41.267px"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap-wrap">
+          <div class="cap" id="cap-0">要修改既有紀錄，在該筆紀錄點選「申請變更」。</div>
+          <div class="cap" id="cap-1">填入新的解析內容與變更原因，名稱、類型與 TTL 會維持不變。</div>
+          <div class="cap" id="cap-2">確認後送出變更申請。</div>
+          <div class="cap" id="cap-3">申請刪除的流程相同：寫下原因後送出，經管理員核准才會刪除。</div>
+        </div>
+        </div>
+      </div>
+      <script>
+        (function () {
+          const tl = gsap.timeline({ paused: true });
+          const q = (s) => document.querySelector('[data-composition-id="s07-change"] ' + s);
+          const qa = (s) => Array.from(document.querySelectorAll('[data-composition-id="s07-change"] ' + s));
+          tl.fromTo(q(".stage"), { x: 1920 }, { x: 0, duration: 0.6, ease: "power3.inOut" }, 0);
+          tl.fromTo(q(".stage"), { x: 0 }, { x: -480, duration: 0.6, ease: "power3.inOut", immediateRender: false }, 29.706);
+          tl.fromTo(q(".dots"), { x: 0, y: 0 }, { x: 30, y: -15, duration: 6, ease: "sine.inOut", yoyo: true, repeat: 4 }, 0);
+          tl.fromTo(q("#ghost"), { x: -40 }, { x: 20, duration: 30.306, ease: "none" }, 0);
+          tl.fromTo(q(".pfill"), { scaleX: 0 }, { scaleX: 1, duration: 30.306, ease: "none" }, 0);
+          tl.set(q("#rk"), { opacity: 0 }, 0);
+          tl.set(q("#rk"), { opacity: 1, y: 40 }, 0.45);
+          tl.to(q("#rk"), { y: 0, duration: 0.16, ease: "power4.out" }, 0.45);
+          tl.set(q("#rt-0"), { opacity: 0 }, 0);
+          tl.set(q("#rt-0"), { opacity: 1, y: 70 }, 0.6);
+          tl.to(q("#rt-0"), { y: 0, duration: 0.19, ease: "power4.out" }, 0.6);
+          tl.set(q("#rt-1"), { opacity: 0 }, 0);
+          tl.set(q("#rt-1"), { opacity: 1, y: 70 }, 0.77);
+          tl.to(q("#rt-1"), { y: 0, duration: 0.19, ease: "power4.out" }, 0.77);
+          tl.fromTo(q("#st-0"), { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, 0.95);
+          tl.fromTo(q("#st-1"), { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, 1.02);
+          tl.fromTo(q("#st-2"), { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, 1.09);
+          tl.fromTo(q("#win"), { x: 140, scale: 0.96 }, { x: 0, scale: 1, duration: 0.9, ease: "power4.out" }, 0.25);
+          tl.set(q("#st-0 b"), { backgroundColor: "#f4f5f7", borderColor: "#cdd2da", color: "#5d6470" }, 0);
+          tl.set(q("#st-0 span"), { color: "#5d6470", fontWeight: 400 }, 0);
+          tl.set(q("#st-1 b"), { backgroundColor: "#f4f5f7", borderColor: "#cdd2da", color: "#5d6470" }, 0);
+          tl.set(q("#st-1 span"), { color: "#5d6470", fontWeight: 400 }, 0);
+          tl.set(q("#st-2 b"), { backgroundColor: "#f4f5f7", borderColor: "#cdd2da", color: "#5d6470" }, 0);
+          tl.set(q("#st-2 span"), { color: "#5d6470", fontWeight: 400 }, 0);
+          tl.set(q("#st-0 b"), { backgroundColor: "#2457b8", borderColor: "#2457b8", color: "#ffffff" }, 0.01);
+          tl.set(q("#st-0 span"), { color: "#1a1d23", fontWeight: 700 }, 0.01);
+          tl.set(q("#st-1 b"), { backgroundColor: "#f4f5f7", borderColor: "#cdd2da", color: "#5d6470" }, 0.01);
+          tl.set(q("#st-1 span"), { color: "#5d6470", fontWeight: 400 }, 0.01);
+          tl.set(q("#st-2 b"), { backgroundColor: "#f4f5f7", borderColor: "#cdd2da", color: "#5d6470" }, 0.01);
+          tl.set(q("#st-2 span"), { color: "#5d6470", fontWeight: 400 }, 0.01);
+          tl.set(q("#st-0 b"), { backgroundColor: "#f4f5f7", borderColor: "#2457b8", color: "#2457b8" }, 9.607);
+          tl.set(q("#st-0 span"), { color: "#5d6470", fontWeight: 400 }, 9.607);
+          tl.set(q("#st-1 b"), { backgroundColor: "#2457b8", borderColor: "#2457b8", color: "#ffffff" }, 9.607);
+          tl.set(q("#st-1 span"), { color: "#1a1d23", fontWeight: 700 }, 9.607);
+          tl.set(q("#st-2 b"), { backgroundColor: "#f4f5f7", borderColor: "#cdd2da", color: "#5d6470" }, 9.607);
+          tl.set(q("#st-2 span"), { color: "#5d6470", fontWeight: 400 }, 9.607);
+          tl.set(q("#st-0 b"), { backgroundColor: "#f4f5f7", borderColor: "#2457b8", color: "#2457b8" }, 21.623);
+          tl.set(q("#st-0 span"), { color: "#5d6470", fontWeight: 400 }, 21.623);
+          tl.set(q("#st-1 b"), { backgroundColor: "#f4f5f7", borderColor: "#2457b8", color: "#2457b8" }, 21.623);
+          tl.set(q("#st-1 span"), { color: "#5d6470", fontWeight: 400 }, 21.623);
+          tl.set(q("#st-2 b"), { backgroundColor: "#2457b8", borderColor: "#2457b8", color: "#ffffff" }, 21.623);
+          tl.set(q("#st-2 span"), { color: "#1a1d23", fontWeight: 700 }, 21.623);
+          tl.fromTo(q("#ring-0"), { opacity: 0, scale: 1.12 }, { opacity: 1, scale: 1, duration: 0.35, ease: "power3.out" }, 23.075);
+          tl.to(q("#ring-0"), { opacity: 0, duration: 0.3, ease: "power2.in" }, 25.275);
+          tl.to(q("#zo"), { scale: 1.45, duration: 1.0, ease: "power3.inOut" }, 9.638);
+          tl.to(q("#zi"), { x: 0, y: 113.178, duration: 1.0, ease: "power3.inOut" }, 9.638);
+          tl.to(q("#zo"), { scale: 1, duration: 0.9, ease: "power3.inOut" }, 17.464);
+          tl.to(q("#zi"), { x: 0, y: 0, duration: 0.9, ease: "power3.inOut" }, 17.464);
+          tl.fromTo(q("#cap-0"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" }, 4.383);
+          tl.to(q("#cap-0"), { opacity: 0, duration: 0.2, ease: "power2.in" }, 9.655000000000001);
+          tl.fromTo(q("#cap-1"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" }, 10.632);
+          tl.to(q("#cap-1"), { opacity: 0, duration: 0.2, ease: "power2.in" }, 17.512);
+          tl.fromTo(q("#cap-2"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" }, 18.462);
+          tl.to(q("#cap-2"), { opacity: 0, duration: 0.2, ease: "power2.in" }, 21.67);
+          tl.fromTo(q("#cap-3"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" }, 22.538);
+          tl.to(q("#cap-3"), { opacity: 0, duration: 0.2, ease: "power2.in" }, 29.754);
+
+          window.__timelines["s07-change"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

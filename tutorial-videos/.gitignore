@@ -1,0 +1,14 @@
+# Finished films are distributed separately (GitHub limits files to 100 MB).
+*.mp4
+renders/
+# Per-project build inputs regenerated locally: screen-recording footage and tooling.
+*/assets/footage.mp4
+*/assets/clips/
+*/node_modules/
+*/package-lock.json
+*/.media/audio/
+*/snapshots/
+# HyperFrames Studio / CLI caches.
+*/.hyperframes/
+*/.thumbnails/
+*/.waveform-cache/

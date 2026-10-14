@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Globe2, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 import { useResource } from "@/lib/client/use-resource";
 import { ApiError, apiRequest, jsonRequest } from "@/lib/client/api";
 import { applicationTypes, type ApplicationPolicy } from "@/lib/requests/policy-model";
@@ -33,8 +33,8 @@ function GlobalApplicationPolicy() {
   const policy = resource.data.policy;
 
   return <section className="card">
-    <ActionFeedback feedback={feedback} />
-    <header className="workflow-panel-head"><SlidersHorizontal size={22} aria-hidden="true" /><div><h2>DNS 申請規則</h2><p>控制開放申請的紀錄類型，以及使用者需要符合的資格。</p></div></header>
+    <div className="workflow-feedback"><ActionFeedback feedback={feedback} /></div>
+    <header className="workflow-panel-head"><div><h2>DNS 申請規則</h2><p>控制開放申請的紀錄類型，以及使用者需要符合的資格。</p></div></header>
     <form key={policy.updatedAt} className="form-surface" onSubmit={async (event) => {
       event.preventDefault();
       if (saving.current) return;
@@ -117,16 +117,16 @@ function ZoneApplicationSettings() {
 
   return <section className="card table-card">
     <ActionFeedback feedback={feedback} />
-    <header className="workflow-panel-head"><Globe2 size={22} aria-hidden="true" /><div><h2>開放申請的網域</h2><p>選擇使用者可在申請表中選取的網域。暫停申請不會刪除 DNS，也不影響已送出的案件。</p></div></header>
+    <header className="workflow-panel-head"><div><h2>開放申請的網域</h2><p>選擇使用者可在申請表中選取的網域。暫停申請不會刪除 DNS，也不影響已送出的案件。</p></div></header>
     <div className="table-tools">
       <div className="filter-input"><Search size={15} aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋網域" aria-label="搜尋申請網域" /></div>
       <Select className="zone-access-filter" aria-label="申請開放狀態" value={status} onChange={setStatus} options={[{ value: "all", label: "全部申請狀態" }, { value: "open", label: "開放申請" }, { value: "closed", label: "暫停申請" }]} />
       <div className="tool-spacer" />
       <button type="button" className="button" disabled={resource.loading || !!pending} onClick={refresh}><RefreshCw size={14} className={resource.loading ? "spin" : ""} aria-hidden="true" />重新整理</button>
     </div>
-    {!resource.loading && !resource.error && <p className="record-results" role="status">顯示 {rows.length} / {zones.length} 個網域</p>}
+    {!!resource.data && !resource.error && <p className="record-results" role="status">顯示 {rows.length} / {zones.length} 個網域</p>}
     {resource.error ? <ResourceError message={resource.error} retry={refresh} /> : <ScrollRegion className="table-wrap" label="可申請網域設定，可水平捲動"><table><thead><tr><th scope="col">網域名稱</th><th scope="col">類別</th><th scope="col">使用者申請</th></tr></thead><tbody>
-      {resource.loading ? <LoadingRows columns={3} /> : rows.map((zone) => {
+      {resource.loading && !resource.data ? <LoadingRows columns={3} /> : rows.map((zone) => {
         const access = accessFor(zone);
         const category = zoneCategories.find((item) => item.id === zoneCategory(zone.name));
         return <tr key={zone.id}><td><strong>{zone.name.replace(/\.$/, "")}</strong></td><td>{category?.label ?? "一般網域"}</td><td><button type="button" className="zone-access-switch" role="switch" aria-checked={access.enabled} aria-label={`${zone.name} 開放申請`} disabled={!!pending||zone.canManageApplications===false} title={zone.canManageApplications===false?"需要完整網域管理權限才能變更申請設定":undefined} onClick={() => access.enabled ? setClosing(zone) : void save(zone, true)}><span className="zone-switch-track" aria-hidden="true"><span /></span><span>{pending === zone.id ? "儲存中…" : access.enabled ? "開放申請" : "暫停申請"}</span></button></td></tr>;

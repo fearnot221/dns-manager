@@ -1,0 +1,65 @@
+{
+  "total": 320.442,
+  "scenes": [
+    {
+      "id": "s01-hook",
+      "start": 0,
+      "dur": 12.604
+    },
+    {
+      "id": "s02-map",
+      "start": 12.004,
+      "dur": 12.67
+    },
+    {
+      "id": "s03-login",
+      "start": 24.074,
+      "dur": 29.284
+    },
+    {
+      "id": "s04-review",
+      "start": 52.758,
+      "dur": 49.941
+    },
+    {
+      "id": "s05-dns",
+      "start": 102.099,
+      "dur": 61.589
+    },
+    {
+      "id": "s06-policy",
+      "start": 163.088,
+      "dur": 27.237
+    },
+    {
+      "id": "s07-units",
+      "start": 189.725,
+      "dur": 28.437
+    },
+    {
+      "id": "s08-protect-events",
+      "start": 217.562,
+      "dur": 34.132
+    },
+    {
+      "id": "s09-accounts",
+      "start": 251.094,
+      "dur": 24.566
+    },
+    {
+      "id": "s10-audit",
+      "start": 275.06,
+      "dur": 25.506
+    },
+    {
+      "id": "s11-recap",
+      "start": 299.966,
+      "dur": 13.166
+    },
+    {
+      "id": "s12-outro",
+      "start": 312.532,
+      "dur": 7.91
+    }
+  ]
+}

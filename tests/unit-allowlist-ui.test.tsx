@@ -29,7 +29,8 @@ it("shows system admins the selected unit users and DNS without application acti
   const html = renderToStaticMarkup(createElement(UnitsWorkbench, { systemAdmin: true }));
   expect(html).toContain("研究單位備註");
   expect(html).toContain("修改單位名稱"); expect(html).toContain("刪除單位");
-  expect(html).toContain('disabled="" title="請先移除所有成員後再刪除單位"');
+  expect(html).toMatch(/<button class="button danger" disabled="" aria-describedby="unit-delete-help-lab">刪除單位<\/button>/);
+  expect(html).toContain('id="unit-delete-help-lab"'); expect(html).toContain("需先移出所有成員");
   expect(html).toContain("單位成員"); expect(html).toContain("lab.example.com."); expect(html).toContain("192.0.2.1");
   expect(html).toContain("搜尋 DNS"); expect(html).toContain("管理權限");
   expect(html).not.toContain('href="/requests/new"'); expect(html).not.toContain("申請變更</button>");

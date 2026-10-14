@@ -8,13 +8,14 @@ const statusNames = { PENDING: "待審核", APPROVED: "已核准", REJECTED: "�
 export function RequestCard({ item, admin, onReview }: { item: DnsRequest; admin: boolean; onReview: (decision: "APPROVE" | "REJECT") => void }) {
   const deleting = item.operation === "DELETE";
   const date = new Date(item.createdAt);
-  return <details className="request-entry">
+  const reviewable = admin && item.canReview;
+  return <div className={`request-item${reviewable ? " is-reviewable" : ""}`}><details className="request-entry">
     <summary className="request-row">
       <span className="request-type">{item.recordType}</span>
       <span className="request-host"><span>{item.recordName.replace(/\.$/, "")}</span>{deleting && <small>刪除申請</small>}{item.reviewNote && <small>有審核回覆</small>}</span>
       <code className="request-value">{item.content}</code>
       <span className={"request-status status-" + item.status.toLowerCase()}>{statusNames[item.status]}</span>
-      <time className="request-date" dateTime={item.createdAt} title={date.toLocaleString("zh-TW")}>{new Intl.DateTimeFormat("zh-TW", { month: "2-digit", day: "2-digit" }).format(date)}</time>
+      <time className="request-date" dateTime={item.createdAt} title={date.toLocaleString("zh-TW")}>{new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit" }).format(date)}</time>
       <ChevronDown size={15} className="request-chevron" aria-hidden="true" />
     </summary>
     <div className="request-detail">
@@ -33,7 +34,8 @@ export function RequestCard({ item, admin, onReview }: { item: DnsRequest; admin
         {item.notes && <div><dt>備註</dt><dd>{item.notes}</dd></div>}
         {item.reviewNote && <div className="review-note"><dt>審核回覆</dt><dd>{item.reviewNote}</dd></div>}
       </dl>
-      {admin && item.canReview && <div className="request-review-actions"><button className="button" onClick={() => onReview("REJECT")}>不核准</button><button className="button primary" onClick={() => onReview("APPROVE")}>{deleting ? "審核刪除" : "核准此筆"}</button></div>}
     </div>
-  </details>;
+  </details>
+  {reviewable && <div className="request-review-actions"><button type="button" className="button compact" aria-label={`不核准 ${item.recordName} ${item.content}`} onClick={() => onReview("REJECT")}>不核准</button><button type="button" className={`button compact ${deleting ? "danger" : "primary"}`} aria-label={`${deleting ? "審核刪除" : "核准"} ${item.recordName} ${item.content}`} onClick={() => onReview("APPROVE")}>{deleting ? "審核刪除" : "核准"}</button></div>}
+  </div>;
 }

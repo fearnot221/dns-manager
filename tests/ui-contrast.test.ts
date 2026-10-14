@@ -33,7 +33,8 @@ describe("core UI text contrast", () => {
   it("keeps controls and semantic status text readable in both themes", () => {
     for (const match of css.matchAll(/(?:^:root|\[data-theme="dark"\])\s*\{([^}]+)\}/gm)) {
       const palette = tokens(match[1]);
-      expect(contrast(palette["border-strong"], palette.panel)).toBeGreaterThanOrEqual(3);
+      expect(contrast(palette["border-control"], palette.panel)).toBeGreaterThanOrEqual(3);
+      for (const background of ["panel", "surface-soft"]) expect(contrast(palette.subtle, palette[background])).toBeGreaterThanOrEqual(4.5);
       for (const status of ["green", "blue", "red", "amber"]) expect(contrast(palette[status], palette.panel)).toBeGreaterThanOrEqual(4.5);
     }
   });

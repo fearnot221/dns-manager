@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | Logto／NCU Portal | 已實作 OIDC `openid identities`、身份同步及登出 | VM 設定應用 Secret，實際帳號驗證登入、身份來源與停用狀態；見 [Logto 指南](../deploy/LOGTO.md) |
 | PowerDNS | 已實作環境設定、查詢、直接維護、申請核准與衝突保護 | 私有連線、API 憑證及 server ID；不使用網頁儲存設定 |
-| PostgreSQL | 已實作單位、申請、清查、稽核與 DNS 復原資料 | 升級套用全部 migration，先在隔離環境驗證並備份 |
+| PostgreSQL | 已實作單位、申請、清查與稽核資料（含唯讀 DNS 歷程快照） | 升級套用全部 migration，先在隔離環境驗證並備份 |
 | GitHub webhook 部署 | 已實作簽章驗證、排隊、建置及 Compose 更新 | GitHub delivery 202 只代表排隊；另看 VM journal、commit 與 healthz |
 | SMTP／寄信 | 未實作 | 本版本沒有電子郵件通知；申請電子郵件是聯絡資料，不代表寄信功能 |
 | Google Sheets | 未實作 | 沒有工作表同步；未設定目標、方向、欄位或服務帳號，不假設可覆寫外部資料 |

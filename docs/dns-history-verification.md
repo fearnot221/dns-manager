@@ -38,3 +38,9 @@
 原始 `npm test`／`npm run lint` 掃入 `.claude/worktrees` 內其他 checkout 及其產物而失敗，因此以命令列排除該目錄重跑，未修改其他工作樹或驗證設定。中途 build 曾發現新增測試缺少必要的 `canDeleteInspections` prop；補齊後上述驗證皆通過。
 
 隔離資料庫位於 `/tmp/dns-ownership-pg.Z9ADPO`，已停止。整合測試使用假的 PowerDNS；未操作正式 DNS／資料庫。未啟動 demo、未執行瀏覽器視覺驗證、未 push 或部署。上線時須套用上述 migration。
+
+### 發布前同步 main（2026-10-14）
+
+將 `origin/main` 的 `afb3e47` 合併至本次功能分支，逐一整合 DNS 列表、單位詳情與清查 UI 測試衝突，保留 main 新版搜尋、compact 按鈕及背景重新載入顯示。本次功能相對 main 仍限於上述 23 個檔案。
+
+整合後重新執行 `UNIT_TEST_DATABASE_URL=postgresql://dns_test@127.0.0.1:55438/dns_units_test npm test -- --exclude '.claude/**'`：67 個檔案、458 項測試全數通過（main 已移除舊版檢視測試）。`npm run lint -- --ignore-pattern '.claude/**'`、`npm run build`（含 TypeScript）及 `git diff --check` 均通過。維持隔離資料庫與假 PowerDNS；本段僅記錄發布前本地驗證。

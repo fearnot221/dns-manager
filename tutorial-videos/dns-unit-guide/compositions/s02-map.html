@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head><meta charset="UTF-8" /></head>
+  <body>
+    <template>
+      <style>
+@font-face { font-family: "DM Display"; src: local("Songti TC Bold"), local("STSongti-TC-Bold"); font-weight: 700; }
+@font-face { font-family: "DM Sans"; src: local("PingFang TC"), local("PingFangTC-Regular"); font-weight: 400; }
+@font-face { font-family: "DM Sans"; src: local("PingFang TC Semibold"), local("PingFangTC-Semibold"); font-weight: 600 700; }
+@font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono-latin.woff2") format("woff2"); font-weight: 100 900; }
+#root { position: absolute; inset: 0; overflow: hidden; background: #f4f5f7; color: #1a1d23; font-family: "DM Sans", sans-serif; }
+#root * { box-sizing: border-box; }
+.stage { position: absolute; inset: 0; background: #f4f5f7; will-change: transform; }
+.dots { position: absolute; inset: -40px; background-image: radial-gradient(#2457b838 2.4px, transparent 2.6px); background-size: 31px 31px; }
+.ghost { position: absolute; font-family: "DM Display", serif; font-weight: 700; color: #2457b824; line-height: .8; white-space: nowrap; }
+.meta { position: absolute; font-family: "Geist Mono", monospace; font-size: 20px; letter-spacing: .04em; color: #5d6470; }
+.headline { position: absolute; font-family: "DM Display", serif; font-weight: 700; line-height: 1.16; color: #1a1d23; }
+.line { display: block; }
+.cap-wrap { position: absolute; left: 0; right: 0; bottom: 40px; display: flex; justify-content: center; }
+.cap { position: absolute; bottom: 0; max-width: 1360px; text-align: center; font-size: 31px; font-weight: 600; line-height: 1.5; color: #ffffff; background: #1a1d23eb; padding: 14px 32px; border-radius: 14px; opacity: 0; }
+.ticket { position: absolute; background: #fff; border: 3px solid #1a1d23; border-radius: 18px; box-shadow: 10px 10px 0 #1a1d23; padding: 30px 38px; transform-origin: 0 0; }
+.ticket .lbl { font-size: 20px; font-weight: 700; letter-spacing: .14em; color: #5d6470; }
+.ticket .rec { font-family: "Geist Mono", monospace; font-size: 44px; margin: 16px 0 24px; white-space: nowrap; }
+.ticket .rec em { font-style: normal; color: #2457b8; }
+.pills { position: relative; height: 46px; }
+.pill { display: inline-block; font-size: 23px; font-weight: 700; padding: 6px 20px; border-radius: 999px; }
+.pill.wait { color: #a14f05; background: #fdf1e4; border: 2px solid #a14f0559; }
+.pill.ok { color: #15803d; background: #e7f5ec; border: 2px solid #15803d59; }
+.pill.unit { color: #2457b8; background: #ebf1fa; border: 2px solid #2457b84d; margin-left: 12px; }
+.pill.abs { position: absolute; left: 0; top: 0; }
+
+.card { position: absolute; background: #fff; border: 3px solid #cdd2da; border-radius: 16px; padding: 30px 34px; }
+.card h3 { font-family: "DM Display", serif; font-size: 40px; margin: 0 0 12px; }
+.card p { font-size: 25px; color: #5d6470; line-height: 1.55; margin: 0; }
+.card.hero { border-color: #2457b8; box-shadow: 10px 10px 0 #2457b8; }
+.list { position: absolute; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 22px 46px; }
+.list li { display: flex; gap: 18px; align-items: baseline; font-size: 31px; font-weight: 600; }
+.list li b { font-family: "Geist Mono", monospace; font-size: 22px; color: #2457b8; }
+.check li b { color: #fff; background: #2457b8; width: 40px; height: 40px; border-radius: 50%; display: inline-grid; place-items: center; font-family: "DM Sans", sans-serif; font-size: 22px; flex: none; transform: translateY(-4px); }
+.char { display: inline-block; opacity: 0; }
+</style>
+      <div id="root" data-composition-id="s02-map" data-width="1920" data-height="1080" data-duration="15.444">
+        <div class="stage">
+        <div class="dots" data-layout-ignore></div>
+        <div class="meta" style="left:81px;top:66px">你的角色</div>
+        <div class="card" id="c1" style="left:81px;top:127px;width:518px;height:307px"><h3>單位成員</h3><p>查看單位 DNS、清查、送出新增／變更／刪除申請</p></div>
+        <div class="card hero" id="c2" style="left:81px;top:468px;width:518px;height:330px"><h3>單位管理員</h3><p>成員的全部功能</p><p style="color:#2457b8;font-weight:700;margin-top:8px">＋ 以學號管理單位成員</p></div>
+        <div class="headline" id="rh" style="left:691px;top:122px;font-size:62px">七段，帶你走完一輪</div>
+        <ol class="list" id="rl" style="left:691px;top:250px;width:1114px"><li id="li-0"><b>01</b><span>登入與畫面導覽</span></li><li id="li-1"><b>02</b><span>查看單位 DNS</span></li><li id="li-2"><b>03</b><span>完成 DNS 清查</span></li><li id="li-3"><b>04</b><span>申請新增 DNS</span></li><li id="li-4"><b>05</b><span>申請變更或刪除</span></li><li id="li-5"><b>06</b><span>追蹤申請紀錄</span></li><li id="li-6"><b>07</b><span>單位管理員：管理成員</span></li></ol>
+        <div class="cap-wrap">
+          <div class="cap" id="cap-0">單位只有兩種角色：成員與管理員。管理員擁有成員的所有功能，另外可以管理單位使用者。</div>
+          <div class="cap" id="cap-1">接下來分七段帶你操作。</div>
+        </div>
+        </div>
+      </div>
+      <script>
+        (function () {
+          const tl = gsap.timeline({ paused: true });
+          const q = (s) => document.querySelector('[data-composition-id="s02-map"] ' + s);
+          const qa = (s) => Array.from(document.querySelectorAll('[data-composition-id="s02-map"] ' + s));
+          tl.fromTo(q(".stage"), { x: 1920 }, { x: 0, duration: 0.6, ease: "power3.inOut" }, 0);
+          tl.fromTo(q(".stage"), { x: 0 }, { x: -480, duration: 0.6, ease: "power3.inOut", immediateRender: false }, 14.844);
+          tl.fromTo(q(".dots"), { x: 0, y: 0 }, { x: 26, y: -13, duration: 6, ease: "sine.inOut", yoyo: true, repeat: 1 }, 0);
+          tl.fromTo(q("#c1"), { x: -80, rotationY: 25, opacity: 0, transformPerspective: 1200 }, { x: 0, rotationY: 0, opacity: 1, duration: 0.8, ease: "power3.out" }, 0.5);
+          tl.fromTo(q("#c2"), { x: -80, rotationY: 25, opacity: 0, transformPerspective: 1200 }, { x: 0, rotationY: 0, opacity: 1, duration: 0.8, ease: "power3.out" }, 0.75);
+          tl.fromTo(q("#rh"), { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 1.0);
+          tl.fromTo(q("#li-0"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 3.2);
+          tl.fromTo(q("#li-1"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 3.52);
+          tl.fromTo(q("#li-2"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 3.84);
+          tl.fromTo(q("#li-3"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 4.16);
+          tl.fromTo(q("#li-4"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 4.48);
+          tl.fromTo(q("#li-5"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 4.8);
+          tl.fromTo(q("#li-6"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 5.12);
+          tl.fromTo(q("#cap-0"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" }, 1);
+          tl.to(q("#cap-0"), { opacity: 0, duration: 0.2, ease: "power2.in" }, 10.388);
+          tl.fromTo(q("#cap-1"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" }, 10.638);
+          tl.to(q("#cap-1"), { opacity: 0, duration: 0.2, ease: "power2.in" }, 13.894);
+
+          window.__timelines["s02-map"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

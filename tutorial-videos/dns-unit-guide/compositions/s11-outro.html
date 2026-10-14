@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head><meta charset="UTF-8" /></head>
+  <body>
+    <template>
+      <style>
+@font-face { font-family: "DM Display"; src: local("Songti TC Bold"), local("STSongti-TC-Bold"); font-weight: 700; }
+@font-face { font-family: "DM Sans"; src: local("PingFang TC"), local("PingFangTC-Regular"); font-weight: 400; }
+@font-face { font-family: "DM Sans"; src: local("PingFang TC Semibold"), local("PingFangTC-Semibold"); font-weight: 600 700; }
+@font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono-latin.woff2") format("woff2"); font-weight: 100 900; }
+#root { position: absolute; inset: 0; overflow: hidden; background: #f4f5f7; color: #1a1d23; font-family: "DM Sans", sans-serif; }
+#root * { box-sizing: border-box; }
+.stage { position: absolute; inset: 0; background: #f4f5f7; will-change: transform; }
+.dots { position: absolute; inset: -40px; background-image: radial-gradient(#2457b838 2.4px, transparent 2.6px); background-size: 31px 31px; }
+.ghost { position: absolute; font-family: "DM Display", serif; font-weight: 700; color: #2457b824; line-height: .8; white-space: nowrap; }
+.meta { position: absolute; font-family: "Geist Mono", monospace; font-size: 20px; letter-spacing: .04em; color: #5d6470; }
+.headline { position: absolute; font-family: "DM Display", serif; font-weight: 700; line-height: 1.16; color: #1a1d23; }
+.line { display: block; }
+.cap-wrap { position: absolute; left: 0; right: 0; bottom: 40px; display: flex; justify-content: center; }
+.cap { position: absolute; bottom: 0; max-width: 1360px; text-align: center; font-size: 31px; font-weight: 600; line-height: 1.5; color: #ffffff; background: #1a1d23eb; padding: 14px 32px; border-radius: 14px; opacity: 0; }
+.ticket { position: absolute; background: #fff; border: 3px solid #1a1d23; border-radius: 18px; box-shadow: 10px 10px 0 #1a1d23; padding: 30px 38px; transform-origin: 0 0; }
+.ticket .lbl { font-size: 20px; font-weight: 700; letter-spacing: .14em; color: #5d6470; }
+.ticket .rec { font-family: "Geist Mono", monospace; font-size: 44px; margin: 16px 0 24px; white-space: nowrap; }
+.ticket .rec em { font-style: normal; color: #2457b8; }
+.pills { position: relative; height: 46px; }
+.pill { display: inline-block; font-size: 23px; font-weight: 700; padding: 6px 20px; border-radius: 999px; }
+.pill.wait { color: #a14f05; background: #fdf1e4; border: 2px solid #a14f0559; }
+.pill.ok { color: #15803d; background: #e7f5ec; border: 2px solid #15803d59; }
+.pill.unit { color: #2457b8; background: #ebf1fa; border: 2px solid #2457b84d; margin-left: 12px; }
+.pill.abs { position: absolute; left: 0; top: 0; }
+
+.card { position: absolute; background: #fff; border: 3px solid #cdd2da; border-radius: 16px; padding: 30px 34px; }
+.card h3 { font-family: "DM Display", serif; font-size: 40px; margin: 0 0 12px; }
+.card p { font-size: 25px; color: #5d6470; line-height: 1.55; margin: 0; }
+.card.hero { border-color: #2457b8; box-shadow: 10px 10px 0 #2457b8; }
+.list { position: absolute; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 22px 46px; }
+.list li { display: flex; gap: 18px; align-items: baseline; font-size: 31px; font-weight: 600; }
+.list li b { font-family: "Geist Mono", monospace; font-size: 22px; color: #2457b8; }
+.check li b { color: #fff; background: #2457b8; width: 40px; height: 40px; border-radius: 50%; display: inline-grid; place-items: center; font-family: "DM Sans", sans-serif; font-size: 22px; flex: none; transform: translateY(-4px); }
+.char { display: inline-block; opacity: 0; }
+</style>
+      <div id="root" data-composition-id="s11-outro" data-width="1920" data-height="1080" data-duration="7.526">
+        <div class="stage">
+        <div class="dots" data-layout-ignore></div>
+        <img id="em" src="assets/ncu-emblem.png" alt="" style="position:absolute;left:874px;top:230px;width:172px;height:172px" />
+        <div class="headline" style="left:0;right:0;top:446px;text-align:center;font-size:96px"><span class="char" id="w-0">D</span><span class="char" id="w-1">N</span><span class="char" id="w-2">S</span><span class="char" id="w-3">&nbsp;</span><span class="char" id="w-4">M</span><span class="char" id="w-5">a</span><span class="char" id="w-6">n</span><span class="char" id="w-7">a</span><span class="char" id="w-8">g</span><span class="char" id="w-9">e</span><span class="char" id="w-10">r</span></div>
+        <div class="meta" id="sub1" style="left:0;right:0;top:590px;text-align:center;font-size:23px">NCUEECESNMG</div>
+        <div id="sub2" style="position:absolute;left:0;right:0;top:672px;text-align:center;font-size:31px;color:#5d6470">有問題請聯絡系統管理員</div>
+        <div class="cap-wrap">
+          <div class="cap" id="cap-0">有問題請聯絡系統管理員，謝謝收看。</div>
+        </div>
+        </div>
+      </div>
+      <script>
+        (function () {
+          const tl = gsap.timeline({ paused: true });
+          const q = (s) => document.querySelector('[data-composition-id="s11-outro"] ' + s);
+          const qa = (s) => Array.from(document.querySelectorAll('[data-composition-id="s11-outro"] ' + s));
+          tl.fromTo(q(".dots"), { x: 0, y: 0 }, { x: 20, y: -10, duration: 6, ease: "sine.inOut", yoyo: true, repeat: 0 }, 0);
+          tl.fromTo(q(".stage"), { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 0);
+          tl.fromTo(q("#em"), { scale: 0, opacity: 0, rotation: -12 }, { scale: 1, opacity: 1, rotation: 0, duration: 0.7, ease: "power3.out" }, 0.4);
+          tl.set(q("#w-0"), { opacity: 1, y: 40 }, 0.95);
+          tl.to(q("#w-0"), { y: 0, duration: 0.16, ease: "power4.out" }, 0.95);
+          tl.set(q("#w-1"), { opacity: 1, y: 40 }, 0.995);
+          tl.to(q("#w-1"), { y: 0, duration: 0.16, ease: "power4.out" }, 0.995);
+          tl.set(q("#w-2"), { opacity: 1, y: 40 }, 1.04);
+          tl.to(q("#w-2"), { y: 0, duration: 0.16, ease: "power4.out" }, 1.04);
+          tl.set(q("#w-3"), { opacity: 1, y: 40 }, 1.085);
+          tl.to(q("#w-3"), { y: 0, duration: 0.16, ease: "power4.out" }, 1.085);
+          tl.set(q("#w-4"), { opacity: 1, y: 40 }, 1.13);
+          tl.to(q("#w-4"), { y: 0, duration: 0.16, ease: "power4.out" }, 1.13);
+          tl.set(q("#w-5"), { opacity: 1, y: 40 }, 1.175);
+          tl.to(q("#w-5"), { y: 0, duration: 0.16, ease: "power4.out" }, 1.175);
+          tl.set(q("#w-6"), { opacity: 1, y: 40 }, 1.22);
+          tl.to(q("#w-6"), { y: 0, duration: 0.16, ease: "power4.out" }, 1.22);
+          tl.set(q("#w-7"), { opacity: 1, y: 40 }, 1.265);
+          tl.to(q("#w-7"), { y: 0, duration: 0.16, ease: "power4.out" }, 1.265);
+          tl.set(q("#w-8"), { opacity: 1, y: 40 }, 1.31);
+          tl.to(q("#w-8"), { y: 0, duration: 0.16, ease: "power4.out" }, 1.31);
+          tl.set(q("#w-9"), { opacity: 1, y: 40 }, 1.355);
+          tl.to(q("#w-9"), { y: 0, duration: 0.16, ease: "power4.out" }, 1.355);
+          tl.set(q("#w-10"), { opacity: 1, y: 40 }, 1.4);
+          tl.to(q("#w-10"), { y: 0, duration: 0.16, ease: "power4.out" }, 1.4);
+          tl.fromTo(q("#sub1"), { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, 1.6);
+          tl.fromTo(q("#sub2"), { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 1.9);
+          tl.to(q(".stage"), { opacity: 0, duration: 0.8, ease: "power2.in" }, 6.726);
+          tl.fromTo(q("#cap-0"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" }, 1.6);
+          tl.to(q("#cap-0"), { opacity: 0, duration: 0.2, ease: "power2.in" }, 6.176);
+
+          window.__timelines["s11-outro"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>
