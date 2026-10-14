@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     const q = query.q.toLowerCase();
     const events = sources.filter((source) => source.zone === zone && (!source.dnsScope || source.dnsScope === scope)).flatMap(dnsHistoryEvents)
       .filter((event) => canManageRecord(actor, zone, event.recordName, event.recordType) && (!name || event.recordName === name) && (!type || event.recordType === type)
-        && (!q || [event.recordName, event.recordType, ...[event.before, event.after].flatMap((rrset) => rrset?.records.map((r) => r.content) ?? [])].some((value) => value.toLowerCase().includes(q))))
+        && (!q || [event.recordName, event.recordType, ...[event.ownership?.before, event.ownership?.after].flatMap((value) => value ? Object.values(value).filter((field): field is string => typeof field === "string") : []), ...[event.before, event.after].flatMap((rrset) => rrset?.records.map((r) => r.content) ?? [])].some((value) => value.toLowerCase().includes(q))))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || Number(a.operation === "SYNC") - Number(b.operation === "SYNC") || b.id.localeCompare(a.id));
     return Response.json({ events: events.slice((query.page - 1) * 50, query.page * 50), total: events.length, page: query.page, syncError }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return apiError(error); }

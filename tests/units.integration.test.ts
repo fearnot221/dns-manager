@@ -1,3 +1,4 @@
+import { PUT as saveOwnership } from "@/app/api/inventory/route";
 import { createDataAccount } from "@/lib/users/create";
 import { changeInspectionEvent } from "@/lib/inspection-events/service";
 import { taipeiDate } from "@/lib/inspection-events/model";
@@ -83,6 +84,25 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await manageAllowlist(creator, unitId, viewer.studentId!);
     await manageAllowlist(creator, unitId, editor.studentId!);
     await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "EDITOR" });
+  });
+  it("persists unit notes and exposes saved ownership and assignment in DNS history", async () => {
+    const created = await createUnit(admin, `notes-${crypto.randomUUID()}`, undefined, "單位測試備註");
+    expect((await unitDetail(admin, created.unit.id, "manage")).unit.note).toBe("單位測試備註");
+    expect((await db.auditLog.findFirstOrThrow({ where: { action: "CREATE_DNS_UNIT", newValue: { path: ["id"], equals: created.unit.id } } })).newValue).toMatchObject({ note: "單位測試備註" });
+    const source = await sourceRecord();
+    const before = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    const response = await saveOwnership(new Request("http://localhost/api/inventory", { method: "PUT", headers: { Origin: "http://localhost", "Content-Type": "application/json" }, body: JSON.stringify({ id: before.id, zoneName: before.zoneName, recordName: before.recordName, recordType: before.recordType, content: before.content, expectedUpdatedAt: before.updatedAt.toISOString(), mode: "metadata", applicantName: "更新聯絡人", purpose: "更新用途" }) }));
+    expect(response.status).toBe(200);
+    const saved = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    await assignRecordUnit(admin, { ...saved, expectedUpdatedAt: saved.updatedAt.toISOString(), unitId: created.unit.id });
+    const history = await (await dnsHistory(new Request(`http://localhost/api/dns-history?zone=${zone.name}&name=${before.recordName}&type=A`))).json();
+    expect(history.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operation: "OWNERSHIP", ownership: expect.objectContaining({ after: expect.objectContaining({ applicantName: "更新聯絡人" }) }) }),
+      expect.objectContaining({ operation: "ASSIGNMENT", legacyScope: false, ownership: expect.objectContaining({ after: expect.objectContaining({ unitId: created.unit.id }) }) }),
+    ]));
+    expect(await db.dnsInspection.count({ where: { recordId: source.id } })).toBe(0);
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
   });
   it("creates non-login data accounts, scopes contact options and rejects activation and admin grants", async () => {
     vi.mocked(requireActor).mockResolvedValue(admin);

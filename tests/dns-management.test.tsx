@@ -83,3 +83,16 @@ it("offers per-record history and keeps deleted-record history accessible in emp
   expect(populated).toContain("DNS 歷程（含已刪除）");
   expect(render("empty.example.")).toContain("DNS 歷程（含已刪除）");
 });
+
+it("exposes assignment beside each forward record and shows unassigned status", () => {
+  const html = render();
+  expect(html).toContain('aria-label="指派單位 host.ee.ncu.edu.tw. 192.0.2.1"');
+  expect(html).toContain("尚未指派單位");
+  expect(render("2.0.192.in-addr.arpa.")).not.toContain('aria-label="指派單位');
+});
+
+it("hides unit assignment from delegated administrators", () => {
+  const html = renderToStaticMarkup(createElement(DnsManagementWorkbench, { systemAdmin: false, canDeleteInspections: false }));
+  expect(html).toContain("清查</button>");
+  expect(html).not.toContain('aria-label="指派單位');
+});

@@ -4,11 +4,14 @@ import { useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { ResourceError } from "@/components/ui/resource-error";
 import { useResource } from "@/lib/client/use-resource";
-import type { DnsHistoryEvent } from "@/lib/dns/history";
+import { ownershipLabels, type OwnershipSnapshot, type DnsHistoryEvent } from "@/lib/dns/history";
 import type { RRSet } from "@/lib/dns/types";
 
 function StateSnapshot({ label, rrset }: { label: string; rrset: RRSet | null }) {
   return <div><strong>{label}</strong>{rrset ? <><p>TTL {rrset.ttl}s</p>{rrset.records.map((record) => <p key={record.content}><code>{record.content}</code>{record.disabled && "（停用）"}</p>)}</> : <p>不存在</p>}</div>;
+}
+function OwnershipState({ label, value }: { label: string; value: OwnershipSnapshot | null }) {
+  return <div><strong>{label}</strong>{value ? <dl>{(Object.keys(ownershipLabels) as (keyof OwnershipSnapshot)[]).filter((key) => key in value).map((key) => <div key={key}><dt>{ownershipLabels[key]}</dt><dd>{key === "unitId" ? value[key] ? "已指派" : "尚未指派單位" : value[key] || "未填寫"}</dd></div>)}</dl> : <p>尚無歸屬資料</p>}</div>;
 }
 export function HistoryDialog({ zone, name = "", type = "", onClose }: { zone: string; name?: string; type?: string; onClose: () => void }) {
   const [page, setPage] = useState(1);
@@ -16,17 +19,17 @@ export function HistoryDialog({ zone, name = "", type = "", onClose }: { zone: s
   const params = new URLSearchParams({ zone, name, type, q: query, page: String(page) });
   const { data, loading, error, reload } = useResource<{ events: DnsHistoryEvent[]; total: number; page: number; syncError?: string }>(`/api/dns-history?${params}`);
   return <Dialog title="DNS 歷程記錄" description={name ? `${name} · ${type}` : `${zone} · 包含已刪除的紀錄`} onClose={onClose}>
-    <div className="modal-body dns-history"><label>搜尋名稱、類型或解析值<input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} /></label>
+    <div className="modal-body dns-history"><label>搜尋名稱、類型、解析值或歸屬資料<input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} /></label>
     <p className="description">每筆 DNS 首次讀取時會保存 PowerDNS 初始快照；已有歷程會從最早保存的快照補登。同一名稱與類型的修改、刪除及重建會保留在同一歷程。</p>
     {error ? <ResourceError message={error} retry={reload} /> : loading ? <p role="status">正在載入歷程…</p> : <>
       {data?.syncError && <p role="status" className="description">{data.syncError}</p>}
       <p role="status">共 {data?.total ?? 0} 筆歷程</p>
       {!data?.events.length && <p>目前沒有符合條件的歷程記錄。</p>}
       {data?.events.map((event) => <article className="card inventory-group" key={event.id}>
-        <h3>{event.recordName} · {event.recordType} · {{ SYNC: "從 PowerDNS 同步", CREATE: "建立", UPDATE: "修改", DELETE: "刪除" }[event.operation]}</h3>
+        <h3>{event.recordName} · {event.recordType} · {{ SYNC: "從 PowerDNS 同步", CREATE: "建立", UPDATE: "修改", DELETE: "刪除", OWNERSHIP: "更新歸屬資料", ASSIGNMENT: "指派單位", INSPECTION: "清查與歸屬紀錄" }[event.operation]}</h3>
         <p><time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString("zh-TW")}</time> · {event.userName || event.userEmail}</p>
         {event.legacyScope && <p className="description">舊操作快照（未記錄 PowerDNS 連線來源）</p>}
-        <StateSnapshot label="變更前" rrset={event.before} /><StateSnapshot label="變更後" rrset={event.after} />
+        {event.ownership ? <><p className="description">此操作不變更 DNS 解析內容。</p><OwnershipState label="變更前" value={event.ownership.before} /><OwnershipState label="變更後" value={event.ownership.after} /></> : <><StateSnapshot label="變更前" rrset={event.before} /><StateSnapshot label="變更後" rrset={event.after} /></>}
       </article>)}
       <div className="page-actions"><button className="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>上一頁</button><span>第 {page} 頁</span><button className="button" disabled={page * 50 >= (data?.total ?? 0)} onClick={() => setPage(page + 1)}>下一頁</button></div>
     </>}</div>

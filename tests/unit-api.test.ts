@@ -56,7 +56,7 @@ describe("unit API boundaries", () => {
   it("does not cache unit discovery or one-time invitations", async () => {
     expect((await GET()).headers.get("Cache-Control")).toBe("no-store");
     vi.mocked(requireActor).mockResolvedValue({ id: "admin", email: "admin@example.com", globalRole: "ADMIN", zoneRoles: {} });
-    vi.mocked(createUnit).mockResolvedValue({ unit: { id: "unit-1", name: "Lab", status: "APPROVED" } });
+    vi.mocked(createUnit).mockResolvedValue({ unit: { id: "unit-1", name: "Lab", note: "", status: "APPROVED" } });
     expect((await POST(req({ action: "create", name: "Lab", managerStudentId: "115000001" }))).headers.get("Cache-Control")).toBe("no-store");
   });
   it("rejects ordinary and zone admin creation and student-id assignment before service calls", async () => {
@@ -161,9 +161,17 @@ it("accepts member/admin roles and removal but rejects the retired viewer role",
 
 it.each([undefined, "", "   "])("allows system admins to create without a manager (%s)", async (managerStudentId) => {
   vi.mocked(requireActor).mockResolvedValue({ id: "admin", email: "admin@example.com", globalRole: "ADMIN", zoneRoles: {} });
-  vi.mocked(createUnit).mockResolvedValue({ unit: { id: "unit-1", name: "Lab", status: "APPROVED" } });
+  vi.mocked(createUnit).mockResolvedValue({ unit: { id: "unit-1", name: "Lab", note: "", status: "APPROVED" } });
   expect((await POST(req({ action: "create", name: "Lab", managerStudentId }))).status).toBe(201);
-  expect(createUnit).toHaveBeenCalledWith(expect.objectContaining({ id: "admin" }), "Lab", managerStudentId?.trim());
+  expect(createUnit).toHaveBeenCalledWith(expect.objectContaining({ id: "admin" }), "Lab", managerStudentId?.trim(), "");
   vi.mocked(requireActor).mockResolvedValue({ id: "user", email: "user@example.com", globalRole: "USER", zoneRoles: {} });
   expect((await POST(req({ action: "create", name: "Lab", managerStudentId }))).status).toBe(403);
+});
+
+it("validates and forwards optional unit notes", async () => {
+  vi.mocked(requireActor).mockResolvedValue({ id: "admin", email: "admin@example.com", globalRole: "ADMIN", zoneRoles: {} });
+  expect((await POST(req({ action: "create", name: "Lab", note: "x".repeat(2001) }))).status).toBe(400);
+  expect(createUnit).not.toHaveBeenCalled();
+  expect((await POST(req({ action: "create", name: "Lab", note: "  聯絡窗口與用途  " }))).status).toBe(201);
+  expect(createUnit).toHaveBeenCalledWith(expect.anything(), "Lab", undefined, "聯絡窗口與用途");
 });

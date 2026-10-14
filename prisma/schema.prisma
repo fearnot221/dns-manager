@@ -306,6 +306,7 @@ enum UnitStatus {
 }
 
 model DnsUnit {
+  note String @default("") @db.Text
   status UnitStatus @default(APPROVED)
   reviewedBy String?
   reviewedAt DateTime?
