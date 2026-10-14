@@ -73,3 +73,9 @@ Google 官方說明：[SMTP relay 設定](https://support.google.com/a/answer/29
 - `npm run build`：通過，含 TypeScript。
 - 使用非正式測試變數的 `docker compose --env-file /dev/null config --quiet`、`git diff --check`：通過。
 - 使用本次隔離 PostgreSQL，驗證後已停止。未啟動 demo、未實際寄信、未 push／部署；容器與正式 SMTP 投遞仍待部署環境驗證。
+
+## 發布前依賴修正
+
+PR #11 的初次 Verify 在 production npm audit 失敗：Nodemailer 8 的安全公告涵蓋原本選用版本。更新至 10.1.1，並以 npm override 統一 Auth.js 的 optional peer，避免留下舊版。專案登入不使用郵件 provider。
+
+以修正後依賴重跑：production audit 0 vulnerabilities、472 項測試（隔離 PostgreSQL）、lint 與 production build 全數通過；使用真實 Nodemailer stream transport 產生 MIME 亦通過，沒有網路寄送。未降低 CI 安全門檻。
