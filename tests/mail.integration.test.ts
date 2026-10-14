@@ -141,13 +141,13 @@ describe.skipIf(!url)("mail settings and delivery in disposable PostgreSQL", () 
     expect((await db.mailDelivery.findFirstOrThrow()).status).toBe("SENT");
     expect(await processOneDelivery()).toBe(false); expect(send).toHaveBeenCalledTimes(1);
   });
-  it("CCs all currently configured group recipients instead of the sender", async () => {
+  it("uses currently configured group recipients for CC and Reply-To on notifications and tests", async () => {
     const saved = await enable(); await enqueue();
     await POST(request({ action: "test", recipient: "test@example.com", expectedRevision: saved.revision }, "POST"));
     await saveMailSettings({ config: { ...config, fromEmail: "changed@example.com", recipients: ["group1@example.com", "group2@example.com"] }, expectedRevision: saved.revision }, actor);
     await processOneDelivery(); await processOneDelivery();
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "team@example.com", cc: ["group1@example.com", "group2@example.com"] }));
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "test@example.com", cc: ["group1@example.com", "group2@example.com"] }));
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "team@example.com", cc: ["group1@example.com", "group2@example.com"], replyTo: ["group1@example.com", "group2@example.com"] }));
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "test@example.com", cc: ["group1@example.com", "group2@example.com"], replyTo: ["group1@example.com", "group2@example.com"] }));
     expect(await db.mailDelivery.count({ where: { status: "SENT" } })).toBe(2);
   });
   it("does not mark a message sent when only its To or CC was accepted", async () => {
