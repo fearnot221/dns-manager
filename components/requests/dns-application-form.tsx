@@ -160,7 +160,6 @@ export function DnsApplicationForm() {
           <label>申請人電子郵件<input name="applicantEmail" type="email" required autoComplete="email" maxLength={320} placeholder="可聯絡的電子郵件" /></label>
           <label>單位分機<input name="applicantExtension" inputMode="numeric" autoComplete="tel-extension" required pattern="[0-9]{1,10}" maxLength={10} title="請填入 1–10 位數字" placeholder="例如 1234" /></label>
         </div>
-        <p className="application-help">姓名、電子郵件與分機為必填，聯絡資料同一份申請只需填一次。核准後會帶入 DNS 清查資料。</p>
       </fieldset>
 
       <section className="application-records" aria-labelledby="application-records-title">

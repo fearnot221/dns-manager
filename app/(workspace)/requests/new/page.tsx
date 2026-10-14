@@ -11,7 +11,7 @@ export default async function NewDnsRequestPage() {
   if (isGlobalAdmin(actor)) redirect("/requests");
 
   return <div className="content application-content">
-    <PageHeader title="申請 DNS" description="填寫聯絡資料與紀錄，完成後一併送交審核。" />
+    <PageHeader title="申請 DNS" />
     <DnsApplicationForm />
   </div>;
 }

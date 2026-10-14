@@ -1,4 +1,4 @@
-export type NavIcon = "apply" | "requests" | "dns" | "units" | "zones" | "inventory" | "users" | "settings" | "protection" | "activity";
+export type NavIcon = "apply" | "requests" | "dns" | "units" | "zones" | "inventory" | "users" | "settings" | "protection" | "mail" | "events" | "activity";
 export type NavItem = { href: string; label: string; icon: NavIcon; nested?: boolean };
 export type NavGroup = { id: string; label: string; items: NavItem[] };
 
@@ -19,8 +19,8 @@ export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAd
     { href: "/admin/deletion-protection", label: "刪除保護", icon: "protection" },
   );
   if (systemAdmin) settings.push(
-    { href: "/admin/mail", label: "郵件服務", icon: "settings" },
-    { href: "/admin/inspection-events", label: "清查活動", icon: "inventory" },
+    { href: "/admin/mail", label: "郵件服務", icon: "mail" },
+    { href: "/admin/inspection-events", label: "清查活動", icon: "events" },
     { href: "/admin/users", label: "帳號管理", icon: "users" },
     { href: "/activity", label: "操作紀錄", icon: "activity" },
   );

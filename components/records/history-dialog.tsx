@@ -20,7 +20,6 @@ export function HistoryDialog({ zone, name = "", type = "", onClose }: { zone: s
   const { data, loading, error, reload } = useResource<{ events: DnsHistoryEvent[]; total: number; page: number; syncError?: string }>(`/api/dns-history?${params}`);
   return <Dialog title="DNS 歷程記錄" description={name ? `${name} · ${type}` : `${zone} · 包含已刪除的紀錄`} onClose={onClose}>
     <div className="modal-body dns-history"><label>搜尋名稱、類型、解析值或歸屬資料<input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} /></label>
-    <p className="description">每筆 DNS 首次讀取時會保存 PowerDNS 初始快照；已有歷程會從最早保存的快照補登。同一名稱與類型的修改、刪除及重建會保留在同一歷程。</p>
     {error ? <ResourceError message={error} retry={reload} /> : loading ? <p role="status">正在載入歷程…</p> : <>
       {data?.syncError && <p role="status" className="description">{data.syncError}</p>}
       <p role="status">共 {data?.total ?? 0} 筆歷程</p>

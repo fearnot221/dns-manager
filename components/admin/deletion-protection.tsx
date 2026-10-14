@@ -5,6 +5,7 @@ import { useResource } from "@/lib/client/use-resource";
 import { apiRequest, jsonRequest } from "@/lib/client/api";
 import { ResourceError } from "@/components/ui/resource-error";
 import { ActionFeedback, type Feedback } from "@/components/ui/action-feedback";
+import { LoadingPanel } from "@/components/ui";
 
 type Status = { configured: boolean; updatedAt: string | null };
 export function DeletionProtectionSettings({ canConfigure }: { canConfigure: boolean }) {
@@ -15,12 +16,12 @@ export function DeletionProtectionSettings({ canConfigure }: { canConfigure: boo
   const helpId = useId();
   const feedbackId = useId();
   if (resource.error) return <ResourceError message={resource.error} retry={resource.reload} />;
-  if (!resource.data) return <p role="status">載入刪除保護設定…</p>;
+  if (!resource.data) return <LoadingPanel label="載入刪除保護設定…" />;
   return <section className="card">
     <header className="workflow-panel-head"><div><h2>DNS 刪除保護密碼</h2>{resource.data.configured && <p role="status">已設定；每次刪除都必須輸入密碼。</p>}</div></header>
     {!resource.data.configured && <div className="workflow-feedback"><div className="warning" role="status"><AlertTriangle size={18} aria-hidden="true" /><div><strong>尚未設定刪除保護密碼</strong><p>設定完成前，所有 DNS 刪除操作暫停。</p></div></div></div>}
     <div id={feedbackId} className="workflow-feedback"><ActionFeedback feedback={feedback} /></div>
-    <p className="workflow-panel-note">適用於刪除 DNS 解析值、Zone 及核准刪除申請。編輯紀錄組時移除或替換既有解析值，也需要驗證。此密碼與登入密碼分開管理。</p>
+    <p className="workflow-panel-note">刪除或替換解析值、刪除 Zone、核准刪除申請時需輸入；與登入密碼分開管理。</p>
     {canConfigure ? <form className="form-surface" onSubmit={async (event) => {
       event.preventDefault();
       if (saving.current) return;
@@ -37,11 +38,11 @@ export function DeletionProtectionSettings({ canConfigure }: { canConfigure: boo
       finally { saving.current = false; setPending(false); }
     }}>
       <fieldset className="form-fields" disabled={pending}>
-        <p id={helpId}>請設定 12–256 個字元；密碼不會顯示或提供查詢。更換密碼後，請通知需要執行刪除的管理員。</p>
+        <p id={helpId}>12–256 個字元，設定後無法查詢；更換後請通知相關管理員。</p>
         <label>新刪除保護密碼<input name="password" type="password" required minLength={12} maxLength={256} autoComplete="new-password" aria-describedby={`${helpId} ${feedbackId}`} /></label>
         <label>再次輸入新密碼<input name="confirmation" type="password" required minLength={12} maxLength={256} autoComplete="new-password" aria-describedby={feedbackId} aria-invalid={feedback?.kind === "error" || undefined} /></label>
         <div className="form-actions"><button className="button primary" aria-busy={pending}>{pending ? "儲存中…" : "儲存刪除保護密碼"}</button><button type="button" className="button" onClick={() => void resource.reload()}>重新載入設定</button></div>
       </fieldset>
-    </form> : <p className="workflow-panel-note">只有最高管理員可以設定或更換密碼；需要刪除時請向最高管理員取得密碼。</p>}
+    </form> : <p className="workflow-panel-note">密碼由最高管理員設定，需要時請向其取得。</p>}
   </section>;
 }

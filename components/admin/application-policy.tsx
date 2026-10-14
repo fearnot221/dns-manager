@@ -10,7 +10,7 @@ import { zoneCategories, zoneCategory } from "@/lib/dns/zone-category";
 import { ResourceError } from "@/components/ui/resource-error";
 import { ActionFeedback, type Feedback } from "@/components/ui/action-feedback";
 import { Dialog } from "@/components/ui/dialog";
-import { EmptyState, LoadingRows } from "@/components/ui";
+import { EmptyState, LoadingPanel, LoadingRows } from "@/components/ui";
 import { ScrollRegion } from "@/components/ui/scroll-region";
 import { Select } from "@/components/ui/select";
 
@@ -29,12 +29,12 @@ function GlobalApplicationPolicy() {
   const [feedback, setFeedback] = useState<Feedback>(null);
   const saving = useRef(false);
   if (resource.error) return <ResourceError message={resource.error} retry={resource.reload} />;
-  if (!resource.data) return <p role="status">載入全域申請規則…</p>;
+  if (!resource.data) return <LoadingPanel label="載入申請規則…" />;
   const policy = resource.data.policy;
 
   return <section className="card">
     <div className="workflow-feedback"><ActionFeedback feedback={feedback} /></div>
-    <header className="workflow-panel-head"><div><h2>DNS 申請規則</h2><p>控制開放申請的紀錄類型，以及使用者需要符合的資格。</p></div></header>
+    <header className="workflow-panel-head"><div><h2>開放申請的類型</h2></div></header>
     <form key={policy.updatedAt} className="form-surface" onSubmit={async (event) => {
       event.preventDefault();
       if (saving.current) return;
@@ -44,7 +44,7 @@ function GlobalApplicationPolicy() {
       setFeedback(null);
       try {
         await apiRequest("/api/application-policy", jsonRequest("PUT", { policy: { allowedTypes: form.getAll("types"), ownership: form.get("ownership") }, expectedUpdatedAt: policy.updatedAt }));
-        setFeedback({ kind: "success", message: "設定已儲存，適用於接下來送出的申請；既有待審案件不會自動取消。" });
+        setFeedback({ kind: "success", message: "設定已儲存，套用於之後送出的申請。" });
         await resource.reload();
       } catch (error) {
         setFeedback({ kind: "error", message: error instanceof Error ? error.message : "儲存失敗" });
@@ -55,12 +55,11 @@ function GlobalApplicationPolicy() {
     }}>
       <fieldset className="form-fields" disabled={pending}>
         <fieldset className="policy-type-section" aria-describedby="policy-types-help">
-          <legend>開放申請的類型</legend>
+          <legend className="sr-only">開放申請的類型</legend>
           <div className="policy-types">{applicationTypes.map((type) => <label className="type-option" key={type}><input type="checkbox" name="types" value={type} defaultChecked={policy.allowedTypes.includes(type)} /><span>{type}</span></label>)}</div>
         </fieldset>
-        <p className="field-help" id="policy-types-help">未勾選任何類型時，將暫停所有類型的新申請。</p>
-        <input type="hidden" name="ownership" value="UNIT_ONLY" /><p>申請資格：已加入核准單位，並具備單位編輯或管理權限。</p>
-        <p className="field-help" id="policy-ownership-help">單位編輯者僅能提出變更申請；DNS 仍須由系統管理員審核後生效。</p>
+        <p className="field-help" id="policy-types-help">全部不勾選即暫停新申請。申請者須為核准單位的編輯者或管理員。</p>
+        <input type="hidden" name="ownership" value="UNIT_ONLY" />
         <div className="form-actions"><button className="button primary" aria-busy={pending}>{pending ? "儲存中…" : "儲存設定"}</button></div>
       </fieldset>
     </form>
@@ -117,7 +116,7 @@ function ZoneApplicationSettings() {
 
   return <section className="card table-card">
     <ActionFeedback feedback={feedback} />
-    <header className="workflow-panel-head"><div><h2>開放申請的網域</h2><p>選擇使用者可在申請表中選取的網域。暫停申請不會刪除 DNS，也不影響已送出的案件。</p></div></header>
+    <header className="workflow-panel-head"><div><h2>開放申請的網域</h2><p>暫停申請不影響既有 DNS 與已送出的案件。</p></div></header>
     <div className="table-tools">
       <div className="filter-input"><Search size={15} aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋網域" aria-label="搜尋申請網域" /></div>
       <Select className="zone-access-filter" aria-label="申請開放狀態" value={status} onChange={setStatus} options={[{ value: "all", label: "全部申請狀態" }, { value: "open", label: "開放申請" }, { value: "closed", label: "暫停申請" }]} />
