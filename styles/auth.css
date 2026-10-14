@@ -10,6 +10,7 @@
 .login-copy { padding: 0 0 var(--space-6); }
 .login-copy h1 { font-size: 1.375rem; line-height: 1.4; }
 .login-copy > p:last-child { margin-top: var(--space-1); color: var(--muted); font-size: var(--text-body); }
+.login-form-panel > :is(.request-notice, .form-error) { margin-bottom: var(--space-4); }
 .credentials-form { display: grid; gap: var(--space-5); }
 .portal-sign-in { display: grid; gap: var(--space-3); }
 .portal-sign-in > .button { width: 100%; min-height: 46px; white-space: normal; font-size: .9375rem; }
