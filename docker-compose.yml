@@ -117,6 +117,34 @@ services:
       driver: json-file
       options: {max-size: 10m, max-file: "3"}
 
+  mail-worker:
+    image: dns-manager-tools:${DEPLOY_TAG:-local}
+    restart: unless-stopped
+    init: true
+    command: [npm, run, mail:worker]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ""
+      RUNTIME_DATABASE_URL_FILE: /run/dns-db/database-url
+    volumes: ["runtime_db:/run/dns-db:ro"]
+    depends_on:
+      runtime-db: {condition: service_completed_successfully}
+    networks: [frontend, database]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    stop_grace_period: 60s
+    healthcheck:
+      test: [CMD, node, -e, "const fs=require('node:fs');process.exit(Date.now()-Number(fs.readFileSync('/tmp/mail-worker-heartbeat','utf8'))<120000?0:1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+
 volumes:
   runtime_db:
   postgres_data:
