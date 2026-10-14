@@ -270,14 +270,14 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     vi.mocked(requireActor).mockResolvedValue(admin);
     const response = await deleteDnsRecord(new Request("http://localhost/api/zones/example.com/records", { method: "DELETE", headers: { Origin: "http://localhost" }, body: JSON.stringify({ name: zone.rrsets[0].name, type: "A", content: "192.0.2.1", expectedHash: source.expectedHash, deletionPassword: "test-delete-password" }) }), { params: Promise.resolve({ zone: zone.name }) });
     expect(response.status).toBe(200);
-    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBeNull();
     vi.mocked(powerdns.replaceRRSet).mockClear();
     await removeMembers();
     await editUnit(admin, unitId, { action: "delete" });
     expect(await db.dnsUnit.findUnique({ where: { id: unitId } })).toBeNull();
     expect(await db.dnsInspection.findUniqueOrThrow({ where: { id: inspected.id } })).toMatchObject({ recordId: source.id, note: "歷史清查" });
     for (const task of tasks) expect(await db.inspectionTask.findUniqueOrThrow({ where: { id: task.id } })).toEqual({ ...task, unitId: null, archivedUnitId: unitId, archivedUnitName: unit.name });
-    expect(await db.auditLog.findFirstOrThrow({ where: { action: "DELETE_DNS_UNIT", userId: admin.id } })).toMatchObject({ oldValue: { id: unitId, recordIds: [source.id], inspectionTaskIds: expect.arrayContaining(tasks.map((task) => task.id)) } });
+    expect(await db.auditLog.findFirstOrThrow({ where: { action: "DELETE_DNS_UNIT", userId: admin.id } })).toMatchObject({ oldValue: { id: unitId, recordIds: [], inspectionTaskIds: expect.arrayContaining(tasks.map((task) => task.id)) } });
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
   });
   it("keeps exactly one live or archived inspection recipient and requires an archived name", async () => {
@@ -972,4 +972,107 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     } finally { await db.inspectionEvent.deleteMany({ where: { id: event!.id } }); }
   });
 
+
+  const directRequest = (method: string, body: unknown) => new Request("http://localhost/api/zones/example.com./records", { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const zoneContext = () => ({ params: Promise.resolve({ zone: zone.name }) });
+  it("preserves disabled values and comments when only TTL changes", async () => {
+    await sourceRecord();
+    zone.rrsets[0].records[0].disabled = true;
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    const rr = structuredClone(zone.rrsets[0]);
+    const response = await updateDnsRecord(directRequest("PATCH", { name: rr.name, type: rr.type, ttl: 600, contents: rr.records.map(r => r.content), expectedHash: rrsetHash(rr) }), zoneContext());
+    expect(response.status).toBe(200);
+    expect(zone.rrsets[0]).toEqual({ ...rr, ttl: 600 });
+  });
+  it("preserves multi-string TXT during TTL edits and can delete the exact value", async () => {
+    const content = String.raw`"v=DKIM1; p=abc" "def\"ghi"`;
+    zone.rrsets = [{ name: "txt.example.com.", type: "TXT", ttl: 300, records: [{ content, disabled: false }] }];
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    const rr = structuredClone(zone.rrsets[0]);
+    expect((await updateDnsRecord(directRequest("PATCH", { name: rr.name, type: rr.type, ttl: 600, contents: [content], expectedHash: rrsetHash(rr) }), zoneContext())).status).toBe(200);
+    expect(zone.rrsets[0].records).toEqual(rr.records);
+    expect((await deleteDnsRecord(directRequest("DELETE", { name: rr.name, type: rr.type, content, expectedHash: rrsetHash(zone.rrsets[0]), deletionPassword: "test-delete-password" }), zoneContext())).status).toBe(200);
+    expect(zone.rrsets).toEqual([]);
+  });
+  it.each(["DELETE", "PATCH"])("retires only removed unit assignments after direct %s and does not restore them on recreation", async method => {
+    const source = await sourceRecord();
+    const inspection = await inspectUnitRecord(editor, unitId, { recordId: source.id, expectedHash: source.expectedHash, note: "keep history" });
+    const sibling = { zoneName: zone.name, recordName: zone.rrsets[0].name, recordType: "A", content: "192.0.2.99" };
+    const siblingId = recordId("local-mock", sibling);
+    await db.dnsRecordMetadata.create({ data: { id: siblingId, ...sibling, unitId, updatedBy: admin.email } });
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    const rr = structuredClone(zone.rrsets[0]);
+    const body = { name: rr.name, type: rr.type, expectedHash: rrsetHash(rr), deletionPassword: "test-delete-password" };
+    const response = method === "DELETE"
+      ? await deleteDnsRecord(directRequest(method, { ...body, content: "192.0.2.1" }), zoneContext())
+      : await updateDnsRecord(directRequest(method, { ...body, ttl: 300, contents: ["192.0.2.99"] }), zoneContext());
+    expect(response.status).toBe(200);
+    expect(await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).toMatchObject({ unitId: null });
+    expect(await db.dnsInspection.findUnique({ where: { id: inspection.id } })).toMatchObject({ recordId: source.id });
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: siblingId } })).unitId).toBe(unitId);
+    expect((await createDnsRecord(directRequest("POST", { name: rr.name, type: rr.type, content: "192.0.2.1", ttl: 300 }), zoneContext())).status).toBe(200);
+    expect((await unitDetail(editor, unitId)).records.some(r => r.id === source.id)).toBe(false);
+    await expect(requestUnitChange(editor, unitId, { recordId: source.id, expectedHash: rrsetHash(zone.rrsets[0]), content: "192.0.2.20", purpose: "must not regain access" })).rejects.toMatchObject({ status: 404 });
+  });
+  it("retires stale historical assignments when an absent value is directly recreated", async () => {
+    const source = await sourceRecord();
+    zone.rrsets[0].records = zone.rrsets[0].records.filter(r => r.content !== "192.0.2.1");
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    expect((await createDnsRecord(directRequest("POST", { name: zone.rrsets[0].name, type: "A", content: "192.0.2.1", ttl: 300 }), zoneContext())).status).toBe(200);
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBeNull();
+  });
+  it("rolls back assignment retirement if PowerDNS rejects deletion", async () => {
+    const source = await sourceRecord();
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    vi.mocked(powerdns.replaceRRSet).mockRejectedValueOnce(new PowerDNSError("unavailable", 502));
+    expect((await deleteDnsRecord(directRequest("DELETE", { name: zone.rrsets[0].name, type: "A", content: "192.0.2.1", expectedHash: source.expectedHash, deletionPassword: "test-delete-password" }), zoneContext())).status).toBe(502);
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
+  });
+  it("allows an approved address round trip while preserving each value's inspection history", async () => {
+    const source = await sourceRecord();
+    const inspection = await inspectUnitRecord(editor, unitId, { recordId: source.id, expectedHash: source.expectedHash, note: "original value history" });
+    const first = await requestUnitChange(editor, unitId, changeInput(source));
+    await reviewUnitRequest(admin, first.id, "APPROVE", undefined, "test-delete-password");
+    const moved = await db.dnsRecordMetadata.findFirstOrThrow({ where: { unitId, content: "192.0.2.10" } });
+    const second = await requestUnitChange(editor, unitId, { recordId: moved.id, expectedHash: rrsetHash(zone.rrsets[0]), content: "192.0.2.1", purpose: "restore previous address" });
+    await reviewUnitRequest(admin, second.id, "APPROVE", undefined, "test-delete-password");
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: moved.id } })).unitId).toBeNull();
+    expect(await db.dnsInspection.findUnique({ where: { id: inspection.id } })).toMatchObject({ recordId: source.id });
+    expect(zone.rrsets[0].records.map(r => r.content)).toEqual(["192.0.2.1", "192.0.2.99"]);
+  });
+  it("still refuses to reuse a historical value assigned to another unit", async () => {
+    const source = await sourceRecord();
+    const first = await requestUnitChange(editor, unitId, changeInput(source));
+    await reviewUnitRequest(admin, first.id, "APPROVE", undefined, "test-delete-password");
+    const other = await createUnit(admin, `protected-${crypto.randomUUID()}`);
+    await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId: other.unit.id } });
+    const moved = await db.dnsRecordMetadata.findFirstOrThrow({ where: { unitId, content: "192.0.2.10" } });
+    const second = await requestUnitChange(editor, unitId, { recordId: moved.id, expectedHash: rrsetHash(zone.rrsets[0]), content: "192.0.2.1", purpose: "must not steal" });
+    vi.mocked(powerdns.replaceRRSet).mockClear();
+    await expect(reviewUnitRequest(admin, second.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 409 });
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+  });
+
+  it("can approve a new application for a previously deleted value without losing history", async () => {
+    const source = await sourceRecord();
+    const inspection = await inspectUnitRecord(editor, unitId, { recordId: source.id, expectedHash: source.expectedHash, note: "historical" });
+    const deletion = await requestUnitChange(editor, unitId, { operation: "DELETE", recordId: source.id, expectedHash: source.expectedHash, purpose: "retire" });
+    await reviewUnitRequest(admin, deletion.id, "APPROVE", undefined, "test-delete-password");
+    const record = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    const submitted = await saveApplication(editor, { unitId, applicantName: "new contact", applicantEmail: "new@example.com", applicantUnit: "ignored", applicantExtension: "1234", records: [{ zoneName: record.zoneName, recordName: record.recordName, recordType: record.recordType, content: record.content, ttl: 300, purpose: "reuse" }] }, httpRequest());
+    const request = await db.dnsRecordRequest.findFirstOrThrow({ where: { applicationId: submitted.applicationId } });
+    await reviewUnitRequest(admin, request.id, "APPROVE");
+    expect(await db.dnsRecordMetadata.findUnique({ where: { id: source.id } })).toMatchObject({ unitId, applicantName: "new contact", purpose: "reuse" });
+    expect(await db.dnsInspection.findUnique({ where: { id: inspection.id } })).toMatchObject({ recordId: source.id });
+  });
+  it("serializes assignment with direct DNS publication using the zone lock", async () => {
+    const source = await sourceRecord();
+    const metadata = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    await db.$transaction(async tx => {
+      await lockDnsZone(tx, zone.name, "local-mock");
+      await expect(assignRecordUnit(admin, { ...metadata, expectedUpdatedAt: metadata.updatedAt.toISOString(), unitId })).rejects.toMatchObject({ status: 409 });
+    });
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
+  });
 });

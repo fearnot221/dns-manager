@@ -3,5 +3,5 @@ import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   resolve:{alias:{"@":fileURLToPath(new URL(".",import.meta.url))}},
-  test:{environment:"node",coverage:{reporter:["text","html"]}},
+  test:{include:["tests/**/*.test.{ts,tsx,mjs}"],environment:"node",coverage:{reporter:["text","html"]}},
 });

@@ -13,3 +13,20 @@ describe("record content",()=>{
   it("normalizes targets and structured records",()=>{expect(normalizeRecordContent("CNAME","Target.Example.net")).toBe("target.example.net.");expect(normalizeRecordContent("MX","10 mail.example.net")).toBe("10 mail.example.net.");expect(normalizeRecordContent("SRV","10 5 443 sip.example.net")).toBe("10 5 443 sip.example.net.");});
   it("quotes TXT and CAA values",()=>{expect(normalizeRecordContent("TXT","hello world")).toBe('"hello world"');expect(normalizeRecordContent("CAA","0 issue letsencrypt.org")).toBe('0 issue "letsencrypt.org"');});
 });
+
+
+describe("TXT presentation preservation", () => {
+  it.each(['"abc" "def"', '"" "hello"', '"v=DKIM1; p=abc" "def"', String.raw`"quoted \"word\" and \\ path"`, String.raw`"\195\167"`, '"one"\t"two"']) ("round-trips %s without changing DNS bytes", content => {
+    expect(normalizeRecordContent("TXT", content)).toBe(content);
+    expect(normalizeRecordContent("TXT", normalizeRecordContent("TXT", content))).toBe(content);
+  });
+  it("escapes literal raw-text quotes and backslashes once", () => {
+    const value = String.raw`a "quote" and \path`;
+    const result = normalizeRecordContent("TXT", value);
+    expect(result).toBe(String.raw`"a \"quote\" and \\path"`);
+    expect(normalizeRecordContent("TXT", result)).toBe(result);
+  });
+  it.each(['"unterminated', '"a"garbage', '"a""b"', String.raw`"\999"`, String.raw`"\12"`, '"abc\\']) ("rejects malformed quoted content %s", content => {
+    expect(() => normalizeRecordContent("TXT", content)).toThrow();
+  });
+});

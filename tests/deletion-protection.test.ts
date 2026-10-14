@@ -5,7 +5,7 @@ vi.mock("@/lib/db/local-store", () => ({ isLocalDemo: () => true, localDocument:
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class extends Error {} }));
 vi.mock("@/lib/audit/service", () => ({ logAuditEvent: vi.fn(async () => {}) }));
 vi.mock("@/lib/dns/lock", () => ({ withDnsZoneLock: async (_zone: string, fn: () => Promise<unknown>) => fn() }));
-vi.mock("@/lib/inventory/service", () => ({ describeRecords: vi.fn() }));
+vi.mock("@/lib/inventory/service", () => ({ describeRecords: vi.fn(), detachChangedRecordUnits: vi.fn() }));
 vi.mock("@/lib/powerdns/client", () => ({ powerdns: { getZone: vi.fn(), replaceRRSet: vi.fn(), deleteRRSet: vi.fn(), deleteZone: vi.fn() } }));
 import { localDocument } from "@/lib/db/local-store";
 import { requireActor } from "@/lib/auth/session";
