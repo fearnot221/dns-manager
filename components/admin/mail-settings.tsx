@@ -77,7 +77,7 @@ export function MailSettingsForm({ initial, onSaved }: { initial: PublicMailSett
           <label htmlFor={`${id}-fromName`}>寄件者名稱<input {...props("fromName")} maxLength={100} value={config.fromName} onChange={e => update("fromName", e.target.value)} />{error("fromName")}</label>
           <label htmlFor={`${id}-fromEmail`}>寄件地址<input {...props("fromEmail")} type="email" required={config.enabled} value={config.fromEmail} onChange={e => update("fromEmail", e.target.value)} placeholder="dns@example.edu.tw" />{error("fromEmail")}</label>
         </div>
-        <label htmlFor={`${id}-recipients`}>網管小組收件地址<textarea {...props("recipients", `${id}-recipients-help`)} required={config.enabled} rows={3} maxLength={5200} value={recipients} onChange={e => setRecipients(e.target.value)} />{error("recipients")}<small id={`${id}-recipients-help`}>每封通知皆 CC；每行一個或以逗號分隔，最多 20 個。</small></label>
+        <label htmlFor={`${id}-recipients`}>網管小組收件地址<textarea {...props("recipients", `${id}-recipients-help`)} required={config.enabled} rows={3} maxLength={5200} value={recipients} onChange={e => setRecipients(e.target.value)} />{error("recipients")}<small id={`${id}-recipients-help`}>每封通知皆 CC 並作為回覆地址；每行一個或以逗號分隔，最多 20 個。</small></label>
       </fieldset>
       <fieldset className="form-fields mail-template" disabled={pending}>
         <legend className="mail-section-title">郵件模板</legend>

@@ -29,7 +29,7 @@ Google 官方說明：[SMTP relay 設定](https://support.google.com/a/answer/29
 
 一份申請對每個收件地址產生一筆通知，每封通知及測試信均 CC 到寄送當下已儲存的網管小組收件地址，批次新增不逐筆寄送。申請及通知在同一資料庫交易提交；SMTP 故障不會讓已儲存的申請消失。
 
-通知保存排入當時的寄件名稱／地址、收件地址、主旨及內文；修改設定不會改寫既有待辦。worker 使用最新 CC 收件清單與 SMTP 連線設定；寄件地址須符合 Google Workspace relay 政策。
+通知保存排入當時的寄件名稱／地址、收件地址、主旨及內文；修改設定不會改寫既有待辦。worker 使用最新 CC／Reply-To 收件清單與 SMTP 連線設定；寄件地址須符合 Google Workspace relay 政策。
 
 停用通知會停止新增待辦、暫停既有待辦；重新啟用後繼續處理。停用瞬間已進行中的寄送可能完成。重新啟用不回補停用期間的新申請。
 
@@ -96,3 +96,9 @@ PR #11 的初次 Verify 在 production npm audit 失敗：Nodemailer 8 的安全
 - `UNIT_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55439/dns_units_test npm test -- tests/mail.test.ts tests/mail.integration.test.ts`：18 項通過，使用本次新建隔離 PostgreSQL；涵蓋多個 CC、設定變更後的通知與測試信、部分拒收、權限與重試。
 - `npm run build`（含 TypeScript）、`git diff --check`：通過。
 - 無資料庫結構變更；未啟動 demo、未做瀏覽器視覺驗證、未實際寄信、未 push／部署。隔離資料庫於驗證後停止。
+
+## 回覆地址（Reply-To）
+
+所有通知及測試信以寄送當下已儲存的「網管小組收件地址」清單作為 Reply-To；多個地址均會列入。收件人按回覆時，郵件軟體會使用此清單。寄件地址仍維持原設定，不必因此建立寄件信箱；網管小組地址須可實際收信。此變更只影響更新後寄出的郵件，已寄出郵件的標頭不會改變。回信由既有郵件服務接收，DNS Manager 不讀取回信或更新申請狀態。
+
+2026-10-15 本地驗證：`codex/mail-reply-to`，基於 `f0318b7` 加本次修正。`npm run lint -- --ignore-pattern '.claude/**'`、`UNIT_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55439/dns_units_test npm test -- tests/mail.test.ts tests/mail.integration.test.ts`（18 項）、`npm run build`（含型別檢查）、`git diff --check` 均通過。隔離 PostgreSQL 已停止；未啟動 demo、未實際寄信，無 migration。
