@@ -1,3 +1,4 @@
+import { lockDnsZone } from "@/lib/dns/lock";
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db/client";
@@ -23,10 +24,11 @@ export async function assignRecordUnit(actor: Actor, input: UnitAssignment) {
       // Share the unit locks used by request submission/review and serialize transfers.
       for (const id of [...new Set([input.unitId, ...(initial?.unitId ? [initial.unitId] : [])])].sort()) await lockUnit(tx, id);
       await requireActiveUnit(tx, input.unitId);
+      const scope = await connectionScope();
+      await lockDnsZone(tx, input.zoneName, scope);
       await tx.$queryRaw`SELECT "id" FROM "DnsRecordMetadata" WHERE "id" = ${input.id} FOR UPDATE`;
       const current = await tx.dnsRecordMetadata.findUnique({ where: { id: input.id } });
       if ((current?.updatedAt.toISOString() ?? null) !== input.expectedUpdatedAt || current?.unitId !== initial?.unitId) throw new ApiError("歸屬資料已更新，請重新載入後再指派。", 409);
-      const scope = await connectionScope();
       if (input.id !== recordId(scope, input)) throw new ApiError("DNS 連線已變更，請重新載入。", 409);
       const zone = await powerdns.getZone(input.zoneName);
       if (!zone.rrsets.some((rrset) => rrset.name === input.recordName && rrset.type === input.recordType && rrset.records.some((record) => record.content === input.content))) throw new ApiError("此解析值已不存在，請重新載入。", 409);

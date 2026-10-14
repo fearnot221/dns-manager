@@ -44,7 +44,7 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
         const source = await tx.dnsRecordMetadata.findUnique({ where: { id: item.sourceRecordId } });
         if (!source || source.unitId !== initial.unitId || source.content !== item.originalContent || !item.expectedRRSet) throw new ApiError("原紀錄歸屬已變更，請退回並重新申請。", 409);
         if (item.sourceMetadataUpdatedAt && source.updatedAt.getTime() !== item.sourceMetadataUpdatedAt.getTime()) throw new ApiError("清查或歸屬資料已更新，請退回並重新申請。", 409);
-        if (item.operation !== "DELETE" && target) throw new ApiError("目標內容已有紀錄資料，請由系統管理員確認歸屬後處理。", 409);
+        if (item.operation !== "DELETE" && target?.unitId) throw new ApiError("目標內容已有紀錄資料，請由系統管理員確認歸屬後處理。", 409);
         const before = item.expectedRRSet as unknown as RRSet;
         if (source.id !== recordId(scope, source) || source.zoneName !== item.zoneName || source.recordName !== item.recordName || source.recordType !== item.recordType) throw new ApiError("原紀錄識別不符，請重新申請。", 409);
         next = item.operation === "DELETE" ? deleteUnitValue(before, source.content) : replaceUnitValue(before, source.content, item.content);
@@ -59,12 +59,19 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
         const { id: _id, updatedAt: _updatedAt, ...metadata } = source;
         void _id; void _updatedAt;
         // Retain historical inspections on the old identity; do not mislabel them as inspections of the new value.
-        if (item.operation !== "DELETE") await tx.dnsRecordMetadata.create({ data: { ...metadata, id: targetId, content: item.content, ...(item.recordPurpose !== null ? { purpose: item.recordPurpose, applicantName: item.applicantName ?? source.applicantName, applicantEmail: item.applicantEmail ?? source.applicantEmail, applicantExtension: item.applicantExtension ?? source.applicantExtension, applicantUnit: item.applicantUnit ?? source.applicantUnit } : {}), updatedBy: actor.email } });
+        if (item.operation !== "DELETE") {
+          const replacement = { ...metadata, content: item.content,
+            ...(item.recordPurpose !== null ? { purpose: item.recordPurpose, applicantName: item.applicantName ?? source.applicantName, applicantEmail: item.applicantEmail ?? source.applicantEmail, applicantExtension: item.applicantExtension ?? source.applicantExtension, applicantUnit: item.applicantUnit ?? source.applicantUnit } : {}),
+            updatedBy: actor.email };
+          // A detached historical identity can be reused after live-state validation.
+          // Its inspections remain attached to the same DNS value, never moved from source.
+          await tx.dnsRecordMetadata.upsert({ where: { id: targetId }, create: { id: targetId, ...replacement }, update: replacement });
+        }
         await tx.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId: null } });
       } else {
         const before = item.expectedRRSet as unknown as RRSet | null;
         if (before?.records.some((r) => r.content === item.content)) throw new ApiError("此解析值在申請時已存在，不能取得共享權限。", 409);
-        if (target && target.unitId !== initial.unitId) throw new ApiError("此解析值已有其他歸屬資料，請確認後處理。", 409);
+        if (target?.unitId && target.unitId !== initial.unitId) throw new ApiError("此解析值已有其他歸屬資料，請確認後處理。", 409);
         const expectedAfter = { ...before, ...addRecord(before ?? undefined, { name: item.recordName, type: item.recordType as RecordType, ttl: before?.ttl ?? item.ttl }, item.content) };
         if (!current?.records.some((r) => r.content === item.content)) {
           // Independent additions in a multi-record application need not be approved in order.
@@ -74,7 +81,8 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
           throw new ApiError("解析值已出現但歸屬無法確認，請由系統管理員處理。", 409);
         }
         if (current && unitRRSetHash(current) === unitRRSetHash(expectedAfter)) auditBefore = before;
-        await tx.dnsRecordMetadata.upsert({ where: { id: targetId }, update: {}, create: { id: targetId, unitId: initial.unitId, zoneName: item.zoneName, recordName: item.recordName, recordType: item.recordType, content: item.content, applicantName: item.applicantName || "", applicantEmail: item.applicantEmail ?? item.user.portalEmail ?? "", applicantUnit: item.applicantUnit || "", applicantExtension: item.applicantExtension || "", purpose: item.purpose || "", updatedBy: actor.email } });
+        const ownership = { unitId: initial.unitId, applicantName: item.applicantName || "", applicantEmail: item.applicantEmail ?? item.user.portalEmail ?? "", applicantUnit: item.applicantUnit || "", applicantExtension: item.applicantExtension || "", purpose: item.purpose || "", updatedBy: actor.email };
+        await tx.dnsRecordMetadata.upsert({ where: { id: targetId }, update: target?.unitId ? {} : ownership, create: { id: targetId, zoneName: item.zoneName, recordName: item.recordName, recordType: item.recordType, content: item.content, ...ownership } });
       }
       await tx.auditLog.create({ data: { dnsScope: scope, userId: actor.id, userEmail: actor.email, zone: item.zoneName, recordName: item.recordName, recordType: item.recordType, action: "APPLY_UNIT_DNS_REQUEST", success: true, oldValue: auditBefore ? redactAudit(auditBefore) as Prisma.InputJsonValue : Prisma.JsonNull, newValue: redactAudit({ requestId: id, unitId: initial.unitId, operation: item.operation, rrset: item.operation === "DELETE" ? next ?? null : next ?? current }) as Prisma.InputJsonValue } });
     }

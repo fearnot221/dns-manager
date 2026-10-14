@@ -45,7 +45,7 @@ export function normalizeRecordContent(type:RecordType, content:string):string {
     if (!match || Number(match[1]) > 255) throw new Error("CAA must be: flags tag value");
     return `${Number(match[1])} ${match[2].toLowerCase()} ${quote(match[3])}`;
   }
-  if (type === "TXT") return quote(value);
+  if (type === "TXT") return normalizeTxt(value);
   return value;
 }
 
@@ -73,3 +73,30 @@ function isLabel(label:string, allowUnderscore=false):boolean {
   return new RegExp(`^(?!-)(?:${body}|-){1,63}(?<!-)$`, "i").test(label);
 }
 function quote(value:string):string { const unquoted=value.replace(/^"|"$/g,""); return `"${unquoted.replace(/(?<!\\)"/g,'\\"')}"`; }
+
+
+/** Preserve DNS presentation-format strings; quoting them again changes their bytes. */
+function normalizeTxt(value: string): string {
+  if (!value.startsWith('"')) return '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  let index = 0;
+  while (index < value.length) {
+    if (value[index++] !== '"') throw new Error("Invalid TXT string sequence");
+    let closed = false;
+    while (index < value.length) {
+      const character = value[index++];
+      if (character === '"') { closed = true; break; }
+      if (character === '\\') {
+        if (index >= value.length) throw new Error("Invalid TXT escape");
+        if (/\d/.test(value[index])) {
+          const octet = value.slice(index, index + 3);
+          if (!/^\d{3}$/.test(octet) || Number(octet) > 255) throw new Error("Invalid TXT octet");
+          index += 3;
+        } else index++;
+      } else if (character === '\n' || character === '\r' || character === '\0') throw new Error("Invalid TXT character");
+    }
+    if (!closed) throw new Error("Unclosed TXT string");
+    if (index < value.length && !/\s/.test(value[index])) throw new Error("TXT strings must be separated by whitespace");
+    while (index < value.length && /\s/.test(value[index])) index++;
+  }
+  return value;
+}

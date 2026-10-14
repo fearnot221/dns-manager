@@ -16,3 +16,8 @@ work
 **/*.env
 !**/*.env.example
 tutorial-videos
+
+**/.claude
+**/.codex
+**/.worktrees
+**/worktrees

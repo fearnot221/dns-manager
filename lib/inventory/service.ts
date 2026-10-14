@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db/client";
 import { isLocalDemo, localDocument } from "@/lib/db/local-store";
@@ -84,4 +85,23 @@ export async function saveInventory(actor: Actor, input: Identity & { id: string
     }
     return { before: current ?? live.ownership, after: { ...saved, ...(input.mode !== "metadata" ? { inspection } : {}) } };
   }, { isolationLevel: "Serializable" });
+}
+
+/** A deleted/reintroduced value never silently inherits historical unit access.
+ * Called under the zone lock, in the transaction that surrounds publication.
+ * Keep metadata and inspections for history; only retire the live assignment.
+ */
+export async function detachChangedRecordUnits(tx: Prisma.TransactionClient | undefined, zone: string, before: RRSet | undefined, after: RRSet | undefined) {
+  const scope = await connectionScope();
+  const previous = new Set(before?.records.map(record => record.content));
+  const next = new Set(after?.records.map(record => record.content));
+  const ids = [
+    ...(before?.records.filter(record => !next.has(record.content)).map(record => recordId(scope, { zoneName: zone, recordName: before.name, recordType: before.type, content: record.content })) ?? []),
+    ...(after?.records.filter(record => !previous.has(record.content)).map(record => recordId(scope, { zoneName: zone, recordName: after.name, recordType: after.type, content: record.content })) ?? []),
+  ];
+  if (!ids.length) return;
+  if (tx) await tx.dnsRecordMetadata.updateMany({ where: { id: { in: ids }, unitId: { not: null } }, data: { unitId: null } });
+  else if (isLocalDemo()) await localDocument<Store, void>("inventory", async () => ({ records: {} }), data => {
+    for (const id of ids) if (data.records[id]) data.records[id].unitId = null;
+  }, true);
 }

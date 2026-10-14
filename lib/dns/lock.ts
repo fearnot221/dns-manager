@@ -9,8 +9,8 @@ export async function lockDnsZone(tx: Prisma.TransactionClient, zone: string, sc
   const rows = await tx.$queryRaw<{ locked: boolean }[]>`SELECT pg_try_advisory_xact_lock(hashtextextended(${scope + "|" + zone.toLowerCase()}, 0)) AS locked`;
   if (!rows[0]?.locked) throw new ApiError("此網域正在更新，請稍後重試。", 409);
 }
-export async function withDnsZoneLock<T>(zone: string, action: () => Promise<T>): Promise<T> {
+export async function withDnsZoneLock<T>(zone: string, action: (tx?: Prisma.TransactionClient) => Promise<T>): Promise<T> {
   if (!process.env.DATABASE_URL) return action();
   const scope = await connectionScope();
-  return db.$transaction(async (tx) => { await lockDnsZone(tx, zone, scope); return action(); }, { timeout: 60000 });
+  return db.$transaction(async (tx) => { await lockDnsZone(tx, zone, scope); return action(tx); }, { timeout: 60000 });
 }

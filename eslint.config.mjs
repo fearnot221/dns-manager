@@ -9,6 +9,10 @@ import tseslint from "typescript-eslint";
 
 const eslintConfig = defineConfig([
   globalIgnores([
+    "**/.claude/**",
+    "**/.codex/**",
+    "**/.worktrees/**",
+    "**/worktrees/**",
     ".next/**",
     "dist/**",
     "out/**",
