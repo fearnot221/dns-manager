@@ -48,10 +48,14 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.0",
+    "fast-glob": "file:tooling/next-eslint-glob"
   },
   "overrides": {
     "deepmerge-ts": "^8.0.0",
-    "nodemailer": "$nodemailer"
+    "nodemailer": "$nodemailer",
+    "@next/eslint-plugin-next@16.3.8": {
+      "fast-glob": "$fast-glob"
+    }
   }
 }
