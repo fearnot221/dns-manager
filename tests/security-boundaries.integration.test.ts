@@ -131,4 +131,16 @@ describe.skipIf(!url)("security budgets, scoped API access and review serializat
   const published=zone.rrsets.some(r=>r.name===item.recordName);
   expect(published).toBe(saved.status==="APPROVED");
  });
+ it("blocks legacy rejection after an interrupted publication and completes without a second write",async()=>{
+  const item=await db.dnsRecordRequest.create({data:{...fixture(crypto.randomUUID()),unitId:null}});
+  vi.mocked(powerdns.replaceRRSet).mockImplementationOnce(async(_zone,rrset)=>{zone.rrsets=[structuredClone(rrset)];throw Error("response lost after publication");});
+  const call=(decision:string)=>reviewRequest(new Request(`http://localhost/api/dns-requests/${item.id}`,{method:"PATCH",body:JSON.stringify({decision})}),{params:Promise.resolve({id:item.id})});
+  expect((await call("APPROVE")).status).toBe(500);
+  expect((await db.dnsRequestPublication.findUniqueOrThrow({where:{requestId:item.id}})).completedAt).toBeNull();
+  expect((await call("REJECT")).status).toBe(409);
+  expect((await call("APPROVE")).status).toBe(200);
+  expect(powerdns.replaceRRSet).toHaveBeenCalledOnce();
+  expect((await db.dnsRecordRequest.findUniqueOrThrow({where:{id:item.id}})).status).toBe("APPROVED");
+  expect((await db.dnsRequestPublication.findUniqueOrThrow({where:{requestId:item.id}})).completedAt).not.toBeNull();
+ });
 });

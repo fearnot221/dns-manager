@@ -15,6 +15,7 @@ import { findDevRequest, isDevRequestStore, reviewDevRequest } from "@/lib/reque
 import { withDnsRequestLock } from "@/lib/requests/lock";
 import { connectionScope } from "@/lib/inventory/service";
 import { reviewUnitRequest } from "@/lib/units/review";
+import { beginPublication, publicationPendingMessage, publicationState } from "@/lib/requests/publication";
 
 async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns-requests/[id]">) {
   let actor: Awaited<ReturnType<typeof requireActor>> | undefined;
@@ -36,12 +37,22 @@ async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns
     recordRequest=isDevRequestStore()?findDevRequest(id):await tx!.dnsRecordRequest.findUnique({where:{id},include:{user:{select:{email:true,name:true}}}});
     notFoundUnless(Boolean(recordRequest) && canReviewDnsRequest(actor!, recordRequest!));
     if (recordRequest!.status !== "PENDING") throw new ApiError("This request has already been reviewed", 409);
+    const publication = tx ? await tx.dnsRequestPublication.findUnique({ where: { requestId: id } }) : null;
+    if (decision.decision === "REJECT" && publication) throw new ApiError(publicationPendingMessage, 409);
 
     if (decision.decision === "APPROVE") {
       const publish=async () => {
       const recordType = recordRequest!.recordType as RecordType;
       const zone = await powerdns.getZone(recordRequest!.zoneName);
       const current = zone.rrsets.find((rrset) => rrset.name === recordRequest!.recordName && rrset.type === recordType);
+      const scope = await connectionScope();
+      if (publication) {
+        if (publicationState(publication, scope, current) === "READY") {
+          await powerdns.replaceRRSet(recordRequest!.zoneName, publication.afterRRSet as unknown as RRSet);
+        }
+        await captureApprovedRequest(actor!, recordRequest!);
+        return;
+      }
       const alreadyPresent = current?.records.some((record) => record.content === recordRequest!.content);
       if (!alreadyPresent) {
         const next: RRSet = addRecord(
@@ -49,6 +60,7 @@ async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns
           { name: recordRequest!.recordName, type: recordType, ttl: current?.ttl ?? recordRequest!.ttl },
           recordRequest!.content,
         );
+        if (tx) await beginPublication(id, scope, actor!.id, current, next);
         await powerdns.replaceRRSet(recordRequest!.zoneName, next);
         await logAuditEvent({ actor: actor!, zone: recordRequest!.zoneName, recordName: recordRequest!.recordName, recordType, action: "APPLY_APPROVED_DNS_RECORD", before: current, after: next, success: true, request });
       }
@@ -59,6 +71,7 @@ async function PATCHHandler(request: Request, { params }: RouteContext<"/api/dns
       else await withDnsZoneLock(recordRequest!.zoneName,publish);
     }
 
+    if (tx && decision.decision === "APPROVE") await tx.dnsRequestPublication.updateMany({ where: { requestId: id }, data: { completedAt: new Date() } });
     return isDevRequestStore()
       ? reviewDevRequest(recordRequest!.id, actor!, decision.decision, decision.reviewNote)!
       : await tx!.dnsRecordRequest.update({
