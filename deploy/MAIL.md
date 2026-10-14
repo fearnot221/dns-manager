@@ -5,37 +5,45 @@
 ## Google SMTP
 
 1. 在 Workspace 管理控制台允許 VM 的固定公網出口 IP、限制寄件網域、要求 TLS，且不要求 SMTP 帳密驗證。系統統一由 server 透過 `smtp-relay.gmail.com` 寄送，預設 Port 587（強制 STARTTLS），不支援個別 Google 帳號登入。
-2. 在 admin 填寫寄件名稱、寄件地址與網管群組信箱。寄件地址須符合 Workspace relay 的允許寄件者政策。多個收件地址以換行或逗號分隔，最多 20 個。
-3. 調整模板並預覽，勾選啟用並儲存。不需要設定 Google 帳號、應用程式密碼或 OAuth。
-4. 在測試區填入明確的測試收件地址，按「寄送測試信」。測試使用已儲存設定，會實際寄信；請更新紀錄並確認收件匣／垃圾郵件匣。測試須由已列入白名單的 VM 出站，其他來源可能被 Google 拒絕。
+2. 在「通知設定」填寫寄件名稱、寄件地址與網管小組收件地址。寄件地址須符合 Workspace relay 的允許寄件者政策。收件地址以標籤方式輸入（Enter、逗號、空白或一次貼上多個），最多 20 個。
+3. 在「郵件模板」調整各場景並預覽，啟用郵件服務並儲存。不需要設定 Google 帳號、應用程式密碼或 OAuth。
+4. 在模板下方填入明確的測試收件地址，按「寄送測試信」。測試以範例資料寄出目前選取且已儲存的模板，會實際寄信；請更新紀錄並確認收件匣／垃圾郵件匣。測試須由已列入白名單的 VM 出站，其他來源可能被 Google 拒絕。
 
-目前功能為申請通知寄送；收件信箱由既有郵件服務接收，本系統不讀取或儲存信箱內的郵件。
+收件信箱由既有郵件服務接收，本系統不讀取或儲存信箱內的郵件。
 
 Google 官方說明：[SMTP relay 設定](https://support.google.com/a/answer/2956491)。
 
 ## 模板與通知
 
-模板為純文字，不執行 HTML、JavaScript 或任意模板運算。支援以下變數：
+模板為純文字，不執行 HTML、JavaScript 或任意模板運算；每個場景只接受自己的變數，主旨與內文可點選變數插入，並以範例資料即時預覽。
 
-| 變數 | 內容 |
-| --- | --- |
-| `{{applicationId}}` | 批次申請編號；修改／刪除為該筆 request ID |
-| `{{applicantName}}` | 新增申請的聯絡人；修改／刪除優先顯示提出申請的使用者 |
-| `{{unitName}}` | 資料庫中的單位名稱 |
-| `{{recordCount}}` | 本份申請的 DNS 紀錄筆數 |
-| `{{operation}}` | 新增、修改或刪除 |
-| `{{submittedAt}}` | 台北時間的送出時間 |
-| `{{reviewUrl}}` | 由伺服器 `AUTH_URL` 產生的 `/requests` 頁面，需要登入並通過原有權限檢查 |
+| 場景 | 收件人 | 預設 | 觸發時機 |
+| --- | --- | --- | --- |
+| 新增／修改／刪除申請 | 網管小組收件地址（CC 網管小組） | 啟用 | 單位送出對應申請 |
+| 申請核准／申請退回 | 申請表的申請人信箱；未填時使用申請帳號的 Portal 信箱 | 停用 | 系統管理員審核單位申請 |
+| 清查活動排定 | 各已啟用單位中、帳號未停用且有信箱的單位管理員 | 停用 | 系統管理員新增清查活動 |
+| 自訂模板 | 「寄信給單位」選取單位的管理員 | — | 系統管理員手動寄出 |
+
+審核結果與清查活動會寄到系統外的信箱，預設停用；需在「郵件模板」個別啟用。這些場景可選擇是否「副本給網管小組」，預設不 CC；所有郵件的 Reply-To 均為網管小組收件地址。舊版只有一組主旨／內文的設定，讀取時會套用到三種申請通知，其餘場景維持預設停用。
+
+變數：
+
+- 申請通知：`{{applicationId}}`（批次申請編號；修改／刪除為該筆 request ID）、`{{applicantName}}`、`{{unitName}}`、`{{recordCount}}`、`{{operation}}`、`{{submittedAt}}`、`{{reviewUrl}}`（由 `AUTH_URL` 產生的 `/requests`）。
+- 審核結果：`{{requestId}}`、`{{applicantName}}`、`{{unitName}}`、`{{operation}}`、`{{recordName}}`、`{{recordType}}`、`{{content}}`、`{{result}}`、`{{reviewNote}}`、`{{reviewedAt}}`、`{{requestsUrl}}`。
+- 清查活動：`{{recipientName}}`、`{{unitName}}`、`{{eventName}}`、`{{startsOn}}`、`{{endsOn}}`、`{{dnsUrl}}`。
+- 自訂模板／寄信給單位：`{{recipientName}}`、`{{unitName}}`、`{{dnsUrl}}`。
+
+「寄信給單位」可搜尋並複選單位，寄給每個單位的管理員（每位管理員每個單位一封），可套用自訂模板並選擇是否副本給網管小組；送出前會確認收件數。沒有可寄送信箱的單位無法選取。手動寄信受既有每分鐘操作上限限制，並寫入操作紀錄（`SEND_UNIT_MAIL`，不含內文）。
 
 一份申請對每個收件地址產生一筆通知，每封通知及測試信均 CC 到寄送當下已儲存的網管小組收件地址，批次新增不逐筆寄送。申請及通知在同一資料庫交易提交；SMTP 故障不會讓已儲存的申請消失。
 
-通知保存排入當時的寄件名稱／地址、收件地址、主旨及內文；修改設定不會改寫既有待辦。worker 使用最新 CC／Reply-To 收件清單與 SMTP 連線設定；寄件地址須符合 Google Workspace relay 政策。
+通知保存排入當時的寄件名稱／地址、收件地址、主旨、內文及是否 CC 網管小組；修改設定不會改寫既有待辦。worker 使用最新 CC／Reply-To 收件清單與 SMTP 連線設定；寄件地址須符合 Google Workspace relay 政策。
 
 停用通知會停止新增待辦、暫停既有待辦；重新啟用後繼續處理。停用瞬間已進行中的寄送可能完成。重新啟用不回補停用期間的新申請。
 
 ## 部署與維運
 
-- 套用 `20261014000000_mail_outbox` migration，並使用更新的 Docker Compose。既有部署會先建置 `web` 與 `migrate`；`mail-worker` 使用同一個 tools image，`compose up` 一起啟動，無須更改 webhook 或 GitHub Actions 發布模式。
+- 套用 `20261014000000_mail_outbox` 與 `20261015000000_mail_scenarios`（新增 `ccTeam`，既有資料預設為 CC）migration，並使用更新的 Docker Compose。既有部署會先建置 `web` 與 `migrate`；`mail-worker` 使用同一個 tools image，`compose up` 一起啟動，無須更改 webhook 或 GitHub Actions 發布模式。
 - worker 透過 runtime DB 憑證檔存取資料庫；不保存或傳送 Google SMTP 帳密，郵件功能不使用 `SETTINGS_ENCRYPTION_KEY`。既有部署的其他金鑰要求維持原樣。
 - VM 需能對 Google SMTP 的 465／587 Port 建立出站連線。TLS 憑證檢查不可停用。worker 不提供對外 HTTP Port。
 - `mail-worker` 每 5 秒查看待辦，使用資料庫鎖與 5 分鐘租約防止同時領取；中斷後可恢復。失敗延遲約 1、2、4、8 分鐘再試，最多 5 次。達上限後顯示失敗，管理員修正設定後可按「重新寄送」。
@@ -43,7 +51,7 @@ Google 官方說明：[SMTP relay 設定](https://support.google.com/a/answer/29
 - 管理頁顯示最近 30 筆；資料庫保留全部寄送紀錄及內容，目前不自動清除。可查閱 Compose `mail-worker` 狀態與日誌；健康檢查確認 worker 能讀取設定並完成輪詢，不代表 Google 驗證或投遞成功。
 - 本機獨立執行命令：`npm run mail:worker`，需明確指定測試資料庫；此命令會處理該資料庫中已啟用的寄信待辦，不能指向未授權環境。
 
-未來新增通知種類時，新增事件產生位置、模板及收件規則即可沿用寄送待辦與 worker；本版僅實作新 DNS 申請與管理員手動測試。
+未來新增通知種類時，新增事件產生位置、場景模板及收件規則即可沿用寄送待辦與 worker。
 
 ## 初版本地驗證（2026-10-14，以下為後續移除帳密模式前的紀錄）
 
@@ -102,3 +110,10 @@ PR #11 的初次 Verify 在 production npm audit 失敗：Nodemailer 8 的安全
 所有通知及測試信以寄送當下已儲存的「網管小組收件地址」清單作為 Reply-To；多個地址均會列入。收件人按回覆時，郵件軟體會使用此清單。寄件地址仍維持原設定，不必因此建立寄件信箱；網管小組地址須可實際收信。此變更只影響更新後寄出的郵件，已寄出郵件的標頭不會改變。回信由既有郵件服務接收，DNS Manager 不讀取回信或更新申請狀態。
 
 2026-10-15 本地驗證：`codex/mail-reply-to`，基於 `f0318b7` 加本次修正。`npm run lint -- --ignore-pattern '.claude/**'`、`UNIT_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55439/dns_units_test npm test -- tests/mail.test.ts tests/mail.integration.test.ts`（18 項）、`npm run build`（含型別檢查）、`git diff --check` 均通過。隔離 PostgreSQL 已停止；未啟動 demo、未實際寄信，無 migration。
+
+## 場景模板與寄信給單位（2026-10-15）
+
+分支 `claude/mail-templates`，基於 `0903e58` 加本次未提交變更：多場景模板、自訂模板、審核結果與清查活動通知、寄信給單位、收件地址標籤輸入、`MailDelivery.ccTeam` migration。
+
+- 本機隔離 PostgreSQL 15（127.0.0.1:55439/dns_units_test，scratchpad 目錄）先 `prisma migrate deploy`，再 `UNIT_TEST_DATABASE_URL=… npx vitest run --exclude '.claude/**'`：69 個測試檔、485 項通過，包含舊設定升級、各場景變數限制、審核退回寄給申請人且不 CC、清查活動只寄給有效且有信箱的單位管理員、手動寄信與錯誤情況、指定模板的測試信。
+- lint、production build 結果見 PR。未實際寄信；正式環境的審核／清查通知預設停用，需管理員啟用。

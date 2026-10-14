@@ -50,9 +50,8 @@ export function OwnershipDialog({ drafts, record, inspection = false, canDeleteI
       {owner.updatedAt && <p className="description">最近更新：{new Date(owner.updatedAt).toLocaleString("zh-TW")} · {owner.updatedByName || (owner.updatedBy.endsWith("@accounts.invalid") ? "未提供姓名" : owner.updatedBy)}</p>}
       {inspection && <>
         <h3>記錄清查</h3>
-        <div className="request-notice">清查時間以伺服器時間為準，經手人自動記錄目前登入帳號，不可代填。</div>
+        <div className="request-notice">清查時間與經手人由系統自動記錄。</div>
         <label>清查備註<textarea name="note" maxLength={2000} placeholder="例如：已與使用單位確認，服務持續使用中。" rows={3} /></label>
-        <p className="description">「儲存並記錄清查」會一併儲存上方歸屬資料；只修改歸屬資料時，請選「儲存歸屬資料」。</p>
       </>}
       <InspectionHistory record={record} onDelete={canDeleteInspections ? removeInspection : undefined} />
       {error && <div id={errorId} ref={errorRef} tabIndex={-1} className="form-error" role="alert">{error}</div>}
@@ -75,7 +74,7 @@ export function UnitAssignmentDialog({ record, onClose, onSaved }: { record: Inv
   const errorRef = useRef<HTMLParagraphElement>(null);
   const selected = units.find((unit) => unit.id === unitId);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
-  return <Dialog title="指派單位" description="設定這筆 DNS 的所屬單位，讓單位成員查看，並由具編輯權限的成員申請變更。不會修改 DNS 解析內容。" pending={pending} onClose={onClose}>
+  return <Dialog title="指派單位" description="不會修改 DNS 解析內容。" pending={pending} onClose={onClose}>
     <form onSubmit={async (event) => {
       event.preventDefault();
       if (sending.current || !selected || resource.loading || resource.error) return;
@@ -90,7 +89,7 @@ export function UnitAssignmentDialog({ record, onClose, onSaved }: { record: Inv
       <div className="review-record"><strong>{record.recordName}</strong><span>{record.recordType} · {record.zoneName}</span><code>{record.content}</code></div>
       <p className="description">目前所屬單位：{record.ownership.unitId ? record.ownership.unitName || record.ownership.applicantUnit : "尚未指派"}</p>
       {resource.loading ? <p role="status">正在載入可指派的單位…</p> : resource.error ? <ResourceError message={resource.error} retry={resource.reload} /> : units.length ? <label>指派給單位<Select aria-label="指派給單位" required value={unitId} onChange={setUnitId} aria-invalid={!!error} aria-describedby={`${helpId}${error ? ` ${errorId}` : ""}`} options={[{ value: "", label: "請選擇單位", disabled: true }, ...units.map((unit) => ({ value: unit.id, label: unit.name }))]} /></label> : <p role="status">目前沒有已啟用的單位，請先至「單位管理」建立單位。</p>}
-      <p id={helpId} className="field-help">{record.ownership.unitId && unitId && record.ownership.unitId !== unitId ? "改派後，原單位將無法透過單位 DNS 存取此筆紀錄；原單位尚未核准的變更申請也無法再核准。" : unitId && unitId === record.ownership.unitId ? "此筆 DNS 已屬於選取的單位，無須再次指派。" : "只指派這一筆解析值，其他 DNS 紀錄不受影響。"}</p>
+      <p id={helpId} className="field-help">{record.ownership.unitId && unitId && record.ownership.unitId !== unitId ? "改派後，原單位將無法存取此紀錄，其待審變更申請也無法再核准。" : unitId && unitId === record.ownership.unitId ? "此筆 DNS 已屬於選取的單位，無須再次指派。" : "只指派這一筆解析值，其他 DNS 紀錄不受影響。"}</p>
       {error && <p id={errorId} ref={errorRef} tabIndex={-1} className="form-error" role="alert">{error}</p>}
     </div><div className="modal-foot"><button type="button" className="button" onClick={onClose}>取消</button><button type="submit" className="button primary" disabled={pending || resource.loading || !!resource.error || !selected || unitId === record.ownership.unitId}>{pending ? "指派中…" : "確認指派單位"}</button></div></fieldset></form>
   </Dialog>;

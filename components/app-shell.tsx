@@ -1,7 +1,7 @@
 "use client";
 
 import { UnitWorkspaceProvider, useUnitWorkspace, type UnitWorkspace } from "@/components/units/unit-workspace";
-import { Building2, ClipboardCheck, FileCheck2, FilePlus2, Globe2, History, LogOut, Menu, Monitor, Moon, Network, PanelLeftClose, PanelLeftOpen, ShieldCheck, SlidersHorizontal, Sun, SunMoon, UserCog, X, ChevronDown } from "lucide-react";
+import { Building2, CalendarRange, ClipboardCheck, FileCheck2, FilePlus2, Globe2, History, LogOut, Mail, Menu, Monitor, Moon, Network, PanelLeftClose, PanelLeftOpen, ShieldCheck, SlidersHorizontal, Sun, SunMoon, UserCog, X, ChevronDown } from "lucide-react";
 import { Brand } from "@/components/brand";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -11,7 +11,7 @@ import { useTheme } from "next-themes";
 import { workspaceNavigation, isNavActive, navigationCookie, type NavIcon } from "@/lib/client/navigation";
 import { IdleSession } from "@/components/auth/idle-session";
 
-const navIcons: Record<NavIcon, typeof Globe2> = { dns: Network, apply: FilePlus2, requests: FileCheck2, units: Building2, zones: Globe2, inventory: ClipboardCheck, users: UserCog, settings: SlidersHorizontal, protection: ShieldCheck, activity: History };
+const navIcons: Record<NavIcon, typeof Globe2> = { dns: Network, apply: FilePlus2, requests: FileCheck2, units: Building2, zones: Globe2, inventory: ClipboardCheck, users: UserCog, settings: SlidersHorizontal, protection: ShieldCheck, mail: Mail, events: CalendarRange, activity: History };
 const legacyNavigationStorageKey = "dns-manager-navigation-collapsed";
 const themeCycle = { system: "light", light: "dark", dark: "system" } as const;
 const themeNames = { system: "跟隨系統", light: "淺色", dark: "深色" } as const;

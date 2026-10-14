@@ -1,6 +1,7 @@
 import "server-only";
 import type { InspectionEvent, Prisma } from "@prisma/client";
 import { db } from "@/lib/db/client";
+import { enqueueInspectionMail } from "@/lib/mail/queue";
 import { isLocalDemo } from "@/lib/db/local-store";
 import { ApiError } from "@/lib/api/respond";
 import { accountOwnerIdentifier, isGlobalAdmin, isOwner, OWNER_IDENTIFIER } from "@/lib/auth/owner";
@@ -68,7 +69,10 @@ export async function changeInspectionEvent(actor: Actor, change: Change) {
     }
     let after: InspectionEvent | null = null;
     if (change.kind === "delete") await tx.inspectionEvent.delete({ where: { id: change.id } });
-    else if (change.kind === "create") after = await tx.inspectionEvent.create({ data: { name: fields!.name, ...dates! } });
+    else if (change.kind === "create") {
+      after = await tx.inspectionEvent.create({ data: { name: fields!.name, ...dates! } });
+      await enqueueInspectionMail(tx, view(after));
+    }
     else after = await tx.inspectionEvent.update({ where: { id: change.id }, data: { name: fields!.name, ...dates!, revision: { increment: 1 } } });
     await tx.auditLog.create({ data: {
       userId: actor.id, userEmail: actor.email, zone: "", action: `INSPECTION_EVENT_${change.kind.toUpperCase()}`, success: true,

@@ -41,7 +41,7 @@ export function AuditWorkbench() {
       {hasFilters && <button className="button ghost" type="button" onClick={resetFilters}>清除條件</button>}
       <button className="button" type="button" disabled={loading} onClick={() => void reload()}><RefreshCw size={15} className={loading ? "spin" : ""} aria-hidden="true" />重新整理</button>
     </form>
-    <p className="record-results" role="status">{query.trim() !== search ? "搜尋文字尚未套用，請按 Enter。" : loading && !data ? "正在載入操作紀錄…" : error ? "無法取得操作紀錄" : `共 ${data?.total ?? 0} 筆 · 點選列可查看請求資訊與變更內容；只有「開始」而沒有結果的操作，可能已中斷。`}</p>
+    <p className="record-results" role="status">{query.trim() !== search ? "搜尋文字尚未套用，請按 Enter。" : loading && !data ? "正在載入操作紀錄…" : error ? "無法取得操作紀錄" : `共 ${data?.total ?? 0} 筆 · 點選列查看詳情`}</p>
     {error ? <ResourceError message={error} retry={reload} /> : loading && !data ? <LoadingPanel label="正在載入操作紀錄…" /> : <div className={`card table-card${loading ? " is-refreshing" : ""}`} aria-busy={loading}><ScrollRegion className="table-wrap" label="操作紀錄清單"><table className="audit-table">
       <thead><tr><th scope="col"><span className="sr-only">展開</span></th><th scope="col">時間</th><th scope="col">操作者</th><th scope="col">操作</th><th scope="col">對象</th><th scope="col">結果</th></tr></thead>
       <tbody>{data?.events.map((event) => {

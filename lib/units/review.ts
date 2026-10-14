@@ -1,6 +1,7 @@
 import { assertDeletionPassword } from "@/lib/security/deletion-protection";
 import "server-only";
 import { lockDnsZone } from "@/lib/dns/lock";
+import { enqueueReviewMail } from "@/lib/mail/queue";
 import { Prisma } from "@prisma/client";
 import { redactAudit } from "@/lib/audit/redact";
 import { db } from "@/lib/db/client";
@@ -78,6 +79,8 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
       await tx.auditLog.create({ data: { dnsScope: scope, userId: actor.id, userEmail: actor.email, zone: item.zoneName, recordName: item.recordName, recordType: item.recordType, action: "APPLY_UNIT_DNS_REQUEST", success: true, oldValue: auditBefore ? redactAudit(auditBefore) as Prisma.InputJsonValue : Prisma.JsonNull, newValue: redactAudit({ requestId: id, unitId: initial.unitId, operation: item.operation, rrset: item.operation === "DELETE" ? next ?? null : next ?? current }) as Prisma.InputJsonValue } });
     }
     const saved = await tx.dnsRecordRequest.update({ where: { id }, data: { status: decision === "APPROVE" ? "APPROVED" : "REJECTED", reviewerId: actor.id, reviewedAt: new Date(), reviewNote: note || null } });
+    const unit = await tx.dnsUnit.findUnique({ where: { id: initial.unitId }, select: { name: true } });
+    await enqueueReviewMail(tx, { ...saved, user: item.user }, unit?.name ?? "");
     await unitAudit(tx, actor, "REVIEW_UNIT_DNS_REQUEST", { requestId: id, status: item.status }, { requestId: id, status: saved.status, reviewNote: note ?? "" });
     return saved;
   }, { timeout: 60000 });

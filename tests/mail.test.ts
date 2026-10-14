@@ -2,12 +2,13 @@ import nodemailer from "nodemailer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { publicMailSettings } from "@/lib/mail/settings";
-import { defaultMailConfig, mailConfigSchema, renderMail, sampleMailVariables, validTemplate } from "@/lib/mail/model";
+import { customVariables, defaultMailConfig, mailConfigSchema, renderMail, sampleMailVariables, scenarios, validTemplate } from "@/lib/mail/model";
 import { safeMailError } from "@/lib/mail/worker";
 import { workspaceNavigation } from "@/lib/client/navigation";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
-import { MailSettingsForm, MailDeliveryPanel } from "@/components/admin/mail-settings";
+import { MailSettingsForm, MailTestSend } from "@/components/admin/mail-settings";
+import { EmailChips } from "@/components/admin/mail-fields";
 afterEach(() => vi.unstubAllEnvs());
 describe("mail settings validation and secrets", () => {
   it("only allows Google endpoints and encrypted ports", () => {
@@ -26,7 +27,7 @@ describe("mail settings validation and secrets", () => {
     expect(html).not.toContain('type="password"');
   });
   it("allows typing a test recipient before enabling mail while preventing premature sending", () => {
-    const html = renderToStaticMarkup(createElement(MailDeliveryPanel, { data: { settings: { config: defaultMailConfig, revision: null }, deliveries: [] }, reload: async () => {} }));
+    const html = renderToStaticMarkup(createElement(MailTestSend, { template: "requestCreate", revision: null, enabled: false, dirty: false }));
     expect(html).not.toMatch(/<fieldset[^>]*disabled/);
     expect(html).not.toMatch(/<input[^>]*disabled/);
     expect(html).toMatch(/<button[^>]*disabled[^>]*>寄送測試信/);
@@ -46,6 +47,33 @@ describe("mail settings validation and secrets", () => {
     const rendered = renderMail({ subject: "{{applicantName}}", body: "{{applicantName}}" }, { ...sampleMailVariables, applicantName: "<script>bad</script>\r\nBcc: no@example.com {{unitName}}" });
     expect(rendered.subject).not.toMatch(/[\r\n]/);
     expect(rendered.text).toContain("{{unitName}}");
+  });
+  it("upgrades a single legacy template into the request scenarios and keeps new scenarios off", () => {
+    const { templates: _templates, customTemplates: _custom, ...legacy } = defaultMailConfig;
+    void _templates; void _custom;
+    const parsed = mailConfigSchema.parse({ ...legacy, subject: "舊主旨 {{unitName}}", body: "舊內文 {{operation}}" });
+    for (const key of ["requestCreate", "requestUpdate", "requestDelete"] as const) expect(parsed.templates[key]).toMatchObject({ enabled: true, ccTeam: true, subject: "舊主旨 {{unitName}}", body: "舊內文 {{operation}}" });
+    for (const key of ["reviewApproved", "reviewRejected", "inspectionCreated"] as const) expect(parsed.templates[key].enabled).toBe(false);
+    expect(parsed.customTemplates).toEqual([]);
+    expect(mailConfigSchema.safeParse({ ...legacy, templates: { requestCreate: defaultMailConfig.templates.requestCreate } }).success).toBe(true);
+  });
+  it("limits each scenario and custom template to its own variables", () => {
+    expect(validTemplate("{{reviewNote}}", scenarios.reviewRejected.variables)).toBe(true);
+    expect(validTemplate("{{reviewNote}}", scenarios.requestCreate.variables)).toBe(false);
+    expect(validTemplate("{{eventName}} {{recipientName}}", scenarios.inspectionCreated.variables)).toBe(true);
+    expect(validTemplate("{{applicationId}}", customVariables)).toBe(false);
+    const templates = { ...defaultMailConfig.templates, reviewApproved: { ...defaultMailConfig.templates.reviewApproved, body: "{{applicationId}}" } };
+    expect(mailConfigSchema.safeParse({ ...defaultMailConfig, templates }).success).toBe(false);
+    const custom = { id: "notice", name: "公告", subject: "{{unitName}}", body: "{{recipientName}} {{dnsUrl}}" };
+    expect(mailConfigSchema.safeParse({ ...defaultMailConfig, customTemplates: [custom] }).success).toBe(true);
+    expect(mailConfigSchema.safeParse({ ...defaultMailConfig, customTemplates: [custom, custom] }).success).toBe(false);
+    expect(mailConfigSchema.safeParse({ ...defaultMailConfig, customTemplates: [{ ...custom, body: "{{reviewUrl}}" }] }).success).toBe(false);
+  });
+  it("renders recipients as removable chips and marks malformed addresses", () => {
+    const html = renderToStaticMarkup(createElement(EmailChips, { id: "r", value: ["team@example.com", "not-an-email"], onChange: () => {}, max: 20 }));
+    expect(html).toContain('aria-label="移除 team@example.com"');
+    expect(html).toMatch(/class="chip is-invalid"[^>]*><span>not-an-email/);
+    expect(renderToStaticMarkup(createElement(EmailChips, { id: "r", value: Array.from({ length: 2 }, (_, i) => `a${i}@example.com`), onChange: () => {}, max: 2 }))).toMatch(/<input[^>]*disabled/);
   });
   it("rejects credential configuration and sanitizes SMTP errors", () => {
     expect(mailConfigSchema.safeParse({ ...defaultMailConfig, username: "user@example.com" }).success).toBe(false);
