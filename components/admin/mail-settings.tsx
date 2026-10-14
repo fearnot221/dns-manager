@@ -62,7 +62,7 @@ export function MailSettingsForm({ initial, onSaved }: { initial: PublicMailSett
         <p>伺服器透過 smtp-relay.gmail.com 寄送，使用 IP 白名單驗證（免帳密）。</p>
         <label htmlFor={`${id}-port`}>加密連線</label><select {...props("port")} value={config.port} onChange={e => update("port", Number(e.target.value) as 465 | 587)}><option value={465}>465 — TLS</option><option value={587}>587 — STARTTLS（強制加密）</option></select>{error("port")}
         <label htmlFor={`${id}-fromName`}>寄件者名稱</label><input {...props("fromName")} maxLength={100} value={config.fromName} onChange={e => update("fromName", e.target.value)} />{error("fromName")}
-        <label htmlFor={`${id}-fromEmail`}>寄件地址</label><input {...props("fromEmail")} type="email" required={config.enabled} value={config.fromEmail} onChange={e => update("fromEmail", e.target.value)} />{error("fromEmail")}
+        <label htmlFor={`${id}-fromEmail`}>網管小組寄件地址（每封郵件會自動 CC 到此地址）</label><input {...props("fromEmail")} type="email" required={config.enabled} value={config.fromEmail} onChange={e => update("fromEmail", e.target.value)} />{error("fromEmail")}
         <label htmlFor={`${id}-recipients`}>網管小組收件地址（最多 20 個，每行一個或以逗號分隔）</label><textarea {...props("recipients")} required={config.enabled} rows={3} maxLength={5200} value={recipients} onChange={e => setRecipients(e.target.value)} />{error("recipients")}
       </fieldset>
       <fieldset className="form-fields" disabled={pending}>
@@ -78,7 +78,7 @@ export function MailSettingsForm({ initial, onSaved }: { initial: PublicMailSett
     </form>
   </section>;
 }
-function MailDeliveryPanel({ data, reload }: { data: Resource; reload: () => Promise<void> }) {
+export function MailDeliveryPanel({ data, reload }: { data: Resource; reload: () => Promise<void> }) {
   const [recipient, setRecipient] = useState("");
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [pending, setPending] = useState(false);
@@ -92,14 +92,14 @@ function MailDeliveryPanel({ data, reload }: { data: Resource; reload: () => Pro
     finally { busy.current = false; setPending(false); }
   }
   return <section className="card">
-    <header className="workflow-panel-head"><div><h2>測試與寄送紀錄</h2><p>使用已儲存的設定；測試信只寄給下方指定地址。</p></div><button type="button" className="button" disabled={pending} onClick={() => void reload()}>更新紀錄與設定</button></header>
+    <header className="workflow-panel-head"><div><h2>測試與寄送紀錄</h2><p>使用已儲存的設定；測試信寄給下方指定地址，並 CC 到網管小組寄件地址。</p></div><button type="button" className="button" disabled={pending} onClick={() => void reload()}>更新紀錄與設定</button></header>
     <div className="workflow-feedback" id={`${id}-feedback`}><ActionFeedback feedback={feedback} /></div>
     <form className="form-surface" onSubmit={e => { e.preventDefault(); void action({ action: "test", recipient, expectedRevision: data.settings.revision }); }}>
-      <fieldset className="form-fields" disabled={pending || !data.settings.config.enabled}>
+      <fieldset className="form-fields" disabled={pending}>
         <legend>寄送測試信</legend>
         <label htmlFor={`${id}-recipient`}>測試收件地址</label><input id={`${id}-recipient`} type="email" required maxLength={254} value={recipient} onChange={e => setRecipient(e.target.value)} aria-describedby={`${id}-feedback ${id}-test-help`} />
-        <p id={`${id}-test-help`}>先儲存並啟用設定，再填寫測試地址；按下按鈕後會實際寄信。</p>
-        <div className="form-actions"><button className="button" aria-busy={pending}>寄送測試信</button></div>
+        <p id={`${id}-test-help`}>可先填寫測試地址；寄送前須儲存並啟用設定。按下按鈕後會實際寄信，並 CC 到設定的寄件地址。</p>
+        <div className="form-actions"><button className="button" disabled={!data.settings.config.enabled} aria-describedby={`${id}-test-help`} aria-busy={pending}>寄送測試信</button></div>
       </fieldset>
     </form>
     <p className="workflow-panel-note">最近 30 筆（台北時間）。「SMTP 已接受」表示 Google 接受郵件，仍須確認收件匣與垃圾郵件匣。失敗最多自動嘗試 5 次；中斷重試可能重複寄送。</p>
