@@ -44,6 +44,7 @@ export async function processOneDelivery() {
     });
     const result = await transport.sendMail({
       from: { name: delivery.fromName, address: delivery.fromEmail }, to: delivery.recipient, cc: settings.config.recipients,
+      replyTo: settings.config.recipients,
       subject: delivery.subject, text: delivery.text,
       messageId: `<${delivery.id}@${delivery.fromEmail.split("@")[1]}>`,
     });

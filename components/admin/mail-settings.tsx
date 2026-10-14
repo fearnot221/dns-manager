@@ -63,7 +63,7 @@ export function MailSettingsForm({ initial, onSaved }: { initial: PublicMailSett
         <label htmlFor={`${id}-port`}>加密連線</label><select {...props("port")} value={config.port} onChange={e => update("port", Number(e.target.value) as 465 | 587)}><option value={465}>465 — TLS</option><option value={587}>587 — STARTTLS（強制加密）</option></select>{error("port")}
         <label htmlFor={`${id}-fromName`}>寄件者名稱</label><input {...props("fromName")} maxLength={100} value={config.fromName} onChange={e => update("fromName", e.target.value)} />{error("fromName")}
         <label htmlFor={`${id}-fromEmail`}>寄件地址</label><input {...props("fromEmail")} type="email" required={config.enabled} value={config.fromEmail} onChange={e => update("fromEmail", e.target.value)} />{error("fromEmail")}
-        <label htmlFor={`${id}-recipients`}>網管小組收件地址（每封郵件均 CC；最多 20 個，每行一個或以逗號分隔）</label><textarea {...props("recipients")} required={config.enabled} rows={3} maxLength={5200} value={recipients} onChange={e => setRecipients(e.target.value)} />{error("recipients")}
+        <label htmlFor={`${id}-recipients`}>網管小組收件地址（每封郵件均 CC 並作為回覆地址；最多 20 個，每行一個或以逗號分隔）</label><textarea {...props("recipients")} required={config.enabled} rows={3} maxLength={5200} value={recipients} onChange={e => setRecipients(e.target.value)} />{error("recipients")}
       </fieldset>
       <fieldset className="form-fields" disabled={pending}>
         <legend>新 DNS 申請模板</legend>
@@ -72,7 +72,7 @@ export function MailSettingsForm({ initial, onSaved }: { initial: PublicMailSett
         <label htmlFor={`${id}-body`}>郵件內文</label><textarea {...props("body")} required rows={12} maxLength={20000} value={config.body} onChange={e => update("body", e.target.value)} />{error("body")}
         <div className="form-actions"><button type="button" className="button" onClick={() => setConfig(v => ({ ...v, subject: defaultSubject, body: defaultBody }))}>還原預設模板</button></div>
         <details><summary>預覽模板（範例資料，不會寄信）</summary><h3>{preview.subject}</h3><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontFamily: "inherit" }}>{preview.text}</pre></details>
-        <p>每份申請對每個收件地址寄送一封。已排入待辦的寄件地址、收件地址及內容不隨模板變更；CC 與 SMTP 連線使用寄送當下已儲存的設定。</p>
+        <p>每份申請對每個收件地址寄送一封。已排入待辦的寄件地址、收件地址及內容不隨模板變更；CC、回覆地址（Reply-To）與 SMTP 連線使用寄送當下已儲存的設定。</p>
         <div className="form-actions"><button className="button primary" aria-busy={pending}>{pending ? "儲存中…" : "儲存郵件設定"}</button></div>
       </fieldset>
     </form>
