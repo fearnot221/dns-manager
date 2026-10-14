@@ -44,3 +44,9 @@
 將 `origin/main` 的 `afb3e47` 合併至本次功能分支，逐一整合 DNS 列表、單位詳情與清查 UI 測試衝突，保留 main 新版搜尋、compact 按鈕及背景重新載入顯示。本次功能相對 main 仍限於上述 23 個檔案。
 
 整合後重新執行 `UNIT_TEST_DATABASE_URL=postgresql://dns_test@127.0.0.1:55438/dns_units_test npm test -- --exclude '.claude/**'`：67 個檔案、458 項測試全數通過（main 已移除舊版檢視測試）。`npm run lint -- --ignore-pattern '.claude/**'`、`npm run build`（含 TypeScript）及 `git diff --check` 均通過。維持隔離資料庫與假 PowerDNS；本段僅記錄發布前本地驗證。
+
+### CI 安全稽核修補（2026-10-14）
+
+PR #9 第一輪 CI 的功能測試及 build 通過，但 production audit 發現既有 Next.js、sharp 與 source-map-js 高風險問題。將 Next.js／eslint-config-next 同步由 16.3.7 升至修補版 16.3.8，並更新 lockfile 中 sharp 至 0.35.5、source-map-js 至 1.2.2；未降低 CI 門檻或使用 force fix。參考 [Next.js 公告](https://github.com/advisories/GHSA-4jqv-mc3x-m676)、[sharp 公告](https://github.com/advisories/GHSA-wq5f-xc86-pv6w)、[source-map-js 公告](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)。
+
+以上述更新後工作樹重跑：`npm audit --omit=dev --audit-level=high` 顯示 0 vulnerabilities；完整隔離資料庫測試（同上命令）67 個檔案、458 項通過；lint、production build（含 TypeScript）及 diff check 通過。等待更新後 PR 的 GitHub Verify，不能沿用失敗的舊 CI。
