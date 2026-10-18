@@ -5,12 +5,11 @@
 .brand-name { display: grid; gap: 1px; min-width: 0; }
 .brand-name strong { font-size: var(--text-small); font-weight: 600; letter-spacing: .04em; white-space: nowrap; }
 .brand-name > span { font-size: 1rem; font-weight: 650; letter-spacing: -.01em; }
-.login-brand { display: flex; align-items: center; justify-content: center; gap: var(--space-4); text-align: left; }
+.login-brand { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); text-align: center; }
 .login-brand .brandmark { width: 52px; height: 52px; padding: 5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px var(--border); }
 .login-brand .brand-name strong { color: var(--muted); font-size: .8125rem; }
 .login-brand .brand-name > span { font-size: 1.25rem; }
 @media (max-width: 600px) {
-  .login-brand { gap: var(--space-3); }
   .login-brand .brandmark { width: 48px; height: 48px; }
   .login-brand .brand-name > span { font-size: 1.0625rem; }
 }
