@@ -1,29 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 import { Brand } from "@/components/brand";
-import { BackButton, QueryPath } from "@/components/not-found-client";
+import { BackButton } from "@/components/not-found-client";
+import { notFoundVariants } from "@/components/not-found/variants";
 
 export const metadata: Metadata = { title: "找不到頁面" };
 
-const hops = [".", "tw.", "edu.tw.", "ncu.edu.tw."];
+const variants = Object.entries(notFoundVariants);
 
-export default function NotFound() {
-  return <main className="nx-page">
-    <div className="nx-grid" aria-hidden="true" />
+export default async function NotFound() {
+  await connection();
+  const [name, Visual] = variants[Math.floor(Math.random() * variants.length)];
+  return <main className={`nx-page nx-${name}`}>
     <div className="nx-shell">
       <div className="login-brand nx-brand"><Brand /></div>
-      <h1 className="nx-code" aria-label="404">
-        <span>4</span><span className="nx-zero">0</span><span>4</span>
-      </h1>
-      <ol className="nx-chain" aria-hidden="true">
-        {hops.map((hop, i) => <li key={hop} style={{ "--i": i } as React.CSSProperties}><span className="nx-node" />{hop}</li>)}
-        <li className="nx-fail" style={{ "--i": hops.length } as React.CSSProperties}><span className="nx-node" />?</li>
-      </ol>
-      <div className="nx-terminal" aria-hidden="true">
-        <div className="nx-terminal-bar"><i /><i /><i /></div>
-        <pre><span className="nx-prompt">$</span> dig <QueryPath />{"\n"}<span className="nx-dim">;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, </span><span className="nx-status">status: NXDOMAIN</span>{"\n"}<span className="nx-dim">;; ANSWER SECTION:</span>{"\n"}<span className="nx-cursor" /></pre>
-      </div>
-      <p className="nx-title">找不到這個頁面</p>
+      <Visual />
+      <h1 className="nx-title"><span className="sr-only">404 · </span>找不到這個頁面</h1>
       <div className="nx-actions">
         <Link className="button primary" href="/">回到首頁</Link>
         <BackButton />
