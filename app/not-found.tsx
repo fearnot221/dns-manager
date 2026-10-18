@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { Brand } from "@/components/brand";
 import { BackButton } from "@/components/not-found-client";
 import { notFoundVariants } from "@/components/not-found/variants";
+import "@/styles/not-found.css";
 
 export const metadata: Metadata = { title: "找不到頁面" };
 

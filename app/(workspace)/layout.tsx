@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { AuthError, requireActor } from "@/lib/auth/session";
 import { canAccessZoneManagement } from "@/lib/auth/permissions";
 import { personDisplay } from "@/lib/users/display";
+import "@/styles/workspace-routes.css";
 
 export default async function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const actor = await requireActor().catch((error: unknown) => {

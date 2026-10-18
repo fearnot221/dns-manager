@@ -2,10 +2,6 @@
 .login-card { width: min(420px,100%); position: relative; background: color-mix(in srgb, var(--panel) 88%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--border); border-radius: var(--radius-dialog); box-shadow: var(--shadow-overlay); overflow: hidden; }
 .login-identity { padding: var(--space-8) var(--space-8) var(--space-6); color: var(--ink); text-align: center; border-bottom: 1px solid var(--border); }
 .login-identity > p { margin-top: var(--space-4); color: var(--muted); font-size: var(--text-caption); letter-spacing: .04em; }
-.login-brand { display: flex; align-items: center; justify-content: center; gap: var(--space-4); text-align: left; }
-.login-brand .brandmark { width: 52px; height: 52px; padding: 5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px var(--border); }
-.login-brand .brand-name strong { color: var(--muted); font-size: .8125rem; }
-.login-brand .brand-name > span { font-size: 1.25rem; }
 .login-form-panel { padding: var(--space-8); }
 .login-copy { padding: 0 0 var(--space-6); text-align: center; }
 .login-copy h1 { font-size: 1.375rem; line-height: 1.4; }
@@ -33,25 +29,24 @@
   .login-page { padding: var(--space-8) var(--space-4); }
   .login-identity { padding: var(--space-5) var(--space-6); }
   .login-form-panel { padding: var(--space-6); }
-  .login-brand { gap: var(--space-3); }
-  .login-brand .brandmark { width: 48px; height: 48px; }
-  .login-brand .brand-name > span { font-size: 1.0625rem; }
 }
 
 /* Background: one word tiled in tilted rows, each row shifted left of the one above.
-   A static extruded copy sits underneath; the face on top carries the color wave. */
+   A static extruded copy sits underneath the static face; a glow-colored copy on top shows through a moving mask band. */
 .login-wave { position: absolute; z-index: -1; top: 50%; left: 50%; width: max-content; translate: -50% -50%; rotate: -6deg; font-size: 7rem; line-height: 1.1; letter-spacing: .01em; white-space: pre; user-select: none; pointer-events: none;
   --wave-base: color-mix(in srgb, var(--ink) 9%, var(--bg));
-  --wave-peak: color-mix(in srgb, var(--accent) 45%, var(--bg));
   --wave-glow: color-mix(in srgb, var(--accent) 85%, var(--bg));
   --wave-depth: color-mix(in srgb, var(--ink) 20%, var(--bg));
   --wave-edge: color-mix(in srgb, var(--ink) 30%, var(--bg));
-  color: transparent; -webkit-background-clip: text; background-clip: text;
-  background-image: repeating-linear-gradient(90deg, var(--wave-base) 0 300px, var(--wave-peak) 380px, var(--wave-glow) 420px, var(--wave-peak) 460px, var(--wave-base) 540px 720px);
-  animation: login-wave 6s linear infinite; }
+  color: var(--wave-base); }
 [data-theme="dark"] .login-wave { --wave-base: color-mix(in srgb, var(--ink) 16%, var(--bg)); --wave-depth: color-mix(in srgb, var(--ink) 7%, var(--bg)); --wave-edge: color-mix(in srgb, var(--ink) 3%, var(--bg)); }
-.login-wave > span { display: block; padding-left: calc((var(--rows) - var(--r)) * .5em); }
-.login-wave-depth { color: var(--wave-depth); background: none; animation: none;
+.login-wave span { display: block; padding-left: calc((var(--rows) - var(--r)) * .5em); }
+.login-wave-depth { color: var(--wave-depth);
   text-shadow: 1px 1px 0 var(--wave-depth), 2px 2px 0 var(--wave-depth), 3px 3px 0 var(--wave-depth), 4px 4px 0 var(--wave-edge), 5px 5px 0 var(--wave-edge); }
-/* Shifting by exactly one 720px period keeps the loop seamless. */
-@keyframes login-wave { to { background-position: 720px 0; } }
+/* The sheen layer slides its mask band while its rows slide back by the same amount, so only the band moves.
+   Both are transform animations, which stay on the compositor instead of repainting the text every frame.
+   Shifting by exactly one 720px period keeps the loop seamless. */
+.login-wave-sheen { color: var(--wave-glow); mask-image: repeating-linear-gradient(90deg, transparent 0 300px, rgb(0 0 0 / .5) 380px, #000 420px, rgb(0 0 0 / .5) 460px, transparent 540px 720px); animation: login-wave 6s linear infinite; }
+.login-wave-sheen > .login-wave-rows { animation: login-wave-hold 6s linear infinite; }
+@keyframes login-wave { to { transform: translateX(720px); } }
+@keyframes login-wave-hold { to { transform: translateX(-720px); } }

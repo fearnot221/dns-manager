@@ -3,13 +3,7 @@
 /* Light sidebar that matches the page chrome; the active route uses the accent tint and a leading bar. */
 .sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; gap: var(--space-1); padding: 0 0 var(--space-4); background: var(--chrome); color: var(--chrome-ink); border-right: 1px solid var(--chrome-border); z-index: 20; overflow-y: auto; }
 .brand { display: flex; align-items: center; gap: var(--space-3); min-height: 72px; padding: var(--space-4); border-bottom: 1px solid var(--chrome-border); }
-.brandmark { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; }
 .sidebar .brandmark { background: #fff; border-radius: 50%; padding: 4px; box-shadow: 0 0 0 1px var(--chrome-border); }
-/* The emblem is a downward triangle whose visual center sits ~13% above its box; nudge it down to look centered. */
-.brandmark img { display: block; width: 100%; height: 100%; object-fit: contain; translate: 0 8%; }
-.brand-name { display: grid; gap: 1px; min-width: 0; }
-.brand-name strong { font-size: var(--text-small); font-weight: 600; letter-spacing: .04em; white-space: nowrap; }
-.brand-name > span { font-size: 1rem; font-weight: 650; letter-spacing: -.01em; }
 .sidebar .brand-name strong { color: var(--chrome-muted); }
 .sidebar-unit { margin: var(--space-3) var(--space-4) 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--chrome-border); border-radius: var(--radius-control); background: var(--chrome-raised); font-size: var(--text-caption); line-height: 1.5; overflow-wrap: anywhere; color: var(--chrome-ink); }
 .sidebar-unit::before { content: "目前單位"; display: block; color: var(--chrome-muted); font-size: var(--text-micro); letter-spacing: .04em; }
