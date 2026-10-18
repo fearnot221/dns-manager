@@ -1,3 +1,4 @@
+import { Bungee } from "next/font/google";
 import { Brand } from "@/components/brand";
 import { redirect } from "next/navigation";
 import { CredentialsSignIn } from "@/components/auth/credentials-sign-in";
@@ -8,6 +9,16 @@ import { logtoConfigured } from "@/lib/auth/logto";
 import { PortalSignIn } from "@/components/auth/portal-sign-in";
 
 export const metadata = { title: "登入" };
+
+// One word tiled into rows; CSS tilts the rows and indents each one less than the row above.
+const waveFont = Bungee({ weight: "400", subsets: ["latin"] });
+const waveRow = Array(4).fill("NCUEECESNMG").join("  ");
+const waveRows = Array.from({ length: 15 }, (_, n) => n);
+
+// Drawn twice: a static extruded layer underneath, and the animated wave face on top.
+function Wave({ depth = false }: { depth?: boolean }) {
+  return <div className={`login-wave ${waveFont.className}${depth ? " login-wave-depth" : ""}`} aria-hidden="true" style={{ "--rows": waveRows.length } as React.CSSProperties}>{waveRows.map((n) => <span key={n} style={{ "--r": n } as React.CSSProperties}>{waveRow}</span>)}</div>;
+}
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; reason?: string }> }) {
   const session = await auth();
@@ -21,6 +32,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const portal = !demo && logtoConfigured();
   const password = passwordLoginEnabled();
   return <main className="login-page">
+    <Wave depth />
+    <Wave />
     <div className="login-card">
       <div className="login-identity"><div className="login-brand"><Brand /></div><p>DNS 紀錄申請・審核・清查</p></div>
       <div className="login-form-panel">
