@@ -13,6 +13,13 @@ describe("durable DNS publication reconciliation", () => {
     expect(publicationState(publication, "original-server", undefined)).toBe("READY");
     expect(publicationState(publication, "original-server", { records: after.records, ttl: after.ttl, type: after.type, name: after.name })).toBe("APPLIED");
   });
+  it("treats omitted and empty comments identically while preserving real comment conflicts", () => {
+    expect(publicationState(publication, "original-server", { ...after, comments: [] })).toBe("APPLIED");
+    const withEmpty = { ...publication, afterRRSet: { ...after, comments: [] } as unknown as Prisma.JsonValue };
+    expect(publicationState(withEmpty, "original-server", after)).toBe("APPLIED");
+    expect(() => publicationState(publication, "original-server", { ...after, comments: [{ content: "changed" }] })).toThrow("快照皆不同");
+    expect(() => publicationState(publication, "original-server", { ...after, records: [{ ...after.records[0], disabled: true }] })).toThrow("快照皆不同");
+  });
   it("never retries against a different server or a subsequently changed RRset", () => {
     expect(() => publicationState(publication, "new-server", after)).toThrow("PowerDNS");
     expect(() => publicationState(publication, "original-server", { ...after, ttl: 600 })).toThrow("快照皆不同");

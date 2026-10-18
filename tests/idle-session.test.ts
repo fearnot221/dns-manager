@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/db/client", () => ({ db: { session: { updateMany: vi.fn() } } }));
+vi.mock("@/lib/db/client", () => ({ db: { session: { updateMany: vi.fn(), deleteMany: vi.fn(), create: vi.fn() }, $transaction: vi.fn(async operations => Promise.all(operations)) } }));
 vi.mock("@/lib/db/local-store", () => ({ isLocalDemo: vi.fn(() => true), localDocument: vi.fn() }));
 import { isLocalDemo, localDocument } from "@/lib/db/local-store";
 import { db } from "@/lib/db/client";
@@ -40,4 +40,12 @@ it("uses an atomic database condition to prevent resurrection", async () => {
   vi.mocked(db.session.updateMany).mockResolvedValue({ count: 0 });
   expect(await touchIdleSession("expired", 1000)).toBeNull();
   expect(db.session.updateMany).toHaveBeenCalledWith({ where: { sessionToken: "expired", expires: { gt: new Date(1000) } }, data: { expires: new Date(901000) } });
+});
+
+it("cleans only expired database sessions when creating a new login", async () => {
+  vi.mocked(isLocalDemo).mockReturnValue(false);
+  expect(await createIdleSession("new", "u", 1000)).toBe(901000);
+  expect(db.session.deleteMany).toHaveBeenCalledWith({ where: { expires: { lte: new Date(1000) } } });
+  expect(db.session.create).toHaveBeenCalledWith({ data: { sessionToken: "new", userId: "u", expires: new Date(901000) } });
+  expect(db.$transaction).toHaveBeenCalledOnce();
 });

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+vi.mock("@/lib/dns/history-query", () => ({ queryDnsHistory: vi.fn() }));
 vi.mock("@/lib/dns/history-sync", () => ({ syncDnsHistory: vi.fn() }));
 vi.mock("@/lib/powerdns/client", () => ({ powerdns: { getZone: vi.fn(async () => ({ rrsets: [] })) } }));
 vi.mock("server-only", () => ({}));
@@ -8,7 +9,7 @@ vi.mock("@/lib/inventory/service", () => ({ connectionScope: async () => "curren
 vi.mock("@/lib/db/client", () => ({ db: { auditLog: { findMany: vi.fn() } } }));
 import { requireActor } from "@/lib/auth/session";
 import { localAuditEvents } from "@/lib/audit/service";
-import { db } from "@/lib/db/client";
+import { queryDnsHistory } from "@/lib/dns/history-query";
 import { GET } from "@/app/api/dns-history/route";
 import { dnsHistoryEvents, type HistorySource } from "@/lib/dns/history";
 const zone = "example.com.";
@@ -71,9 +72,9 @@ it("searches deleted values, separates types and paginates without truncating hi
 });
 it("queries durable production snapshots with the current connection scope", async () => {
   vi.stubEnv("DATABASE_URL", "postgresql://unused");
-  vi.mocked(db.auditLog.findMany).mockResolvedValue([{ ...source({ dnsScope: "current-server" }), user: { name: "管理員" } }] as never);
+  vi.mocked(queryDnsHistory).mockResolvedValue({ events: [{ ...dnsHistoryEvents(source({ dnsScope: "current-server" }))[0], userName: "管理員" }], total: 1 });
   expect((await (await request()).json()).events[0].userName).toBe("管理員");
-  expect(db.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ zone, success: true, OR: [{ dnsScope: "current-server" }, { dnsScope: null }] }) }));
+  expect(queryDnsHistory).toHaveBeenCalledWith(expect.objectContaining({ id: "admin" }), zone, "current-server", { name: "", type: "", q: "", page: 1, zone: "example.com" });
   expect(localAuditEvents).not.toHaveBeenCalled();
 });
 

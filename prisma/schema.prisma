@@ -87,6 +87,8 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expires])
 }
 
 model VerificationToken {
@@ -166,6 +168,7 @@ model AuditLog {
 
   @@index([createdAt])
   @@index([zone, createdAt])
+  @@index([zone, dnsScope, recordName, recordType, action])
   @@index([userId, createdAt])
 }
 

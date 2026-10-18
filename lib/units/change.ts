@@ -7,7 +7,7 @@ function ordered(value: unknown): unknown {
   return value;
 }
 // PostgreSQL JSONB reorders object keys; compare values, not serialization order.
-export function unitRRSetHash(value: RRSet | undefined) { return rrsetHash(ordered(value) as RRSet | undefined); }
+export function unitRRSetHash(value: RRSet | undefined) { return rrsetHash(value ? ordered({ ...value, comments: value.comments ?? [] }) as RRSet : undefined); }
 
 export function replaceUnitValue(before: RRSet, oldContent: string, content: string): RRSet {
   if (!before.records.some((record) => record.content === oldContent)) throw new Error("原始解析值已不存在。");
