@@ -10,7 +10,10 @@ export async function createIdleSession(id: string, userId: string, now = Date.n
     for (const key of Object.keys(store.sessions)) if (store.sessions[key] <= now) delete store.sessions[key];
     store.sessions[id] = expires;
   }, true);
-  else await db.session.create({ data: { sessionToken: id, userId, expires: new Date(expires) } });
+  else await db.$transaction([
+    db.session.deleteMany({ where: { expires: { lte: new Date(now) } } }),
+    db.session.create({ data: { sessionToken: id, userId, expires: new Date(expires) } }),
+  ]);
   return expires;
 }
 export async function readIdleSession(id: unknown, now = Date.now()): Promise<number | null> {

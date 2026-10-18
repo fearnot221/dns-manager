@@ -5,11 +5,11 @@ import { z } from "zod";
 import { requireActor } from "@/lib/auth/session";
 import { canManageRecord, canManageZone } from "@/lib/auth/permissions";
 import { apiError, notFoundUnless } from "@/lib/api/respond";
-import { db } from "@/lib/db/client";
+import { queryDnsHistory } from "@/lib/dns/history-query";
 import { localAuditEvents } from "@/lib/audit/service";
 import { connectionScope } from "@/lib/inventory/service";
 import { normalizeDnsName, normalizeZoneName } from "@/lib/dns/names";
-import { DNS_HISTORY_ACTIONS, dnsHistoryEvents, type HistorySource } from "@/lib/dns/history";
+import { dnsHistoryEvents } from "@/lib/dns/history";
 
 const querySchema = z.object({ zone: z.string().min(1).max(255), name: z.string().max(255).default(""), type: z.string().max(30).default(""), q: z.string().max(200).default(""), page: z.coerce.number().int().min(1).max(10000).default(1) });
 export async function GET(request: Request) {
@@ -27,13 +27,11 @@ export async function GET(request: Request) {
     try { rrsets = (await powerdns.getZone(zone)).rrsets.filter((rrset) => canManageRecord(actor, zone, rrset.name, rrset.type)); }
     catch (error) { if (!(error instanceof PowerDNSError && error.status === 404)) syncError = "PowerDNS 暫時無法讀取；顯示已保存的歷程，尚未同步的紀錄請稍後重試。"; }
     await syncDnsHistory(zone, scope, rrsets);
-    // Legacy snapshots lack a connection scope. Preserve them with an explicit label.
-    // Zone deletion snapshots contain multiple identities: expand before filtering and paging.
-    const sources: HistorySource[] = process.env.DATABASE_URL ? await db.auditLog.findMany({
-      where: { zone, success: true, action: { in: DNS_HISTORY_ACTIONS }, OR: [{ dnsScope: scope }, { dnsScope: null }] },
-      select: { id: true, createdAt: true, zone: true, action: true, success: true, recordName: true, recordType: true, oldValue: true, newValue: true, userEmail: true, dnsScope: true, user: { select: { name: true } } },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    }).then((rows) => rows.map(({ user, ...row }) => ({ ...row, userName: user?.name }))) : await localAuditEvents();
+    if (process.env.DATABASE_URL) {
+      const result = await queryDnsHistory(actor, zone, scope, { ...query, name, type });
+      return Response.json({ ...result, page: query.page, syncError }, { headers: { "Cache-Control": "private, no-store" } });
+    }
+    const sources = await localAuditEvents();
     const q = query.q.toLowerCase();
     const events = sources.filter((source) => source.zone === zone && (!source.dnsScope || source.dnsScope === scope)).flatMap(dnsHistoryEvents)
       .filter((event) => canManageRecord(actor, zone, event.recordName, event.recordType) && (!name || event.recordName === name) && (!type || event.recordType === type)

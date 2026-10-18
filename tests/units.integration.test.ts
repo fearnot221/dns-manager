@@ -1,3 +1,5 @@
+import * as auditService from "@/lib/audit/service";
+import { DELETE as deleteDnsZone } from "@/app/api/zones/[zone]/route";
 import { prepareApplication } from "@/lib/requests/application";
 import { PUT as saveOwnership } from "@/app/api/inventory/route";
 import { createDataAccount } from "@/lib/users/create";
@@ -20,7 +22,7 @@ vi.mock("@/lib/db/client", async () => {
   return { db: new PrismaClient({ datasourceUrl: process.env.UNIT_TEST_DATABASE_URL || "postgresql://unused@127.0.0.1:1/unused" }) };
 });
 vi.mock("@/lib/powerdns/settings", () => ({ connectionEnvironment: async () => ({ PDNS_MOCK: "true" }) }));
-vi.mock("@/lib/powerdns/client", () => ({ powerdns: { getZone: vi.fn(), replaceRRSet: vi.fn(), deleteRRSet: vi.fn() } }));
+vi.mock("@/lib/powerdns/client", () => ({ powerdns: { getZone: vi.fn(), replaceRRSet: vi.fn(), deleteRRSet: vi.fn(), deleteZone: vi.fn() } }));
 import { requireActor } from "@/lib/auth/session";
 import { PATCH as patchUser } from "@/app/api/users/[id]/route";
 import { manageAllowlist } from "@/lib/units/allowlist";
@@ -908,6 +910,23 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     for (const request of requests.reverse()) await reviewUnitRequest(admin, request.id, "APPROVE", undefined, "test-delete-password");
     expect((await unitDetail(viewer, unitId)).records).toHaveLength(2);
   });
+  it("reconciles an interrupted new RRset when PowerDNS returns an empty comments field", async () => {
+    const input = { unitId, applicantName: "測試", applicantEmail: "contact@example.com", applicantUnit: "ignored", applicantExtension: "1234", records: [{ zoneName: zone.name, recordName: `recovery-${crypto.randomUUID().slice(0, 8)}.example.com.`, recordType: "A", content: "192.0.2.40", ttl: 300, purpose: "recovery test" }] };
+    const saved = await saveApplication(viewer, input, httpRequest());
+    const pending = await db.dnsRecordRequest.findFirstOrThrow({ where: { applicationId: saved.applicationId } });
+    vi.mocked(powerdns.replaceRRSet).mockImplementationOnce(async (_zone, next) => {
+      zone.rrsets = [{ ...structuredClone(next), comments: [] }];
+      throw new PowerDNSError("response lost", 502);
+    });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE")).rejects.toMatchObject({ status: 502 });
+    expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("PENDING");
+    expect((await db.dnsRequestPublication.findUniqueOrThrow({ where: { requestId: pending.id } })).completedAt).toBeNull();
+    await reviewUnitRequest(admin, pending.id, "APPROVE");
+    expect(powerdns.replaceRRSet).toHaveBeenCalledOnce();
+    expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("APPROVED");
+    expect((await db.dnsRequestPublication.findUniqueOrThrow({ where: { requestId: pending.id } })).completedAt).not.toBeNull();
+    expect((await unitDetail(viewer, unitId)).records[0]).toMatchObject({ content: "192.0.2.40", applicantName: "測試" });
+  });
   it("lets members append inspections without changing ownership, DNS or exposing contact fields", async () => {
     const source = await sourceRecord();
     const before = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
@@ -1230,6 +1249,71 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     vi.mocked(requireActor).mockResolvedValue(admin);
     vi.mocked(powerdns.replaceRRSet).mockRejectedValueOnce(new PowerDNSError("unavailable", 502));
     expect((await deleteDnsRecord(directRequest("DELETE", { name: zone.rrsets[0].name, type: "A", content: "192.0.2.1", expectedHash: source.expectedHash, deletionPassword: "test-delete-password" }), zoneContext())).status).toBe(502);
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
+  });
+  it("preserves full direct-edit intent when PowerDNS applies a deletion but its response is lost", async () => {
+    const source = await sourceRecord();
+    const before = structuredClone(zone.rrsets[0]);
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    vi.mocked(powerdns.replaceRRSet).mockImplementationOnce(async (_zone, next) => {
+      zone.rrsets = [structuredClone(next)];
+      throw new PowerDNSError("response lost", 502);
+    });
+    const response = await deleteDnsRecord(directRequest("DELETE", { name: before.name, type: "A", content: "192.0.2.1", expectedHash: source.expectedHash, deletionPassword: "test-delete-password" }), zoneContext());
+    expect(response.status).toBe(502);
+    const requestId = response.headers.get("x-request-id")!;
+    const intent = await db.auditLog.findFirstOrThrow({ where: { requestId, action: "DNS_PUBLICATION_STARTED" } });
+    expect(intent).toMatchObject({ dnsScope: "local-mock", userId: admin.id, oldValue: before, newValue: { action: "DELETE_RECORD", rrset: zone.rrsets[0] } });
+    expect(JSON.stringify(intent)).not.toContain("test-delete-password");
+    expect(await db.auditLog.count({ where: { requestId, action: "DELETE_RECORD", success: true } })).toBe(0);
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
+  });
+  it("does not contact PowerDNS if the durable direct-edit intent cannot be saved", async () => {
+    const source = await sourceRecord();
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    const original = auditService.logAuditEvent;
+    const spy = vi.spyOn(auditService, "logAuditEvent").mockImplementation(async (input, tx) => {
+      if (input.action === "DNS_PUBLICATION_STARTED") throw new Error("intent storage unavailable");
+      return original(input, tx);
+    });
+    try {
+      const response = await deleteDnsRecord(directRequest("DELETE", { name: zone.rrsets[0].name, type: "A", content: "192.0.2.1", expectedHash: source.expectedHash, deletionPassword: "test-delete-password" }), zoneContext());
+      expect(response.status).toBe(500);
+      expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+      expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
+    } finally { spy.mockRestore(); }
+  });
+  it("commits assignment retirement and successful DNS audit together", async () => {
+    const source = await sourceRecord();
+    const before = structuredClone(zone.rrsets[0]);
+    vi.mocked(requireActor).mockResolvedValue(admin);
+    const original = auditService.logAuditEvent;
+    const spy = vi.spyOn(auditService, "logAuditEvent").mockImplementation(async (input, tx) => {
+      if (input.action === "DELETE_RECORD" && input.success) throw new Error("completion storage unavailable");
+      return original(input, tx);
+    });
+    try {
+      const response = await deleteDnsRecord(directRequest("DELETE", { name: before.name, type: "A", content: "192.0.2.1", expectedHash: source.expectedHash, deletionPassword: "test-delete-password" }), zoneContext());
+      expect(response.status).toBe(500);
+      expect(zone.rrsets[0].records).toEqual([{ content: "192.0.2.99", disabled: false }]);
+      const requestId = response.headers.get("x-request-id")!;
+      expect(await db.auditLog.count({ where: { requestId, action: "DNS_PUBLICATION_STARTED" } })).toBe(1);
+      expect(await db.auditLog.count({ where: { requestId, action: "DELETE_RECORD", success: true } })).toBe(0);
+      expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
+    } finally { spy.mockRestore(); }
+  });
+  it("preserves an entire zone snapshot if deletion succeeds before its response is lost", async () => {
+    const source = await sourceRecord();
+    const before = structuredClone(zone);
+    vi.mocked(requireActor).mockResolvedValue({ ...admin, globalRole: "SUPER_ADMIN" });
+    vi.mocked(powerdns.deleteZone).mockImplementationOnce(async () => {
+      zone.rrsets = [];
+      throw new PowerDNSError("response lost", 502);
+    });
+    const response = await deleteDnsZone(new Request("http://localhost/api/zones/example.com.?confirm=example.com", { method: "DELETE", body: JSON.stringify({ deletionPassword: "test-delete-password" }) }), zoneContext());
+    expect(response.status).toBe(502);
+    const intent = await db.auditLog.findFirstOrThrow({ where: { requestId: response.headers.get("x-request-id")!, action: "DNS_PUBLICATION_STARTED" } });
+    expect(intent).toMatchObject({ dnsScope: "local-mock", oldValue: before, newValue: { action: "DELETE_ZONE", zone: null } });
     expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
   });
   it("allows an approved address round trip while preserving each value's inspection history", async () => {
