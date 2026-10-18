@@ -1,3 +1,4 @@
+import { prepareApplication } from "@/lib/requests/application";
 import { PUT as saveOwnership } from "@/app/api/inventory/route";
 import { createDataAccount } from "@/lib/users/create";
 import { spawnSync } from "node:child_process";
@@ -85,6 +86,114 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await manageAllowlist(creator, unitId, viewer.studentId!);
     await manageAllowlist(creator, unitId, editor.studentId!);
     await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: "EDITOR" });
+  });
+  async function claimInput() {
+    const source = await sourceRecord();
+    await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId: null } });
+    const input = prepareApplication({ operation: "CLAIM", unitId, applicantName: "歸屬申請人", applicantEmail: "contact@example.com", applicantUnit: "不信任的名稱", applicantExtension: "1234", records: [{ zoneName: zone.name, name: zone.rrsets[0].name, type: "A", content: "192.0.2.1", ttl: 60, purpose: "實驗室網站", notes: "已確認仍在使用" }] }, [zone.name]);
+    return { source, input };
+  }
+  async function submitClaim() {
+    const { source, input } = await claimInput();
+    const result = await saveApplication(editor, input, httpRequest());
+    const item = await db.dnsRecordRequest.findFirstOrThrow({ where: { applicationId: result.applicationId } });
+    return { source, input, item };
+  }
+  it("approves ownership atomically with inspection history, preserving all live DNS values", async () => {
+    const { source, item } = await submitClaim();
+    const before = structuredClone(zone);
+    expect(item).toMatchObject({ operation: "CLAIM", status: "PENDING", ttl: 300 });
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBeNull();
+    const saved = await reviewUnitRequest(admin, item.id, "APPROVE", "確認歸屬");
+    expect(saved.status).toBe("APPROVED");
+    const detail = await unitDetail(editor, unitId);
+    expect(detail.records[0]).toMatchObject({ id: source.id, applicantName: "歸屬申請人", applicantEmail: "contact@example.com", purpose: "實驗室網站" });
+    expect(detail.records[0].inspections).toHaveLength(1);
+    expect(detail.records[0].inspections[0].note).toContain(item.id);
+    expect(detail.records[0].inspections[0].note).toContain("確認歸屬");
+    expect(zone).toEqual(before);
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+    expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
+    await expect(reviewUnitRequest(admin, item.id, "APPROVE")).rejects.toMatchObject({ status: 409 });
+    expect(await db.dnsInspection.count({ where: { recordId: source.id } })).toBe(1);
+    expect(await db.auditLog.findFirst({ where: { action: "ASSIGN_DNS_UNIT", newValue: { path: ["requestId"], equals: item.id } } })).not.toBeNull();
+  });
+  it("creates metadata for an untracked value", async () => {
+    const { source, input } = await claimInput();
+    await db.dnsRecordMetadata.delete({ where: { id: source.id } });
+    const result = await saveApplication(editor, input, httpRequest());
+    const item = await db.dnsRecordRequest.findFirstOrThrow({ where: { applicationId: result.applicationId } });
+    await reviewUnitRequest(admin, item.id, "APPROVE");
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
+    expect(await db.dnsInspection.count({ where: { recordId: source.id } })).toBe(1);
+  });
+  it("preserves earlier inspections when a tracked value is claimed", async () => {
+    const { source, input } = await claimInput();
+    const history = await db.dnsInspection.create({ data: { recordId: source.id, inspectorId: admin.id, inspectorEmail: admin.email, inspectorName: "原清查人", note: "既有清查" } });
+    const result = await saveApplication(editor, input, httpRequest());
+    const item = await db.dnsRecordRequest.findFirstOrThrow({ where: { applicationId: result.applicationId } });
+    await reviewUnitRequest(admin, item.id, "APPROVE");
+    const inspections = await db.dnsInspection.findMany({ where: { recordId: source.id } });
+    expect(inspections).toHaveLength(2);
+    expect(inspections).toEqual(expect.arrayContaining([expect.objectContaining({ id: history.id, note: "既有清查" }), expect.objectContaining({ eventClassified: true })]));
+  });
+  it("serializes competing ownership approvals without replacing the winning unit", async () => {
+    const { source, input, item } = await submitClaim();
+    const second = await createUnit(admin, `claim-${crypto.randomUUID()}`, creator.studentId!);
+    const result = await saveApplication(creator, { ...input, unitId: second.unit.id }, httpRequest());
+    const other = await db.dnsRecordRequest.findFirstOrThrow({ where: { applicationId: result.applicationId } });
+    const results = await Promise.allSettled([reviewUnitRequest(admin, item.id, "APPROVE"), reviewUnitRequest(admin, other.id, "APPROVE")]);
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    const winner = (await db.dnsRecordRequest.findMany({ where: { id: { in: [item.id, other.id] }, status: "APPROVED" } }))[0];
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(winner.unitId);
+    expect(await db.dnsInspection.count({ where: { recordId: source.id } })).toBe(1);
+    const losingId = winner.id === item.id ? other.id : item.id;
+    await expect(reviewUnitRequest(admin, losingId, "APPROVE")).rejects.toMatchObject({ status: 409 });
+  });
+  it("allows rejection of claims for existing DNS without assigning ownership or recording inspection", async () => {
+    const { source, item } = await submitClaim();
+    expect((await reviewUnitRequest(admin, item.id, "REJECT", "資料不足")).status).toBe("REJECTED");
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBeNull();
+    expect(await db.dnsInspection.count({ where: { recordId: source.id } })).toBe(0);
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+  });
+  it("requires actual membership even for administrators and permits enrolled admins to apply", async () => {
+    const { input } = await claimInput();
+    await expect(saveApplication(admin, input, httpRequest())).rejects.toMatchObject({ status: 403 });
+    await manageAllowlist(creator, unitId, admin.studentId!);
+    expect((await listUnits(admin)).find(u => u.id === unitId)?.canApply).toBe(true);
+    await expect(saveApplication(admin, input, httpRequest())).resolves.toMatchObject({ count: 1 });
+    const createInput = { ...input, operation: "CREATE" as const, records: [{ ...input.records[0], content: "192.0.2.50" }] };
+    await expect(saveApplication(admin, createInput, httpRequest())).resolves.toMatchObject({ count: 1 });
+  });
+  it("rejects outsiders, duplicate claims, missing values and already assigned values", async () => {
+    const { source, input } = await claimInput();
+    await expect(saveApplication(outsider, input, httpRequest())).rejects.toMatchObject({ status: 403 });
+    await expect(saveApplication(editor, { ...input, records: [{ ...input.records[0], content: "192.0.2.250" }] }, httpRequest())).rejects.toMatchObject({ status: 409 });
+    await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId } });
+    await expect(saveApplication(editor, input, httpRequest())).rejects.toMatchObject({ status: 409 });
+    await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId: null } });
+    await saveApplication(editor, input, httpRequest());
+    await expect(saveApplication(editor, input, httpRequest())).rejects.toMatchObject({ status: 409 });
+  });
+  it.each(["missing", "metadata", "ownership", "membership", "disabled", "scope"])("blocks stale claim approval after %s changes", async (change) => {
+    const { source, item } = await submitClaim();
+    if (change === "missing") zone.rrsets = [];
+    if (change === "metadata") await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { purpose: "已更新", updatedAt: new Date(Date.now() + 1000) } });
+    if (change === "ownership") await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId } });
+    if (change === "membership") await manageUnit(creator, unitId, { action: "member", userId: editor.id, role: null });
+    if (change === "disabled") await db.user.update({ where: { id: editor.id }, data: { disabled: true } });
+    if (change === "scope") await db.dnsRecordRequest.update({ where: { id: item.id }, data: { connectionScope: "another-server" } });
+    await expect(reviewUnitRequest(admin, item.id, "APPROVE")).rejects.toMatchObject({ status: 409 });
+    expect((await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: item.id } })).status).toBe("PENDING");
+    expect(await db.dnsInspection.count({ where: { recordId: source.id } })).toBe(0);
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+    expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
+  });
+  it("prevents unit administrators and delegated zone administrators from reviewing ownership claims", async () => {
+    const { item } = await submitClaim();
+    await expect(reviewUnitRequest(creator, item.id, "APPROVE")).rejects.toMatchObject({ status: 403 });
+    await expect(reviewUnitRequest({ ...outsider, zoneRoles: { [zone.name]: "ADMIN" } }, item.id, "APPROVE")).rejects.toMatchObject({ status: 403 });
   });
   it("persists unit notes and exposes saved ownership and assignment in DNS history", async () => {
     const created = await createUnit(admin, `notes-${crypto.randomUUID()}`, undefined, "單位測試備註");

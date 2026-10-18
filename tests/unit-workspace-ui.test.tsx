@@ -62,3 +62,17 @@ it("limits ordinary request history to the active unit, preserving admin review 
   const admin = inWorkspace(createElement(DnsRequestsWorkbench, { admin: true, actorId: "me" }));
   expect(admin).toContain("other.example.com."); expect(admin).toContain("personal.example.com.");
 });
+
+it("lets system administrators switch actual memberships and exposes their application entry", () => {
+  const html = shell([unit, { ...unit, id: "two", name: "第二單位" }], true);
+  expect(html).toContain("切換工作區");
+  expect(html).toContain('href="/requests/new"');
+  expect(html).toContain('href="/requests/claim"');
+});
+it("explains ownership-only approval and hides TTL editing on claim forms", () => {
+  vi.mocked(useResource).mockImplementation((url) => ({ data: url === "/api/units" ? { units: [{ ...unit, canApply: true }] } : url === "/api/application-policy" ? { policy: { allowedTypes: ["A"], ownership: "UNIT_ONLY" } } : { zones: [{ name: "example.com." }] }, loading: false, error: "", reload: vi.fn() }) as never);
+  const html = inWorkspace(createElement(DnsApplicationForm, { operation: "CLAIM" }));
+  expect(html).toContain("DNS 歸屬申請");
+  expect(html).toContain("核准後歸屬本單位並記錄清查");
+  expect(html).not.toContain('aria-label="TTL"');
+});

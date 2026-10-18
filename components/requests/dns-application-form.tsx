@@ -22,7 +22,8 @@ type DraftRecord = { id: number; zoneName: string; name: string; type: RecordTyp
 const blankRecord = (id: number, zoneName = ""): DraftRecord => ({ id, zoneName, name: "", type: "A", content: "", ttl: "300", purpose: "", notes: "" });
 const hints: Partial<Record<RecordType, string>> = { A: "192.0.2.10", AAAA: "2001:db8::1", CNAME: "target.example.com", MX: "10 mail.example.com", TXT: "v=spf1 include:_spf.example.com ~all", SRV: "10 5 443 service.example.com", CAA: "0 issue letsencrypt.org" };
 
-export function DnsApplicationForm() {
+export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREATE" | "CLAIM" }) {
+  const claiming = operation === "CLAIM";
   const router = useRouter();
   const workspace = useUnitWorkspace();
   const { data, loading, error: zoneError, reload } = useResource<{ zones: { name: string }[] }>("/api/dns-requests/zones");
@@ -123,6 +124,7 @@ export function DnsApplicationForm() {
     setPending(true);
     try {
       const result = await apiRequest<{ applicationId: string; count: number }>("/api/dns-requests", jsonRequest("POST", {
+        operation,
         applicantName: formData.get("applicantName"),
         applicantEmail: formData.get("applicantEmail"),
         applicantUnit: selectedUnit?.name || formData.get("applicantUnit"),
@@ -148,7 +150,7 @@ export function DnsApplicationForm() {
   if (unitResource.error) return <ResourceError message={unitResource.error} retry={unitResource.reload} />;
   if (!selectedUnit) return <EmptyState title={workspace.active ? "此單位目前無法申請" : "尚未加入單位"} description={workspace.active ? "須加入已啟用的單位才能申請。請聯絡單位管理員確認權限。" : "請提供學號給單位管理員或系統管理員，由管理員將你加入單位。"} action={<Link className="button" href="/dns">查看單位 DNS</Link>} />;
 
-  return <>{policyResource.error && <ResourceError message="無法取得申請規則，暫時無法送出申請。" retry={policyResource.reload} />}<p className="sr-only" role="status">{policyResource.loading ? "載入申請規則…" : ""}</p><form className="card dns-application" onSubmit={submit} onChange={() => { dirty.current = true; }} aria-label="申請 DNS" aria-busy={pending}>
+  return <>{policyResource.error && <ResourceError message="無法取得申請規則，暫時無法送出申請。" retry={policyResource.reload} />}<p className="sr-only" role="status">{policyResource.loading ? "載入申請規則…" : ""}</p><form className="card dns-application" onSubmit={submit} onChange={() => { dirty.current = true; }} aria-label={claiming ? "DNS 歸屬申請" : "申請 DNS"} aria-busy={pending}>
     <div className="modal-body">
       <fieldset className="application-section" disabled={pending}>
         <legend>申請人資料</legend>
@@ -176,7 +178,7 @@ export function DnsApplicationForm() {
             <label>名稱<input value={record.name} onChange={(event) => update(record.id, { name: event.target.value })} placeholder="www 或 @" required maxLength={253} autoCapitalize="none" spellCheck={false} aria-describedby={`fqdn-${record.id}`} ref={(node) => { if (node && focusId.current === record.id) { if (!record.zoneName) node.closest("fieldset")?.querySelector<HTMLElement>(".custom-select-trigger")?.focus(); else node.focus(); focusId.current = null; } }} /><small id={`fqdn-${record.id}`} className="fqdn-preview">{fqdnPreview(record)}</small></label>
             <label>類型<Select aria-label="DNS 類型" value={record.type} onChange={(value) => update(record.id, { type: value as RecordType })} options={[...(!requestTypes.includes(record.type as typeof requestTypes[number]) ? [{ value: record.type, label: `${record.type}（未開放，請改選）`, disabled: true }] : []), ...requestTypes.map((type) => ({ value: type, label: type }))]} /></label>
             <label className="content-field">解析內容<input value={record.content} onChange={(event) => update(record.id, { content: event.target.value })} placeholder={hints[record.type]} required maxLength={65535} autoCapitalize="none" spellCheck={false} aria-label="解析內容" aria-describedby={`content-help-${record.id}`} /><small id={`content-help-${record.id}`}>{contentHelp(record.type)}</small></label>
-            <label>TTL<Select aria-label="TTL" value={record.ttl} onChange={(value) => update(record.id, { ttl: value })} options={[{ value: "60", label: "1 分鐘" }, { value: "300", label: "5 分鐘" }, { value: "600", label: "10 分鐘" }, { value: "1800", label: "30 分鐘" }, { value: "3600", label: "1 小時" }]} /></label>
+            {!claiming && <label>TTL<Select aria-label="TTL" value={record.ttl} onChange={(value) => update(record.id, { ttl: value })} options={[{ value: "60", label: "1 分鐘" }, { value: "300", label: "5 分鐘" }, { value: "600", label: "10 分鐘" }, { value: "1800", label: "30 分鐘" }, { value: "3600", label: "1 小時" }]} /></label>}
             <label className="purpose-field">用途<textarea rows={2} required value={record.purpose} onChange={(event) => update(record.id, { purpose: event.target.value })} placeholder="請說明此 DNS 的服務名稱與實際用途，供後續清查使用" maxLength={1000} /></label>
             <label className="purpose-field">備註（選填）<textarea rows={2} value={record.notes} onChange={(event) => update(record.id, { notes: event.target.value })} placeholder="其他需要補充的說明" maxLength={1000} /></label>
           </div>
@@ -185,7 +187,7 @@ export function DnsApplicationForm() {
         <button ref={addButton} className="button add-record-button" type="button" onClick={addRecord} disabled={pending}><Plus size={18} />新增下一筆 DNS 紀錄</button>
         {removed && <div className="removal-notice" role="status"><span>已移除 {removed.record.name || "未命名紀錄"}</span><button type="button" disabled={pending} onClick={undoRemove}>復原</button></div>}
       </section>
-      <p className="application-review-note">送出後由管理員逐筆審核，核准前不會建立 DNS 紀錄。</p>
+      <p className="application-review-note">{claiming ? "請填寫既有 DNS 的名稱、類型及解析內容。核准後歸屬本單位並記錄清查，解析內容維持不變；已有單位歸屬的紀錄須請管理員確認後處理。" : "送出後由管理員逐筆審核，核准前不會建立 DNS 紀錄。"}</p>
       {error && errorRecordId === null && <div className="form-error" role="alert"><AlertTriangle size={17} /><p ref={errorTarget} tabIndex={-1}>{error}。填寫內容已保留。</p></div>}
     </div>
     <div className="modal-foot"><span className="application-count" aria-live="polite">共 {records.length} 筆待送出</span><button className="button" type="button" data-leave-workspace disabled={pending} onClick={() => router.push("/requests")}>返回申請紀錄</button><button type="submit" className="button primary" disabled={pending || loading || Boolean(zoneError) || !zones.length || (!selectedUnit || unitResource.loading || Boolean(unitResource.error) || policyResource.loading || Boolean(policyResource.error))}>{pending && <Loader2 className="spin" size={16} />}{pending ? "送出中…" : "送出 " + records.length + " 筆申請"}</button></div>

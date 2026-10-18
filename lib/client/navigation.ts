@@ -8,7 +8,9 @@ export const navigationCookie = "dns-manager-navigation";
 // Presentation only. Server routes remain responsible for authorization.
 export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAdmin = false): NavGroup[] {
   const items: NavItem[] = [
-    ...(!systemAdmin ? [{ href: "/dns", label: "單位 DNS", icon: "dns" as const }, { href: "/requests/new", label: "申請 DNS", icon: "apply" as const }] : []),
+    { href: "/dns", label: "單位 DNS", icon: "dns" },
+    { href: "/requests/new", label: "申請 DNS", icon: "apply" },
+    { href: "/requests/claim", label: "DNS 歸屬申請", icon: "apply" },
     { href: "/requests", label: admin ? "申請審核" : "申請紀錄", icon: "requests" },
   ];
   if (unitAdmin || systemAdmin) items.push({ href: "/units", label: "單位管理", icon: "units" });

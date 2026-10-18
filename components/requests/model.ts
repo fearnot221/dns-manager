@@ -3,7 +3,7 @@ import type { RecordType } from "@/lib/dns/types";
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 export type DnsRequest = {
   id: string;
-  operation?: "CREATE" | "UPDATE" | "DELETE";
+  operation?: "CREATE" | "CLAIM" | "UPDATE" | "DELETE";
   applicationId?: string | null;
   unitId?: string | null;
   sourceRecordId?: string | null;

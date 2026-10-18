@@ -21,6 +21,7 @@ enum ZoneRole {
 
 enum DnsRequestOperation {
   CREATE
+  CLAIM
   UPDATE
   DELETE
 }

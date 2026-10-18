@@ -12,7 +12,7 @@ export function RequestCard({ item, admin, onReview }: { item: DnsRequest; admin
   return <div className={`request-item${reviewable ? " is-reviewable" : ""}`}><details className="request-entry">
     <summary className="request-row">
       <span className="request-type">{item.recordType}</span>
-      <span className="request-host"><span>{item.recordName.replace(/\.$/, "")}</span>{deleting && <small>刪除申請</small>}{item.reviewNote && <small>有審核回覆</small>}</span>
+      <span className="request-host"><span>{item.recordName.replace(/\.$/, "")}</span>{item.operation === "CLAIM" && <small>歸屬申請</small>}{deleting && <small>刪除申請</small>}{item.reviewNote && <small>有審核回覆</small>}</span>
       <code className="request-value">{item.content}</code>
       <span className={"request-status status-" + item.status.toLowerCase()}>{statusNames[item.status]}</span>
       <time className="request-date" dateTime={item.createdAt} title={date.toLocaleString("zh-TW")}>{new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit" }).format(date)}</time>
@@ -20,7 +20,7 @@ export function RequestCard({ item, admin, onReview }: { item: DnsRequest; admin
     </summary>
     <div className="request-detail">
       <dl>
-        <div><dt>申請類別</dt><dd>{deleting ? "刪除 DNS" : item.sourceRecordId ? "變更既有 DNS" : "新增 DNS"}{item.unitId ? " · 單位申請" : ""}</dd></div>
+        <div><dt>申請類別</dt><dd>{item.operation === "CLAIM" ? "DNS 歸屬申請" : deleting ? "刪除 DNS" : item.sourceRecordId ? "變更既有 DNS" : "新增 DNS"}{item.unitId ? " · 單位申請" : ""}</dd></div>
         {item.sourceRecordId && !deleting && <div><dt>原解析內容</dt><dd><code>{item.originalContent}</code></dd></div>}
         <div><dt>完整名稱</dt><dd><code>{item.recordName}</code></dd></div>
         <div><dt>{deleting ? "刪除內容" : "內容"}</dt><dd><code>{item.content}</code></dd></div>
