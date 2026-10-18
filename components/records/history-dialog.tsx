@@ -28,7 +28,7 @@ export function HistoryDialog({ zone, name = "", type = "", onClose }: { zone: s
         <h3>{event.recordName} · {event.recordType} · {{ SYNC: "從 PowerDNS 同步", CREATE: "建立", UPDATE: "修改", DELETE: "刪除", OWNERSHIP: "更新歸屬資料", ASSIGNMENT: "指派單位", INSPECTION: "清查與歸屬紀錄" }[event.operation]}</h3>
         <p><time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString("zh-TW")}</time> · {event.userName || event.userEmail}</p>
         {event.legacyScope && <p className="description">舊操作快照（未記錄 PowerDNS 連線來源）</p>}
-        {event.ownership ? <><p className="description">此操作不變更 DNS 解析內容。</p><OwnershipState label="變更前" value={event.ownership.before} /><OwnershipState label="變更後" value={event.ownership.after} /></> : <><StateSnapshot label="變更前" rrset={event.before} /><StateSnapshot label="變更後" rrset={event.after} /></>}
+        {event.ownership ? <><OwnershipState label="變更前" value={event.ownership.before} /><OwnershipState label="變更後" value={event.ownership.after} /></> : <><StateSnapshot label="變更前" rrset={event.before} /><StateSnapshot label="變更後" rrset={event.after} /></>}
       </article>)}
       <div className="page-actions"><button className="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>上一頁</button><span>第 {page} 頁</span><button className="button" disabled={page * 50 >= (data?.total ?? 0)} onClick={() => setPage(page + 1)}>下一頁</button></div>
     </>}</div>

@@ -87,8 +87,8 @@ export function MailSettingsForm({ initial, onSaved, view = "settings", onView }
   }
 
   return <form className="card form-surface" noValidate onSubmit={event => { event.preventDefault(); void submit(event.currentTarget); }}>
-    {view === "settings" ? <header className="workflow-panel-head"><Mail size={20} aria-hidden="true" /><div><h2>通知設定</h2><p>寄件來源與網管小組收件地址</p></div><Badge tone={initial.config.enabled ? "green" : "neutral"}>{initial.config.enabled ? "已啟用" : "已停用"}</Badge></header>
-      : <header className="workflow-panel-head"><FileText size={20} aria-hidden="true" /><div><h2>郵件模板</h2><p>依場景設定收件對象與內容</p></div></header>}
+    {view === "settings" ? <header className="workflow-panel-head"><Mail size={20} aria-hidden="true" /><div><h2>通知設定</h2></div><Badge tone={initial.config.enabled ? "green" : "neutral"}>{initial.config.enabled ? "已啟用" : "已停用"}</Badge></header>
+      : <header className="workflow-panel-head"><FileText size={20} aria-hidden="true" /><div><h2>郵件模板</h2></div></header>}
     <div className="workflow-feedback" id={`${id}-feedback`}><ActionFeedback feedback={feedback.view === view ? feedback.value : null} /></div>
     {view === "settings" ? <fieldset className="form-fields" disabled={pending}>
       <legend className="sr-only">通知設定</legend>

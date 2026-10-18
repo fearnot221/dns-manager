@@ -54,7 +54,7 @@ export function MailComposePanel({ settings, units, onSent, onViewLog }: { setti
   }
 
   return <section className="card form-surface">
-    <header className="workflow-panel-head"><Send size={20} aria-hidden="true" /><div><h2>寄信給單位</h2><p>寄給所選單位的管理員，回覆會寄到網管小組</p></div></header>
+    <header className="workflow-panel-head"><Send size={20} aria-hidden="true" /><div><h2>寄信給單位</h2></div></header>
     <div className="workflow-feedback"><ActionFeedback feedback={feedback} />{feedback?.kind === "success" && <button type="button" className="link-button mail-log-link" onClick={onViewLog}>查看寄送紀錄</button>}</div>
     {!enabled && <p className="workflow-panel-note">郵件服務尚未啟用，請先至「通知設定」啟用並儲存。</p>}
     <fieldset className="form-fields" disabled={pending || !enabled}>
