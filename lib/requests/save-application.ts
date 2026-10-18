@@ -7,7 +7,7 @@ import { ApplicationInputError, requestRecordKey, type PreparedApplication } fro
 import { isDevRequestStore } from "./dev-store";
 import { redactAudit } from "@/lib/audit/redact";
 import { lockActiveUser, lockUnit } from "@/lib/units/service";
-import { connectionScope } from "@/lib/inventory/service";
+import { connectionScope, recordId } from "@/lib/inventory/service";
 import { powerdns } from "@/lib/powerdns/client";
 import type { RRSet } from "@/lib/dns/types";
 import { applicationLimits } from "./limit-policy";
@@ -16,6 +16,7 @@ import { assertApplicationPolicy } from "./policy";
 
 export async function saveApplication(actor: Actor, input: PreparedApplication, request: Request) {
   if (!input.unitId) throw new ApplicationInputError("必須選擇已啟用的單位才能申請 DNS。", 403);
+  const claiming = input.operation === "CLAIM";
   const applicationId = crypto.randomUUID();
   if (isDevRequestStore()) throw new ApplicationInputError("單位申請需要資料庫。", 503);
   try {
@@ -26,7 +27,8 @@ export async function saveApplication(actor: Actor, input: PreparedApplication, 
       for (const zone of new Set(input.records.map((record) => record.zoneName))) snapshots.set(zone, (await powerdns.getZone(zone)).rrsets);
       for (const record of input.records) {
         const current = snapshots.get(record.zoneName)?.find((r) => r.name === record.recordName && r.type === record.recordType);
-        if (current?.records.some((r) => r.content === record.content)) throw new ApplicationInputError("解析值已存在，不能透過新增申請取得既有 DNS 的共享權限。", 409);
+        if (claiming && !current?.records.some((r) => r.content === record.content)) throw new ApplicationInputError("歸屬申請的解析值不存在，請確認名稱、類型與解析內容。", 409);
+        if (!claiming && current?.records.some((r) => r.content === record.content)) throw new ApplicationInputError("解析值已存在，不能透過新增申請取得既有 DNS 的共享權限。", 409);
       }
     }
     await db.$transaction(async (tx) => {
@@ -47,7 +49,16 @@ export async function saveApplication(actor: Actor, input: PreparedApplication, 
         if (pending.has(key)) throw new ApplicationInputError(`第 ${index + 1} 筆：已有相同的待審核申請，整份申請尚未送出。`, 409);
         pending.add(key);
       });
-      const rows=records.map(record=>({...record,...applicant,applicationId,userId,connectionScope:scope,expectedRRSet:(snapshots.get(record.zoneName)?.find(r=>r.name===record.recordName&&r.type===record.recordType) as unknown as Prisma.InputJsonValue)??Prisma.JsonNull}));
+      const metadataVersions = new Map<string, Date | null>();
+      if (claiming) {
+        for (const record of records) {
+          const id = recordId(scope, record);
+          const metadata = await tx.dnsRecordMetadata.findUnique({ where: { id } });
+          if (metadata?.unitId) throw new ApplicationInputError("此解析值已有單位歸屬，請由管理員確認後處理。", 409);
+          metadataVersions.set(id, metadata?.updatedAt ?? null);
+        }
+      }
+      const rows=records.map(record=>({...record,...applicant,applicationId,userId,connectionScope:scope,...(claiming ? { ttl: snapshots.get(record.zoneName)!.find(r=>r.name===record.recordName&&r.type===record.recordType)!.ttl, sourceMetadataUpdatedAt: metadataVersions.get(recordId(scope, record)) } : {}),expectedRRSet:(snapshots.get(record.zoneName)?.find(r=>r.name===record.recordName&&r.type===record.recordType) as unknown as Prisma.InputJsonValue)??Prisma.JsonNull}));
       // Reserve room for generated IDs, review metadata and serialized snapshots.
       let bytes=0;const limits=applicationLimits();
       for(const row of rows){bytes+=Buffer.byteLength(JSON.stringify(row))+1024;if(bytes>Math.min(limits.pendingBytes,limits.dailyBytes))throw new ApplicationInputError("本份申請資料量超過單位安全上限，請分批送出。",429);}
@@ -58,13 +69,13 @@ export async function saveApplication(actor: Actor, input: PreparedApplication, 
         await tx.dnsRecordRequest.createMany({ data: rows.slice(offset,offset+250) });
         await tx.auditLog.createMany({ data: chunk.map((record) => ({
           userId, userEmail: actor.email, zone: record.zoneName, recordName: record.recordName, recordType: record.recordType,
-          action: "REQUEST_DNS_RECORD", success: true, requestId: request.headers.get("x-request-id") || applicationId,
+          action: claiming ? "REQUEST_DNS_OWNERSHIP" : "REQUEST_DNS_RECORD", success: true, requestId: request.headers.get("x-request-id") || applicationId,
           ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
           userAgent: request.headers.get("user-agent")?.slice(0, 500),
           newValue: redactAudit({ ...record, ...applicant, applicationId }) as Prisma.InputJsonValue,
         })) });
       }
-      await enqueueDnsMail(tx, `dns-request:${applicationId}`, { applicationId, applicantName: input.applicantName || actor.name || "未提供", unitName: unit.name, recordCount: String(records.length), operation: "新增" });
+      if (!claiming) await enqueueDnsMail(tx, `dns-request:${applicationId}`, { applicationId, applicantName: input.applicantName || actor.name || "未提供", unitName: unit.name, recordCount: String(records.length), operation: "新增" });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
     return { applicationId, count: input.records.length };
   } catch (error) {

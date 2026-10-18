@@ -4,7 +4,7 @@ import { isNavActive, workspaceNavigation } from "@/lib/client/navigation";
 describe("workspace navigation", () => {
   const items = (admin: boolean, systemAdmin: boolean) => workspaceNavigation(admin, systemAdmin).flatMap((group) => group.items);
   it("keeps unit workflows flat without exposing management links", () => {
-    expect(items(false, false).map((item) => item.href)).toEqual(["/dns", "/requests/new", "/requests"]);
+    expect(items(false, false).map((item) => item.href)).toEqual(["/dns", "/requests/new", "/requests/claim", "/requests"]);
     expect(items(false, false).find((item) => item.href === "/requests")?.label).toBe("申請紀錄");
   });
   it("only exposes unit management to unit or global administrators", () => {
@@ -45,8 +45,8 @@ describe("workspace navigation", () => {
   });
 });
 
-it("removes user DNS workflows from system administrator navigation", () => {
+it("exposes user DNS workflows to system administrators", () => {
   const routes = workspaceNavigation(true, true, true)[0].items.map((item) => item.href);
-  expect(routes).not.toContain("/dns"); expect(routes).not.toContain("/requests/new");
+  expect(routes).toContain("/dns"); expect(routes).toContain("/requests/new"); expect(routes).toContain("/requests/claim");
   expect(routes).toContain("/units"); expect(routes).toContain("/requests");
 });

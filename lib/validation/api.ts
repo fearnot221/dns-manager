@@ -18,6 +18,7 @@ export const requestOwnershipSchema = z.object({
   purpose: z.string().trim().max(1000),
 }).strict();
 export const dnsApplicationSchema = z.object({
+  operation: z.enum(["CREATE", "CLAIM"]).optional(),
   unitId: z.string().trim().min(1).max(100),
   applicantName: z.string().trim().min(1, "請填寫申請人姓名").max(100),
   applicantEmail: z.string().trim().pipe(z.email().max(320)),

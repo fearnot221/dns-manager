@@ -1,3 +1,4 @@
+import { inspectionEventSnapshot } from "@/lib/inspection-events/service";
 import { assertDeletionPassword } from "@/lib/security/deletion-protection";
 import "server-only";
 import { lockDnsZone } from "@/lib/dns/lock";
@@ -36,7 +37,7 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
     if (decision === "REJECT") {
       if (publication) throw new ApiError(publicationPendingMessage, 409);
       // Protect pending requests interrupted before publication journaling was installed.
-      if (item.connectionScope === await connectionScope()) {
+      if (item.operation !== "CLAIM" && item.connectionScope === await connectionScope()) {
         await lockDnsZone(tx, item.zoneName, item.connectionScope);
         const current = (await powerdns.getZone(item.zoneName)).rrsets.find(r => r.name === item.recordName && r.type === item.recordType);
         const before = item.expectedRRSet as unknown as RRSet | null;
@@ -63,7 +64,20 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
       const target = await tx.dnsRecordMetadata.findUnique({ where: { id: targetId } });
       let next: RRSet | undefined;
       let auditBefore = current ?? null;
-      if (item.sourceRecordId) {
+      if (item.operation === "CLAIM") {
+        if (!current?.records.some(r => r.content === item.content)) throw new ApiError("申請的解析值已不存在，請退回並重新申請。", 409);
+        await tx.$queryRaw`SELECT "id" FROM "DnsRecordMetadata" WHERE "id" = ${targetId} FOR UPDATE`;
+        const metadata = await tx.dnsRecordMetadata.findUnique({ where: { id: targetId } });
+        if (metadata?.unitId || (metadata?.updatedAt.getTime() ?? null) !== (item.sourceMetadataUpdatedAt?.getTime() ?? null)) throw new ApiError("歸屬或清查資料已變更，請退回並重新申請。", 409);
+        const unit = await tx.dnsUnit.findUniqueOrThrow({ where: { id: initial.unitId }, select: { name: true } });
+        const ownership = { unitId: initial.unitId, applicantName: item.applicantName || "", applicantEmail: item.applicantEmail || "", applicantExtension: item.applicantExtension || "", applicantUnit: unit.name, purpose: item.purpose || "", updatedBy: actor.email };
+        if (metadata) await tx.dnsRecordMetadata.update({ where: { id: targetId }, data: ownership });
+        else await tx.dnsRecordMetadata.create({ data: { id: targetId, zoneName: item.zoneName, recordName: item.recordName, recordType: item.recordType, content: item.content, ...ownership } });
+        const inspectedAt = new Date();
+        const event = await inspectionEventSnapshot(inspectedAt, tx);
+        const inspection = await tx.dnsInspection.create({ data: { recordId: targetId, inspectedAt, ...event, inspectorId: actor.id, inspectorEmail: actor.email, inspectorName: actor.name || actor.studentId || "系統管理員", note: `DNS 歸屬申請核准（${id}）；申請人：${item.applicantName || item.user.name || item.userId}；單位：${unit.name}；用途：${item.purpose || ""}；備註：${item.notes || ""}；審核回覆：${note || ""}` } });
+        await tx.auditLog.create({ data: { dnsScope: scope, userId: actor.id, userEmail: actor.email, zone: item.zoneName, recordName: item.recordName, recordType: item.recordType, action: "ASSIGN_DNS_UNIT", success: true, oldValue: { recordId: targetId, content: item.content, unitId: null, applicantUnit: metadata?.applicantUnit ?? "" }, newValue: { recordId: targetId, content: item.content, ...ownership, requestId: id, inspectionId: inspection.id } } });
+      } else if (item.sourceRecordId) {
         await tx.$queryRaw`SELECT "id" FROM "DnsRecordMetadata" WHERE "id" = ${item.sourceRecordId} FOR UPDATE`;
         const source = await tx.dnsRecordMetadata.findUnique({ where: { id: item.sourceRecordId } });
         if (!source || source.unitId !== initial.unitId || source.content !== item.originalContent || !item.expectedRRSet) throw new ApiError("原紀錄歸屬已變更，請退回並重新申請。", 409);
@@ -114,7 +128,7 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
         const ownership = { unitId: initial.unitId, applicantName: item.applicantName || "", applicantEmail: item.applicantEmail ?? item.user.portalEmail ?? "", applicantUnit: item.applicantUnit || "", applicantExtension: item.applicantExtension || "", purpose: item.purpose || "", updatedBy: actor.email };
         await tx.dnsRecordMetadata.upsert({ where: { id: targetId }, update: target?.unitId ? {} : ownership, create: { id: targetId, zoneName: item.zoneName, recordName: item.recordName, recordType: item.recordType, content: item.content, ...ownership } });
       }
-      await tx.auditLog.create({ data: { dnsScope: scope, userId: actor.id, userEmail: actor.email, zone: item.zoneName, recordName: item.recordName, recordType: item.recordType, action: "APPLY_UNIT_DNS_REQUEST", success: true, oldValue: auditBefore ? redactAudit(auditBefore) as Prisma.InputJsonValue : Prisma.JsonNull, newValue: redactAudit({ requestId: id, unitId: initial.unitId, operation: item.operation, rrset: item.operation === "DELETE" ? next ?? null : next ?? current }) as Prisma.InputJsonValue } });
+      if (item.operation !== "CLAIM") await tx.auditLog.create({ data: { dnsScope: scope, userId: actor.id, userEmail: actor.email, zone: item.zoneName, recordName: item.recordName, recordType: item.recordType, action: "APPLY_UNIT_DNS_REQUEST", success: true, oldValue: auditBefore ? redactAudit(auditBefore) as Prisma.InputJsonValue : Prisma.JsonNull, newValue: redactAudit({ requestId: id, unitId: initial.unitId, operation: item.operation, rrset: item.operation === "DELETE" ? next ?? null : next ?? current }) as Prisma.InputJsonValue } });
     }
     const saved = await tx.dnsRecordRequest.update({ where: { id }, data: { status: decision === "APPROVE" ? "APPROVED" : "REJECTED", reviewerId: actor.id, reviewedAt: new Date(), reviewNote: note || null } });
     if (decision === "APPROVE") await tx.dnsRequestPublication.updateMany({ where: { requestId: id }, data: { completedAt: new Date() } });

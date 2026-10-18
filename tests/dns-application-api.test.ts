@@ -96,3 +96,13 @@ it("passes optional notes independently from purpose", async () => {
   expect(response.status).toBe(201);
   expect(vi.mocked(saveApplication).mock.calls[0][1].records[0]).toMatchObject({ purpose: "實驗室網站", notes: "補充說明" });
 });
+
+it("passes validated ownership claims through the authenticated application API", async () => {
+  const response = await POST(request({ ...body, operation: "CLAIM" }));
+  expect(response.status).toBe(201);
+  expect(saveApplication).toHaveBeenCalledWith(expect.objectContaining({ id: "user" }), expect.objectContaining({ operation: "CLAIM", unitId: "unit-1", records: [expect.objectContaining({ recordName: "test.example.com." })] }), expect.any(Request));
+});
+it("rejects forged operations at the application boundary", async () => {
+  expect((await POST(request({ ...body, operation: "UPDATE" }))).status).toBe(400);
+  expect(saveApplication).not.toHaveBeenCalled();
+});

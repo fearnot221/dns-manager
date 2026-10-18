@@ -32,7 +32,7 @@ export async function enqueueDnsMail(tx: Tx, eventKey: string, values: Omit<Mail
   return enqueueScenario(tx, eventKey, requestScenario(values.operation), config => config.recipients.map(recipient => ({ recipient, values: full })));
 }
 
-const operationLabels: Record<string, string> = { CREATE: "新增", UPDATE: "修改", DELETE: "刪除" };
+const operationLabels: Record<string, string> = { CREATE: "新增", CLAIM: "歸屬", UPDATE: "修改", DELETE: "刪除" };
 type ReviewedRequest = { id: string; operation: string; status: string; recordName: string; recordType: string; content: string; reviewNote: string | null; reviewedAt: Date | null; applicantName: string | null; applicantEmail: string | null; applicantUnit: string | null; user: { name: string | null; email: string; portalEmail: string | null } };
 export async function enqueueReviewMail(tx: Tx, request: ReviewedRequest, unitName: string) {
   const approved = request.status === "APPROVED";
