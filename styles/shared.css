@@ -1,0 +1,50 @@
+/* Styles shared by the workspace and the pages outside it (login, 404). Loaded from the root layout, before every route's own styles. */
+.brandmark { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; }
+/* The emblem is a downward triangle whose visual center sits ~13% above its box; nudge it down to look centered. */
+.brandmark img { display: block; width: 100%; height: 100%; object-fit: contain; translate: 0 8%; }
+.brand-name { display: grid; gap: 1px; min-width: 0; }
+.brand-name strong { font-size: var(--text-small); font-weight: 600; letter-spacing: .04em; white-space: nowrap; }
+.brand-name > span { font-size: 1rem; font-weight: 650; letter-spacing: -.01em; }
+.login-brand { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); text-align: center; }
+.login-brand .brandmark { width: 52px; height: 52px; padding: 5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px var(--border); }
+.login-brand .brand-name strong { color: var(--muted); font-size: .8125rem; }
+.login-brand .brand-name > span { font-size: 1.25rem; }
+@media (max-width: 600px) {
+  .login-brand .brandmark { width: 48px; height: 48px; }
+  .login-brand .brand-name > span { font-size: 1.0625rem; }
+}
+
+.button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--control-height); padding: var(--control-padding); border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--panel); color: var(--ink); font-size: var(--text-body); font-weight: 500; line-height: 1.4; text-decoration: none; white-space: nowrap; box-shadow: var(--shadow-sm); transition: background .15s var(--ease), border-color .15s var(--ease), color .15s var(--ease), box-shadow .15s var(--ease); }
+.button:hover:not(:disabled) { background: var(--surface-soft); border-color: var(--border-control); }
+.button.compact { min-height: 32px; padding: 4px 10px; font-size: var(--text-caption); }
+.button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.button.danger-solid { background: var(--red); border-color: var(--red); color: var(--on-accent); }
+.button.danger-solid:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 86%, var(--ink)); border-color: color-mix(in srgb, var(--red) 86%, var(--ink)); }
+.button.danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, var(--border-strong)); }
+.button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 7%, var(--panel)); border-color: var(--red); color: var(--red); }
+.button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.button.ghost:hover:not(:disabled) { color: var(--ink); background: var(--surface-sunken); border-color: transparent; }
+.button:active:not(:disabled), .icon-button:active:not(:disabled) { transform: translateY(1px); }
+.icon-button { display: inline-grid; place-items: center; width: var(--control-height); height: var(--control-height); flex-shrink: 0; border: 1px solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--muted); text-decoration: none; transition: background .15s var(--ease), color .15s var(--ease); }
+.icon-button:hover:not(:disabled) { background: var(--surface-soft); color: var(--ink); }
+.icon-button.danger { color: var(--muted); }
+.icon-button.danger:hover:not(:disabled), .danger-hover:hover:not(:disabled) { color: var(--red); background: color-mix(in srgb, var(--red) 8%, var(--panel)); }
+@media (max-width: 600px) {
+  .button, .icon-button { min-height: 44px; }
+  .icon-button { width: 44px; }
+  .button.compact { min-height: 40px; }
+}
+
+/* Inline notices: tinted surface, matching hairline and an icon carry the meaning together with color. */
+.warning, .form-error, .request-notice { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-soft); color: var(--ink); font-size: var(--text-body); }
+.warning > svg, .form-error > svg { margin-top: 3px; }
+.warning { border-color: color-mix(in srgb, var(--amber) 35%, var(--border)); background: color-mix(in srgb, var(--amber) 6%, var(--panel)); }
+.warning > svg { color: var(--amber); }
+.request-notice { border-color: color-mix(in srgb, var(--blue) 25%, var(--border)); background: color-mix(in srgb, var(--blue) 5%, var(--panel)); color: var(--muted); }
+.warning strong, .request-notice strong { color: var(--ink); }
+.warning p, .request-notice p { color: var(--muted); margin-top: var(--space-1); }
+.form-error { color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, var(--border)); background: color-mix(in srgb, var(--red) 6%, var(--panel)); }
+.form-error small { color: var(--muted); }
+
+.field-help { color: var(--muted); font-size: var(--text-caption); line-height: 1.7; margin: 0; }

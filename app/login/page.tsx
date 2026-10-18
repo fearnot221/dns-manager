@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth/config";
 import { requireActor, AuthError } from "@/lib/auth/session";
 import { logtoConfigured } from "@/lib/auth/logto";
 import { PortalSignIn } from "@/components/auth/portal-sign-in";
+import "@/styles/auth.css";
 
 export const metadata = { title: "登入" };
 
@@ -15,9 +16,9 @@ const waveFont = Bungee({ weight: "400", subsets: ["latin"] });
 const waveRow = Array(4).fill("NCUEECESNMG").join("  ");
 const waveRows = Array.from({ length: 15 }, (_, n) => n);
 
-// Drawn twice: a static extruded layer underneath, and the animated wave face on top.
-function Wave({ depth = false }: { depth?: boolean }) {
-  return <div className={`login-wave ${waveFont.className}${depth ? " login-wave-depth" : ""}`} aria-hidden="true" style={{ "--rows": waveRows.length } as React.CSSProperties}>{waveRows.map((n) => <span key={n} style={{ "--r": n } as React.CSSProperties}>{waveRow}</span>)}</div>;
+// Drawn three times: a static extruded layer, the static face, and a masked highlight copy that carries the wave.
+function Wave({ layer }: { layer: "depth" | "face" | "sheen" }) {
+  return <div className={`login-wave login-wave-${layer} ${waveFont.className}`} aria-hidden="true" style={{ "--rows": waveRows.length } as React.CSSProperties}><div className="login-wave-rows">{waveRows.map((n) => <span key={n} style={{ "--r": n } as React.CSSProperties}>{waveRow}</span>)}</div></div>;
 }
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; reason?: string }> }) {
@@ -32,8 +33,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const portal = !demo && logtoConfigured();
   const password = passwordLoginEnabled();
   return <main className="login-page">
-    <Wave depth />
-    <Wave />
+    <Wave layer="depth" />
+    <Wave layer="face" />
+    <Wave layer="sheen" />
     <div className="login-card">
       <div className="login-identity"><div className="login-brand"><Brand /></div><p>DNS 紀錄申請・審核・清查</p></div>
       <div className="login-form-panel">

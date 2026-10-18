@@ -21,6 +21,8 @@ html::-webkit-scrollbar, body::-webkit-scrollbar, *::-webkit-scrollbar {
   .tab-strip::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 }
 
+/* A hard fling on macOS/iOS rubber-bands the whole document, pulling the sticky shell away and exposing a blank strip. */
+html { overscroll-behavior-y: none; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-size: var(--text-body); line-height: 1.6; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 button, input, select, textarea { font: inherit; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }

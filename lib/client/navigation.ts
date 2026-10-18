@@ -1,4 +1,4 @@
-export type NavIcon = "apply" | "requests" | "dns" | "units" | "zones" | "inventory" | "users" | "settings" | "protection" | "mail" | "events" | "activity";
+export type NavIcon = "apply" | "claim" | "requests" | "review" | "dns" | "units" | "zones" | "users" | "settings" | "protection" | "mail" | "events" | "activity";
 export type NavItem = { href: string; label: string; icon: NavIcon; nested?: boolean };
 export type NavGroup = { id: string; label: string; items: NavItem[] };
 
@@ -7,14 +7,16 @@ export const navigationCookie = "dns-manager-navigation";
 
 // Presentation only. Server routes remain responsible for authorization.
 export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAdmin = false): NavGroup[] {
-  const items: NavItem[] = [
-    { href: "/dns", label: "單位 DNS", icon: "dns" },
-    { href: "/requests/new", label: "申請 DNS", icon: "apply" },
-    { href: "/requests/claim", label: "DNS 歸屬申請", icon: "apply" },
-    { href: "/requests", label: admin ? "申請審核" : "申請紀錄", icon: "requests" },
-  ];
+  const items: NavItem[] = [{ href: "/dns", label: "單位 DNS", icon: "dns" }];
   if (unitAdmin || systemAdmin) items.push({ href: "/units", label: "單位管理", icon: "units" });
   if (admin) items.push({ href: "/zones", label: "DNS 管理", icon: "zones", nested: true });
+  const applications: NavItem[] = [
+    { href: "/requests/new", label: "申請 DNS", icon: "apply" },
+    { href: "/requests/claim", label: "DNS 歸屬申請", icon: "claim" },
+  ];
+  // Administrators review every request on the same route; others see only their own records.
+  const review: NavItem[] = admin ? [{ href: "/requests", label: "申請審核", icon: "review" }] : [];
+  if (!admin) applications.push({ href: "/requests", label: "申請紀錄", icon: "requests" });
   const settings: NavItem[] = [];
   if (admin) settings.push(
     { href: "/admin/application-policy", label: "申請規則", icon: "settings" },
@@ -26,7 +28,12 @@ export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAd
     { href: "/admin/users", label: "帳號管理", icon: "users" },
     { href: "/activity", label: "操作紀錄", icon: "activity" },
   );
-  return [{ id: "workflow", label: "日常作業", items }, ...(settings.length ? [{ id: "settings", label: "系統設定", items: settings }] : [])];
+  return [
+    { id: "workflow", label: "日常作業", items },
+    { id: "applications", label: "申請作業", items: applications },
+    { id: "review", label: "審核作業", items: review },
+    { id: "settings", label: "系統設定", items: settings },
+  ].filter((group) => group.items.length);
 }
 export function isNavActive(pathname: string, item: NavItem) {
   return pathname === item.href || !!item.nested && pathname.startsWith(`${item.href}/`);
