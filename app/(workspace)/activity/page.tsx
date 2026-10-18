@@ -6,5 +6,5 @@ import { AuditWorkbench } from "@/components/admin/audit-workbench";
 export const metadata = { title: "操作紀錄" };
 export default async function ActivityPage() {
   if (!isGlobalAdmin(await requireActor())) redirect("/requests");
-  return <div className="content"><PageHeader title="操作紀錄" description="唯讀紀錄，無法修改或刪除。" /><AuditWorkbench /></div>;
+  return <div className="content"><PageHeader title="操作紀錄" /><AuditWorkbench /></div>;
 }

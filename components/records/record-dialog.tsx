@@ -49,7 +49,7 @@ export function RecordDialog({ zone, dialog, onClose, onSaved }: { zone: string;
 
   const protectedRecord = rr && protectedTypes.has(rr.type);
   return <Dialog title={dialog.mode === "add" ? "新增 DNS 紀錄" : dialog.mode === "edit" ? `編輯 ${rr?.type} 紀錄組` : "刪除此解析值？"}
-    description={dialog.mode === "delete" ? "刪除後會立即影響 DNS 解析，且無法復原。" : dialog.mode === "edit" ? "同名稱、同類型的解析內容請每行填一筆。" : "填寫名稱與解析內容，儲存後立即生效。"}
+    description={dialog.mode === "delete" ? "刪除後會立即影響 DNS 解析，且無法復原。" : undefined}
     pending={pending} onClose={onClose}>
       <form onSubmit={submit} aria-describedby={error ? errorId : undefined}><fieldset className="dialog-fields" disabled={pending}><div className="modal-body">
         {protectedRecord && <div className="warning"><ShieldAlert size={18} /><div><strong>受保護的紀錄</strong><p>修改此類紀錄需要管理員權限。</p></div></div>}

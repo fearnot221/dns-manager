@@ -18,7 +18,7 @@ export function DeletionProtectionSettings({ canConfigure }: { canConfigure: boo
   if (resource.error) return <ResourceError message={resource.error} retry={resource.reload} />;
   if (!resource.data) return <LoadingPanel label="載入刪除保護設定…" />;
   return <section className="card">
-    <header className="workflow-panel-head"><div><h2>DNS 刪除保護密碼</h2>{resource.data.configured && <p role="status">已設定；每次刪除都必須輸入密碼。</p>}</div></header>
+    <header className="workflow-panel-head"><div><h2>DNS 刪除保護密碼</h2>{resource.data.configured && <p role="status">已設定</p>}</div></header>
     {!resource.data.configured && <div className="workflow-feedback"><div className="warning" role="status"><AlertTriangle size={18} aria-hidden="true" /><div><strong>尚未設定刪除保護密碼</strong><p>設定完成前，所有 DNS 刪除操作暫停。</p></div></div></div>}
     <div id={feedbackId} className="workflow-feedback"><ActionFeedback feedback={feedback} /></div>
     <p className="workflow-panel-note">刪除或替換解析值、刪除 Zone、核准刪除申請時需輸入；與登入密碼分開管理。</p>

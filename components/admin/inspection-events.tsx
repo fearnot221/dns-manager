@@ -61,10 +61,10 @@ export function InspectionEvents() {
         </div></td></tr>;
       })}
     </tbody></table></ScrollRegion>}
-    {!resource.loading && !resource.error && !resource.data?.events.length && <EmptyState title="尚無清查活動" description="目前沒有排定的清查期間。" />}
+    {!resource.loading && !resource.error && !resource.data?.events.length && <EmptyState title="尚無清查活動" />}
     {editor && <Dialog title={editor.kind === "delete" ? "刪除清查活動？" : editor.kind === "create" ? "新增清查活動" : "編輯清查活動"} pending={pending} onClose={() => { setEditor(null); setFeedback(null); }}>
       <div className="modal-body"><ActionFeedback feedback={feedback} />
-        {editor.kind === "delete" ? <><p className="unit-wrap">{selected!.name}</p><p>歷次清查紀錄會保留當時的活動標記。</p><div className="form-actions"><button type="button" className="button" disabled={pending} data-dialog-initial-focus onClick={() => { setEditor(null); setFeedback(null); }}>取消</button><button type="button" className="button danger" disabled={pending} onClick={() => void save()}>{pending ? "刪除中…" : "確認刪除"}</button></div></> :
+        {editor.kind === "delete" ? <><p className="unit-wrap">{selected!.name}</p><div className="form-actions"><button type="button" className="button" disabled={pending} data-dialog-initial-focus onClick={() => { setEditor(null); setFeedback(null); }}>取消</button><button type="button" className="button danger" disabled={pending} onClick={() => void save()}>{pending ? "刪除中…" : "確認刪除"}</button></div></> :
           <form className="form-surface" onSubmit={(event) => { event.preventDefault(); void save(new FormData(event.currentTarget)); }}>
             <fieldset className="form-fields" disabled={pending}>
               <label>活動名稱<input name="name" required maxLength={120} defaultValue={selected?.name ?? ""} aria-invalid={!!errors.name} aria-describedby={errors.name ? "event-name-error" : undefined} /></label>

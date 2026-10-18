@@ -1,0 +1,52 @@
+/* 404: a DNS lookup that walks the resolver chain and ends in NXDOMAIN. */
+.nx-page { position: relative; display: grid; place-items: center; min-height: 100dvh; padding: var(--space-12) var(--space-4); overflow: hidden; background: var(--bg); }
+.nx-grid { position: absolute; inset: -40px; background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 40px 40px; mask-image: radial-gradient(ellipse at center, #000 10%, transparent 70%); animation: nx-drift 24s linear infinite; }
+.nx-grid::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 45%); }
+.nx-shell { position: relative; display: grid; justify-items: center; gap: var(--space-6); width: min(560px, 100%); text-align: center; }
+.nx-brand { animation: nx-rise .6s var(--ease) both; }
+
+.nx-code { display: flex; gap: .04em; font-family: var(--font-mono), ui-monospace, monospace; font-size: clamp(5.5rem, 22vw, 9.5rem); font-weight: 700; line-height: 1; letter-spacing: -.04em; }
+.nx-code span { background: linear-gradient(180deg, var(--ink), color-mix(in srgb, var(--ink) 35%, transparent)); -webkit-background-clip: text; background-clip: text; color: transparent; animation: nx-rise .7s var(--ease) both; }
+.nx-code span:nth-child(2) { animation-delay: .08s; }
+.nx-code span:nth-child(3) { animation-delay: .16s; }
+.nx-code .nx-zero { position: relative; background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 30%, transparent)); -webkit-background-clip: text; background-clip: text; animation: nx-rise .7s .08s var(--ease) both, nx-glitch 4s 2.4s steps(1) infinite; }
+
+.nx-chain { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--space-2) 0; list-style: none; padding: 0; margin: 0; font-family: var(--font-mono), ui-monospace, monospace; font-size: var(--text-caption); color: var(--muted); }
+.nx-chain li { display: flex; align-items: center; gap: 6px; opacity: .35; animation: nx-hop .35s calc(.5s + var(--i) * .28s) var(--ease) forwards; }
+.nx-chain li + li::before { content: ""; width: 22px; height: 1px; margin: 0 8px 0 2px; background: linear-gradient(90deg, var(--border-strong), var(--accent)); }
+.nx-node { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+.nx-chain li:not(.nx-fail) { --hop: var(--accent); }
+.nx-chain .nx-fail { --hop: var(--red); }
+.nx-chain .nx-fail::before { background: repeating-linear-gradient(90deg, var(--red) 0 4px, transparent 4px 7px); }
+
+.nx-terminal { width: 100%; text-align: left; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-dialog); box-shadow: var(--shadow-overlay); overflow: hidden; animation: nx-rise .6s .3s var(--ease) both; }
+.nx-terminal-bar { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface-soft); }
+.nx-terminal-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); }
+.nx-terminal pre { margin: 0; padding: var(--space-4); font-family: var(--font-mono), ui-monospace, monospace; font-size: var(--text-caption); line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+.nx-prompt { color: var(--accent); }
+.nx-query { color: var(--amber); }
+.nx-dim { color: var(--muted); }
+.nx-status { color: var(--red); font-weight: 600; opacity: 0; animation: nx-fade .2s 2s forwards; }
+.nx-cursor { display: inline-block; width: .6em; height: 1.1em; vertical-align: text-bottom; background: var(--ink); animation: nx-blink 1s steps(1) infinite; }
+
+.nx-title { font-size: var(--text-section); font-weight: 600; animation: nx-rise .6s .45s var(--ease) both; }
+.nx-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); animation: nx-rise .6s .55s var(--ease) both; }
+
+@keyframes nx-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes nx-fade { to { opacity: 1; } }
+@keyframes nx-blink { 50% { opacity: 0; } }
+@keyframes nx-drift { to { transform: translate(40px, 40px); } }
+@keyframes nx-hop { to { opacity: 1; color: var(--hop); } }
+.nx-chain li .nx-node { animation: nx-node .35s calc(.5s + var(--i) * .28s) var(--ease) forwards; }
+@keyframes nx-node { 50% { transform: scale(1.6); } to { background: var(--hop); box-shadow: 0 0 0 4px color-mix(in srgb, var(--hop) 20%, transparent); } }
+@keyframes nx-glitch {
+  0%, 100% { transform: none; text-shadow: none; }
+  2% { transform: translate(-3px, 1px) skewX(-6deg); }
+  4% { transform: translate(3px, -1px); }
+  6% { transform: none; }
+}
+@media (max-width: 520px) {
+  .nx-chain { font-size: var(--text-micro); }
+  .nx-chain li { gap: 4px; }
+  .nx-chain li + li::before { width: 10px; margin: 0 4px 0 2px; }
+}

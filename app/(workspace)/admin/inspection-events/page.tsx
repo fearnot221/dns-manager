@@ -8,5 +8,5 @@ export const metadata = { title: "清查活動" };
 
 export default async function InspectionEventsPage() {
   if (!isGlobalAdmin(await requireActor())) redirect("/dns");
-  return <div className="content"><PageHeader title="清查活動" description="期間內的清查紀錄會標記所屬活動。" /><InspectionEvents /></div>;
+  return <div className="content"><PageHeader title="清查活動" /><InspectionEvents /></div>;
 }

@@ -73,6 +73,6 @@ it("explains ownership-only approval and hides TTL editing on claim forms", () =
   vi.mocked(useResource).mockImplementation((url) => ({ data: url === "/api/units" ? { units: [{ ...unit, canApply: true }] } : url === "/api/application-policy" ? { policy: { allowedTypes: ["A"], ownership: "UNIT_ONLY" } } : { zones: [{ name: "example.com." }] }, loading: false, error: "", reload: vi.fn() }) as never);
   const html = inWorkspace(createElement(DnsApplicationForm, { operation: "CLAIM" }));
   expect(html).toContain("DNS 歸屬申請");
-  expect(html).toContain("核准後歸屬本單位並記錄清查");
+  expect(html).toContain("核准後歸屬本單位，解析內容維持不變");
   expect(html).not.toContain('aria-label="TTL"');
 });

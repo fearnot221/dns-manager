@@ -116,7 +116,7 @@ function ZoneApplicationSettings() {
 
   return <section className="card table-card">
     <ActionFeedback feedback={feedback} />
-    <header className="workflow-panel-head"><div><h2>開放申請的網域</h2><p>暫停申請不影響既有 DNS 與已送出的案件。</p></div></header>
+    <header className="workflow-panel-head"><div><h2>開放申請的網域</h2></div></header>
     <div className="table-tools">
       <div className="filter-input"><Search size={15} aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋網域" aria-label="搜尋申請網域" /></div>
       <Select className="zone-access-filter" aria-label="申請開放狀態" value={status} onChange={setStatus} options={[{ value: "all", label: "全部申請狀態" }, { value: "open", label: "開放申請" }, { value: "closed", label: "暫停申請" }]} />
@@ -131,7 +131,7 @@ function ZoneApplicationSettings() {
         return <tr key={zone.id}><td><strong>{zone.name.replace(/\.$/, "")}</strong></td><td>{category?.label ?? "一般網域"}</td><td><button type="button" className="zone-access-switch" role="switch" aria-checked={access.enabled} aria-label={`${zone.name} 開放申請`} disabled={!!pending||zone.canManageApplications===false} title={zone.canManageApplications===false?"需要完整網域管理權限才能變更申請設定":undefined} onClick={() => access.enabled ? setClosing(zone) : void save(zone, true)}><span className="zone-switch-track" aria-hidden="true"><span /></span><span>{pending === zone.id ? "儲存中…" : access.enabled ? "開放申請" : "暫停申請"}</span></button></td></tr>;
       })}
     </tbody></table></ScrollRegion>}
-    {!resource.loading && !resource.error && !rows.length && <EmptyState title={zones.length ? "沒有符合條件的網域" : "目前沒有可管理的網域"} description={zones.length ? "請調整搜尋或申請狀態。" : "取得可管理的網域後，即可在此設定是否開放申請。"} />}
+    {!resource.loading && !resource.error && !rows.length && <EmptyState title={zones.length ? "沒有符合條件的網域" : "目前沒有可管理的網域"} />}
     {closing && <Dialog title="暫停此網域的申請？" description={`${closing.name} 將從申請表移除，既有 DNS 與待審核申請不受影響。`} pending={!!pending} onClose={() => { setClosing(null); setFeedback(null); setConflict(false); }}>
       <div className="modal-foot"><button className="button" type="button" disabled={!!pending} onClick={() => { setClosing(null); setFeedback(null); setConflict(false); }}>取消</button>{conflict ? <button type="button" className="button primary" onClick={refresh}>重新載入最新設定</button> : <button className="button primary" type="button" disabled={!!pending} onClick={() => void save(closing, false)}>{pending ? "儲存中…" : "暫停申請"}</button>}</div>
     </Dialog>}

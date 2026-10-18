@@ -154,7 +154,7 @@ export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREA
     <div className="modal-body">
       <fieldset className="application-section" disabled={pending}>
         <legend>申請人資料</legend>
-        <p className="application-help">本次申請歸屬「{selectedUnit.name}」。核准的 DNS 與申請紀錄會供單位成員查看。</p>
+        <p className="application-help">本次申請歸屬「{selectedUnit.name}」。</p>
         <div className="applicant-grid">
           <ContactPicker />
           <label>申請人姓名<input name="applicantName" autoComplete="name" required maxLength={100} placeholder="請填寫姓名" /></label>
@@ -187,7 +187,7 @@ export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREA
         <button ref={addButton} className="button add-record-button" type="button" onClick={addRecord} disabled={pending}><Plus size={18} />新增下一筆 DNS 紀錄</button>
         {removed && <div className="removal-notice" role="status"><span>已移除 {removed.record.name || "未命名紀錄"}</span><button type="button" disabled={pending} onClick={undoRemove}>復原</button></div>}
       </section>
-      <p className="application-review-note">{claiming ? "請填寫既有 DNS 的名稱、類型及解析內容。核准後歸屬本單位並記錄清查，解析內容維持不變；已有單位歸屬的紀錄須請管理員確認後處理。" : "送出後由管理員逐筆審核，核准前不會建立 DNS 紀錄。"}</p>
+      <p className="application-review-note">{claiming ? "核准後歸屬本單位，解析內容維持不變；已有單位歸屬的紀錄須由管理員處理。" : "核准前不會建立 DNS 紀錄。"}</p>
       {error && errorRecordId === null && <div className="form-error" role="alert"><AlertTriangle size={17} /><p ref={errorTarget} tabIndex={-1}>{error}。填寫內容已保留。</p></div>}
     </div>
     <div className="modal-foot"><span className="application-count" aria-live="polite">共 {records.length} 筆待送出</span><button className="button" type="button" data-leave-workspace disabled={pending} onClick={() => router.push("/requests")}>返回申請紀錄</button><button type="submit" className="button primary" disabled={pending || loading || Boolean(zoneError) || !zones.length || (!selectedUnit || unitResource.loading || Boolean(unitResource.error) || policyResource.loading || Boolean(policyResource.error))}>{pending && <Loader2 className="spin" size={16} />}{pending ? "送出中…" : "送出 " + records.length + " 筆申請"}</button></div>
