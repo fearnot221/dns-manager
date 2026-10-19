@@ -1,5 +1,4 @@
 import { auditMutation } from "@/lib/audit/mutation";
-import { applicationZoneNames } from "@/lib/requests/zone-access";
 import { powerdns } from "@/lib/powerdns/client";
 import { requestListQuery,requestPageSize,encodeRequestCursor } from "@/lib/requests/list-query";
 import { filterRequests,scopeRequests } from "@/components/requests/model";
@@ -50,7 +49,7 @@ async function POSTHandler(request: Request) {
     const preview=prepareApplication(body,parsed.data!.records.map(r=>r.zoneName));
     await assertApplicationPolicy(actor,preview.records.map(r=>r.recordType),preview.unitId);
     const zones = await powerdns.listZones();
-    const input = prepareApplication(body, await applicationZoneNames(zones.map((zone) => zone.name)));
+    const input = prepareApplication(body, zones.map((zone) => zone.name));
     const saved = await saveApplication(actor, input, request);
     return Response.json(saved, { status: 201 });
   } catch (error) {

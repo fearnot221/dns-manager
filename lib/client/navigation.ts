@@ -18,10 +18,8 @@ export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAd
   const review: NavItem[] = admin ? [{ href: "/requests", label: "申請審核", icon: "review" }] : [];
   if (!admin) applications.push({ href: "/requests", label: "申請紀錄", icon: "requests" });
   const settings: NavItem[] = [];
-  if (admin) settings.push(
-    { href: "/admin/application-policy", label: "申請規則", icon: "settings" },
-    { href: "/admin/deletion-protection", label: "刪除保護", icon: "protection" },
-  );
+  if (systemAdmin) settings.push({ href: "/admin/application-policy", label: "申請規則", icon: "settings" });
+  if (admin) settings.push({ href: "/admin/deletion-protection", label: "刪除保護", icon: "protection" });
   if (systemAdmin) settings.push(
     { href: "/admin/mail", label: "郵件服務", icon: "mail" },
     { href: "/admin/inspection-events", label: "清查活動", icon: "events" },

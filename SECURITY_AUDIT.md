@@ -105,9 +105,8 @@ GitHub → [TB9 signed body / event classification / dedupe]
 | /api/zones/[zone]/records | GET/POST/PATCH/DELETE | Yes | Z；delete type/apex 再檢查 | zone/name/type/ttl/content(s)/hash/password | zone RRset 與 ownership PII、DNS 寫入 | app/api/zones/[zone]/records/route.ts → context/mutate |
 | /api/zones/[zone]/permissions | GET/POST | Yes | O | zone；userId/userEmail/role/expiry/resourcePattern | 讀取/委派 zone grant | app/api/zones/[zone]/permissions/route.ts → permission upsert |
 | /api/zones/[zone]/permissions/[id] | DELETE | Yes | O | zone、permission id | 撤銷已綁 zone permission | app/api/zones/[zone]/permissions/[id]/route.ts → delete |
-| /api/zones/[zone]/applications | PATCH | Yes | Z | zone；enabled/expectedUpdatedAt | 網域申請開關 | app/api/zones/[zone]/applications/route.ts → setZoneApplicationAccess |
 | /api/dns-requests | GET/POST | Yes | GET self/unit/Z/G；POST Ue/Ua | unitId/contact/records；cookie | PII/申請列表、建立待審項 | app/api/dns-requests/route.ts → prepareApplication/saveApplication |
-| /api/dns-requests/zones | GET | Yes | A | cookie | 可申請 zone 名稱清單 | app/api/dns-requests/zones/route.ts → applicationZoneNames |
+| /api/dns-requests/zones | GET | Yes | A | cookie | 可申請 zone 名稱清單（全部 zone） | app/api/dns-requests/zones/route.ts |
 | /api/dns-requests/[id] | PATCH | Yes | unit G；legacy Z | id/decision/reviewNote/deletionPassword | 核准/拒絕、發布 DNS/metadata | app/api/dns-requests/[id]/route.ts → reviewUnitRequest/legacy branch |
 | /api/units | GET/POST | Yes | GET member/G；POST G | create/name/managerStudentId | unit 列表/建立/管理人指派 | app/api/units/route.ts → listUnits/createUnit |
 | /api/units/[id] | GET/PATCH | Yes | GET member/G；manage Ua/G；rename/delete/assign G | id/view；rename/delete/assign-manager/allowlist/member discriminated body | 成員學號/角色、單位/名單變更 | app/api/units/[id]/route.ts → unitDetail/manageUnit/manageAllowlist/editUnit |
@@ -116,7 +115,7 @@ GitHub → [TB9 signed body / event classification / dedupe]
 | /api/inventory | GET/PUT | Yes | Z | record tuple/id/mode/contact/note/version | zone 範圍 PII/清查 metadata | app/api/inventory/route.ts → listInventory/saveInventory |
 | /api/inventory/assignment | PUT | Yes | G | tuple/id/unitId/version | 轉移一筆 live DNS 的 unit ownership | app/api/inventory/assignment/route.ts → assignRecordUnit |
 | /api/inventory/inspections/[id] | DELETE | Yes | O | inspection id/recordId/version | 刪除清查歷史 | app/api/inventory/inspections/[id]/route.ts → deleteInspection |
-| /api/application-policy | GET/PUT | Yes | GET A；PUT G | allowedTypes/UNIT_ONLY/version | 全站申請規則 | app/api/application-policy/route.ts → saveApplicationPolicy |
+| /api/application-policy | GET/PUT | Yes | GET A；PUT G | adminOnlyTypes/UNIT_ONLY/version | 全站申請規則 | app/api/application-policy/route.ts → saveApplicationPolicy |
 | /api/admin/deletion-protection | GET/PUT | Yes | GET zone manager/G；PUT O | password/confirmation/version | 保護密碼設定/hash | app/api/admin/deletion-protection/route.ts → saveDeletionPassword |
 | /api/admin/dns-export | POST | Yes | G | cookie/Origin/signal | 匯出全 DNS/contact/inspection CSV | app/api/admin/dns-export/route.ts → describeRecords/csvRow |
 | /api/audit | GET | Yes | G | q/action/status/page | system audit/PII | app/api/audit/route.ts → Prisma where/redactAudit |
@@ -248,7 +247,6 @@ requireActor先auth()、provider allowlist、server idle，再DB User active狀�
 | /api/zones/[zone]/records GET/POST/PATCH/DELETE | 401 | 404除非zone ADMIN | scope外應拒絕；SEC-01 | G允許；delete guard | VIEWER/EDITOR也不能過context；apex SOA/NS限SUPER_ADMIN |
 | /api/zones/[zone]/permissions GET/POST | 401 | 404 | 404 | O only | 不能G自行delegation |
 | /api/zones/[zone]/permissions/[id] DELETE | 401 | 404 | 404 | O且id+zone匹配 | permission BOLA防護 |
-| /api/zones/[zone]/applications PATCH | 401 | 404除非Z | 其他zone404 | G允許 | zone setting版本控制 |
 | /api/dns-requests GET | 401 | 本人及unit | 不同unit資料不可見；Z另有zone scope | G全部 | membership+zone policy，不是單純self |
 | /api/dns-requests POST | 401 | 有效Ue/Ua | 其他unit403 | G也需實際membership | 申請不直接DNS寫入 |
 | /api/dns-requests/zones GET | 401 | 開放zone名 | 同公開給有效使用者 | 同左 | 不回rrsets/keys |

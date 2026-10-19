@@ -66,8 +66,17 @@
 .application-record { min-width: 0; display: grid; gap: var(--space-4); margin: 0; padding: var(--space-4) var(--space-5) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface-soft); scroll-margin-top: 76px; }
 .application-record.has-error { border-color: var(--red); }
 .application-record-head h3 { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-body); }
-.dns-fields { display: grid; grid-template-columns: 1.2fr 1fr .65fr; gap: var(--space-4); }
+.dns-fields { display: grid; grid-template-columns: .65fr 1.2fr 1fr; gap: var(--space-4); }
 .dns-fields .content-field { grid-column: span 2; }
+.dns-fields.no-ttl .content-field { grid-column: 1/-1; }
+.content-parts { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 6px; }
+.content-parts legend { float: left; width: 100%; margin-bottom: 6px; font-size: var(--text-body); font-weight: 500; }
+.content-parts > small { font-size: var(--text-small); color: var(--muted); }
+.content-parts-grid { display: grid; gap: var(--space-3); }
+.content-parts-grid label { font-size: var(--text-caption); color: var(--muted); }
+.parts-MX .content-parts-grid { grid-template-columns: 6rem minmax(0, 1fr); }
+.parts-SRV .content-parts-grid { grid-template-columns: repeat(3, 5.5rem) minmax(0, 1fr); }
+.parts-CAA .content-parts-grid { grid-template-columns: 5.5rem 9.5rem minmax(0, 1fr); }
 .dns-fields .purpose-field { grid-column: 1/-1; }
 .dns-application input, .dns-application select { scroll-margin-block: 90px 130px; }
 .dns-application .purpose-field textarea { min-height: 72px; }
@@ -101,12 +110,16 @@
   .request-detail dl { grid-template-columns: 1fr; }
   .request-review-actions { padding-inline: var(--space-3); }
   .dns-fields { grid-template-columns: 1fr 1fr; }
-  .dns-fields > label:first-child, .dns-fields .content-field, .dns-fields .purpose-field { grid-column: 1/-1; }
+  .dns-fields > label:nth-child(3), .dns-fields .content-field, .dns-fields .purpose-field { grid-column: 1/-1; }
+  .parts-SRV .content-parts-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .parts-SRV .content-parts-grid > label:last-child { grid-column: 1/-1; }
 }
 @media (max-width: 480px) {
   .request-contact-details > div, .request-detail dl > div { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
 }
 @media (max-width: 420px) {
   .dns-fields, .applicant-grid { grid-template-columns: minmax(0, 1fr); }
-  .dns-fields .content-field { grid-column: auto; }
+  .dns-fields .content-field, .dns-fields > label:nth-child(3) { grid-column: auto; }
+  .parts-CAA .content-parts-grid { grid-template-columns: 5rem minmax(0, 1fr); }
+  .parts-CAA .content-parts-grid > label:last-child { grid-column: 1/-1; }
 }

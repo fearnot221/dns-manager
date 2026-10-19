@@ -720,7 +720,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
   });
   it("does not accept arbitrary unit ids or legacy personal policy settings", async () => {
     await db.systemSetting.create({ data: { key: "dns-application-policy", value: { allowedTypes: ["A"], ownership: "ANY" } } });
-    expect((await readApplicationPolicy()).ownership).toBe("UNIT_ONLY");
+    expect(await readApplicationPolicy()).toMatchObject({ ownership: "UNIT_ONLY", adminOnlyTypes: ["AAAA", "CNAME", "MX", "TXT", "SRV", "CAA", "PTR"] });
     for (const actor of [outsider, admin]) await expect(assertApplicationPolicy(actor, ["A"], unitId)).rejects.toMatchObject({ status: 403 });
     await expect(assertApplicationPolicy(editor, ["A"])).rejects.toMatchObject({ status: 403 });
   });
@@ -732,14 +732,14 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect((await unitDetail(creator, unitId)).allowlist).toHaveLength(3);
   });
   it("enforces type and membership rules in application services and detects stale policy edits", async () => {
-    const saved = await saveApplicationPolicy({ allowedTypes: ["A"], ownership: "UNIT_ONLY" }, null);
+    const saved = await saveApplicationPolicy({ adminOnlyTypes: ["AAAA"], ownership: "UNIT_ONLY" }, null);
     await expect(assertApplicationPolicy(outsider, ["A"])).rejects.toMatchObject({ status: 403 });
     await expect(assertApplicationPolicy(editor, ["AAAA"], unitId)).rejects.toMatchObject({ status: 403 });
     await expect(assertApplicationPolicy(editor, ["A"], unitId)).resolves.toBeUndefined();
-    await expect(saveApplicationPolicy({ allowedTypes: [], ownership: "UNIT_ONLY" }, null)).rejects.toMatchObject({ status: 409 });
+    await expect(saveApplicationPolicy({ adminOnlyTypes: [], ownership: "UNIT_ONLY" }, null)).rejects.toMatchObject({ status: 409 });
     expect((await readApplicationPolicy()).updatedAt).toBe(saved.after.updatedAt);
     const source = await sourceRecord();
-    await saveApplicationPolicy({ allowedTypes: [], ownership: "UNIT_ONLY" }, saved.after.updatedAt);
+    await saveApplicationPolicy({ adminOnlyTypes: ["A", "AAAA", "CNAME", "MX", "TXT", "SRV", "CAA", "PTR"], ownership: "UNIT_ONLY" }, saved.after.updatedAt);
     await expect(requestUnitChange(editor, unitId, changeInput(source))).rejects.toMatchObject({ status: 403 });
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
   });

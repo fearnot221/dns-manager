@@ -7,7 +7,7 @@ import { logAuditEvent } from "@/lib/audit/service";
 import { readApplicationPolicy, saveApplicationPolicy } from "@/lib/requests/policy";
 import { applicationPolicySchema } from "@/lib/requests/policy-model";
 import { z } from "zod";
-export async function GET() { try { await requireActor(); return Response.json({ policy: await readApplicationPolicy() }, { headers: { "Cache-Control": "private, no-store" } }); } catch (error) { return apiError(error); } }
+export async function GET() { try { const actor = await requireActor(); return Response.json({ policy: await readApplicationPolicy(), admin: isGlobalAdmin(actor) }, { headers: { "Cache-Control": "private, no-store" } }); } catch (error) { return apiError(error); } }
 export const PUT = auditMutation(async (request: Request) => {
   try {
     assertSameOrigin(request); const actor = await requireActor();

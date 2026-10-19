@@ -1,4 +1,5 @@
 import { dnsApplicationSchema } from "@/lib/validation/api";
+import { zoneAcceptsType } from "./policy-model";
 import { normalizeDnsName, normalizeRecordContent, normalizeZoneName, validateTtl } from "@/lib/dns/names";
 
 export class ApplicationInputError extends Error {
@@ -30,6 +31,7 @@ export function prepareApplication(input: unknown, availableZones: readonly stri
     try {
       const zoneName = normalizeZoneName(record.zoneName);
       if (!zones.has(zoneName)) throw new ApplicationInputError("此 Zone 已不存在或無法申請，請重新載入網域清單。");
+      if (!zoneAcceptsType(zoneName, record.type)) throw new ApplicationInputError(record.type === "PTR" ? "PTR 只能申請於反解網域。" : "反解網域只能申請 PTR。");
       const entry = { zoneName, recordName: normalizeDnsName(record.name, zoneName), recordType: record.type, content: normalizeRecordContent(record.type, record.content), ttl: validateTtl(record.ttl), purpose: record.purpose, notes: record.notes || null };
       const key = requestRecordKey(entry);
       if (seen.has(key)) throw new ApplicationInputError("與本次申請中的其他紀錄重複，請移除重複項目。", 409);

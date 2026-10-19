@@ -10,6 +10,12 @@ const zones = ["example.com.", "student.example.com."];
 const actor = (): Actor => ({ id: crypto.randomUUID(), email: "user@example.com", globalRole: "USER", zoneRoles: {} });
 
 describe("multi-record DNS applications", () => {
+  it("keeps PTR in reverse zones and other types in forward zones", () => {
+    const reverse = ["example.com.", "2.0.192.in-addr.arpa.", "8.b.d.0.1.0.0.2.ip6.arpa."];
+    expect(prepareApplication({ ...contact, records: [{ ...record, zoneName: "2.0.192.in-addr.arpa", name: "10", type: "PTR", content: "host.example.com" }] }, reverse).records[0].recordName).toBe("10.2.0.192.in-addr.arpa.");
+    expect(() => prepareApplication({ ...contact, records: [{ ...record, type: "PTR", content: "host.example.com" }] }, reverse)).toThrow("PTR 只能申請於反解網域");
+    expect(() => prepareApplication({ ...contact, records: [{ ...record, zoneName: "8.b.d.0.1.0.0.2.ip6.arpa" }] }, reverse)).toThrow("反解網域只能申請 PTR");
+  });
   it("validates contact email and keeps record purpose for inventory", () => {
     const input = prepareApplication({ ...contact, applicantEmail: " contact@example.com ", records: [{ ...record, purpose: " 實驗室網站 ", notes: " 補充說明 " }] }, zones);
     expect(input.applicantEmail).toBe("contact@example.com");
