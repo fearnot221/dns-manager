@@ -4,14 +4,14 @@ import { isNavActive, workspaceNavigation } from "@/lib/client/navigation";
 describe("workspace navigation", () => {
   const items = (admin: boolean, systemAdmin: boolean) => workspaceNavigation(admin, systemAdmin).flatMap((group) => group.items);
   it("keeps unit workflows flat without exposing management links", () => {
-    expect(items(false, false).map((item) => item.href)).toEqual(["/dns", "/requests/new", "/requests/claim", "/requests"]);
+    expect(items(false, false).map((item) => item.href)).toEqual(["/dns", "/requests/new", "/requests/claim", "/requests", "/guide"]);
     expect(items(false, false).find((item) => item.href === "/requests")?.label).toBe("申請紀錄");
   });
   it("only exposes unit management to unit or global administrators", () => {
     expect(workspaceNavigation(false, false, true)[0].items.find((item) => item.href === "/units")?.label).toBe("單位管理");
     expect(items(true, false).some((item) => item.href === "/units")).toBe(false);
     expect(items(true, true).find((item) => item.href === "/units")?.label).toBe("單位管理");
-    expect(workspaceNavigation(false, false).map((group) => group.id)).toEqual(["workflow", "applications"]);
+    expect(workspaceNavigation(false, false).map((group) => group.id)).toEqual(["workflow", "applications", "help"]);
   });
   it("separates zone management from global administration", () => {
     expect(items(true, false).map((item) => item.href)).toContain("/zones");
@@ -30,7 +30,7 @@ describe("workspace navigation", () => {
     expect(navigation.filter((item) => isNavActive("/zones-other", item))).toEqual([]);
   });
   it("separates applying from reviewing", () => {
-    expect(workspaceNavigation(true, false).map((group) => group.id)).toEqual(["workflow", "applications", "review", "settings"]);
+    expect(workspaceNavigation(true, false).map((group) => group.id)).toEqual(["workflow", "applications", "review", "settings", "help"]);
     expect(workspaceNavigation(true, false).find((group) => group.id === "review")?.items.map((item) => item.label)).toEqual(["申請審核"]);
     expect(workspaceNavigation(false, false).find((group) => group.id === "applications")?.items.map((item) => item.href)).toEqual(["/requests/new", "/requests/claim", "/requests"]);
   });
@@ -48,6 +48,13 @@ describe("workspace navigation", () => {
       expect(items(admin, systemAdmin).map((item) => item.href)).not.toContain("/inspections");
     }
   });
+});
+
+it("links the usage guide last for every role", () => {
+  for (const [admin, systemAdmin, unitAdmin] of [[false, false, false], [false, false, true], [true, false, false], [true, true, true]]) {
+    const groups = workspaceNavigation(admin, systemAdmin, unitAdmin);
+    expect(groups.at(-1)?.items).toEqual([{ href: "/guide", label: "使用說明", icon: "guide" }]);
+  }
 });
 
 it("exposes user DNS workflows to system administrators", () => {
