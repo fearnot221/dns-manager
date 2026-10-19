@@ -137,7 +137,7 @@ describe.skipIf(!url)("mail settings and delivery in disposable PostgreSQL", () 
   it("uses TLS, records SMTP acceptance and does not send a successful job twice", async () => {
     await enable(); await enqueue();
     expect(await processOneDelivery()).toBe(true);
-    expect(nodemailer.createTransport).toHaveBeenCalledWith(expect.objectContaining({ host: "smtp-relay.gmail.com", secure: false, requireTLS: true, tls: { minVersion: "TLSv1.2", rejectUnauthorized: true } }));
+    expect(nodemailer.createTransport).toHaveBeenCalledWith(expect.objectContaining({ host: "smtp-relay.gmail.com", name: "example.com", secure: false, requireTLS: true, tls: { minVersion: "TLSv1.2", rejectUnauthorized: true } }));
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "team@example.com", text: expect.stringContaining("https://dns.example.com/requests") }));
     expect((await db.mailDelivery.findFirstOrThrow()).status).toBe("SENT");
     expect(await processOneDelivery()).toBe(false); expect(send).toHaveBeenCalledTimes(1);
@@ -176,6 +176,26 @@ describe.skipIf(!url)("mail settings and delivery in disposable PostgreSQL", () 
       expect(row.status).toBe(attempt === 5 ? "FAILED" : "PENDING");
       expect(row.availableAt.getTime()).toBeGreaterThan(Date.now());
     }
+    expect(await processOneDelivery()).toBe(false);
+  });
+  it("backs off after Google's EHLO rejection and delivers the same queued message on recovery", async () => {
+    const saved = await enable();
+    await POST(request({ action: "test", recipient: "test@example.com", expectedRevision: saved.revision }, "POST"));
+    send.mockRejectedValueOnce({ code: "ECONNECTION", command: "EHLO", responseCode: 421, response: "private SMTP response" });
+    await processOneDelivery();
+    const deferred = await db.mailDelivery.findFirstOrThrow();
+    expect(deferred).toMatchObject({ status: "PENDING", attempts: 1, sentAt: null });
+    expect(deferred.lastError).toContain("暫時拒絕寄送（421）");
+    expect(deferred.lastError).not.toContain("private SMTP response");
+    expect(deferred.availableAt.getTime()).toBeGreaterThan(Date.now());
+    expect(await processOneDelivery()).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+    await db.mailDelivery.update({ where: { id: deferred.id }, data: { availableAt: new Date(0) } });
+    await processOneDelivery();
+    expect(await db.mailDelivery.findUniqueOrThrow({ where: { id: deferred.id } })).toMatchObject({ status: "SENT", attempts: 2, lastError: null, sentAt: expect.any(Date) });
+    expect(await db.mailDelivery.count()).toBe(1);
+    expect(send.mock.calls[1][0].messageId).toBe(send.mock.calls[0][0].messageId);
+    expect(nodemailer.createTransport).toHaveBeenLastCalledWith(expect.objectContaining({ name: "example.com", requireTLS: true }));
     expect(await processOneDelivery()).toBe(false);
   });
   it("queues tests only to an explicit recipient and permits retries only for failed deliveries", async () => {

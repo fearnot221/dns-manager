@@ -7,7 +7,8 @@ import { readMailSettings } from "./settings";
 
 const maxAttempts = 5;
 export function safeMailError(error: unknown) {
-  const code = (error as { code?: string })?.code;
+  const { code, responseCode } = (error ?? {}) as { code?: string; responseCode?: number };
+  if (typeof responseCode === "number" && responseCode >= 400 && responseCode < 500) return `Google SMTP 暫時拒絕寄送（${responseCode}），請稍後查看重試結果；持續失敗時請檢查來源 IP 與 SMTP 寄信身分設定。`;
   if (code === "EAUTH") return "Google 驗證失敗，請檢查來源 IP 白名單與寄件網域設定。";
   if (["ECONNECTION", "ETIMEDOUT", "ESOCKET", "EDNS"].includes(code || "")) return "無法連線至 Google SMTP，請檢查網路與 TLS 設定。";
   return "寄送未完成，請檢查 Google SMTP 驗證設定、寄件地址及收件地址。";
@@ -38,6 +39,8 @@ export async function processOneDelivery() {
   try {
     transport = nodemailer.createTransport({
       host: settings.config.host, port: settings.config.port, secure: settings.config.port === 465,
+      // Docker hostnames fall back to [127.0.0.1]; Google recommends our own domain for EHLO.
+      name: delivery.fromEmail.split("@")[1],
       requireTLS: true, tls: { minVersion: "TLSv1.2", rejectUnauthorized: true },
       connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 30000,
       disableFileAccess: true, disableUrlAccess: true,

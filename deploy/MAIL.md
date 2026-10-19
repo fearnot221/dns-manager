@@ -13,6 +13,16 @@
 
 Google 官方說明：[SMTP relay 設定](https://support.google.com/a/answer/2956491)。
 
+### Google 在 EHLO 階段回覆 421
+
+worker 使用每封待寄郵件的寄件網域作為 HELO／EHLO 身分，避免 Docker 的短主機名稱讓 Nodemailer 使用通用的 `[127.0.0.1]`。Google 建議使用自己的網域或伺服器名稱，以降低觸發防濫用限制的機會。
+
+2026-10-19 在正式 worker 以 `verify()` 檢查（未寄信）：預設身分被 Google 以 `421 4.7.0 ... (EHLO)` 拒絕；同容器、同 SMTP 主機／587 連接埠改用已設定的寄件網域後驗證通過。這是當次問題的可重現線索，不代表可以避免所有 Google 限流。
+
+SMTP 4xx 回覆會顯示「暫時拒絕寄送」與回覆碼，不再誤報為網路／TLS 錯誤；不顯示原始 SMTP 回應中的地址或其他資料。既有重試間隔為 1、2、4、8 分鐘，最多嘗試 5 次，最後失敗需由管理員確認後重試。不要連續新增測試信；若持續收到 421，請由 Workspace 管理員檢查來源公網 IP、relay 政策與 Google 端限制。SMTP 已接受仍須另確認收件匣，請勿關閉 TLS 憑證驗證來繞過問題。
+
+本機驗證（`codex/smtp-helo-identity`，基於 `f73f316` 加本次修正）：`npm run lint`、`UNIT_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55447/dns_units_test npx vitest run tests/mail.test.ts tests/mail.integration.test.ts`（29 項，隔離 PostgreSQL／UTC，與 VM 相同時區）、`npm run build`（含型別檢查）、`git diff --check` 通過。Build 前移走舊分支遺留的 `.next/dev/types` 快取。測試涵蓋寄信身分、421 退避與恢復、回應去敏、權限、租約與重試上限。未啟動 demo、未實際寄信、未重寄正式失敗紀錄、未 push／部署。
+
 ## 模板與通知
 
 模板為純文字，不執行 HTML、JavaScript 或任意模板運算；每個場景只接受自己的變數，主旨與內文可點選變數插入，並以範例資料即時預覽。
