@@ -1,4 +1,4 @@
-export type NavIcon = "apply" | "claim" | "requests" | "review" | "dns" | "units" | "zones" | "users" | "settings" | "protection" | "mail" | "events" | "activity";
+export type NavIcon = "apply" | "claim" | "requests" | "review" | "dns" | "units" | "zones" | "users" | "settings" | "protection" | "mail" | "events" | "activity" | "guide";
 export type NavItem = { href: string; label: string; icon: NavIcon; nested?: boolean };
 export type NavGroup = { id: string; label: string; items: NavItem[] };
 
@@ -28,11 +28,13 @@ export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAd
     { href: "/admin/users", label: "帳號管理", icon: "users" },
     { href: "/activity", label: "操作紀錄", icon: "activity" },
   );
+  const help: NavItem[] = [{ href: "/guide", label: "使用說明", icon: "guide" }];
   return [
     { id: "workflow", label: "日常作業", items },
     { id: "applications", label: "申請作業", items: applications },
     { id: "review", label: "審核作業", items: review },
     { id: "settings", label: "系統設定", items: settings },
+    { id: "help", label: "說明", items: help },
   ].filter((group) => group.items.length);
 }
 export function isNavActive(pathname: string, item: NavItem) {

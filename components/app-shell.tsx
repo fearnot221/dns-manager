@@ -1,7 +1,7 @@
 "use client";
 
 import { UnitWorkspaceProvider, useUnitWorkspace, type UnitWorkspace } from "@/components/units/unit-workspace";
-import { Building2, CalendarCheck, ClipboardCheck, FileClock, FileKey2, FilePlus2, Globe2, History, LogOut, Mail, Menu, Monitor, Moon, Network, PanelLeftClose, PanelLeftOpen, ScrollText, ShieldCheck, Sun, SunMoon, UserCog, X, ChevronDown } from "lucide-react";
+import { Building2, CalendarCheck, ClipboardCheck, FileClock, FileKey2, FilePlus2, Globe2, History, LogOut, Mail, Menu, Monitor, Moon, Network, PanelLeftClose, PanelLeftOpen, ScrollText, ShieldCheck, Sun, SunMoon, UserCog, X, ChevronDown, CircleHelp } from "lucide-react";
 import { Brand } from "@/components/brand";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -11,7 +11,7 @@ import { useTheme } from "next-themes";
 import { workspaceNavigation, isNavActive, navigationCookie, type NavIcon } from "@/lib/client/navigation";
 import { IdleSession } from "@/components/auth/idle-session";
 
-const navIcons: Record<NavIcon, typeof Globe2> = { dns: Network, apply: FilePlus2, claim: FileKey2, requests: FileClock, review: ClipboardCheck, units: Building2, zones: Globe2, users: UserCog, settings: ScrollText, protection: ShieldCheck, mail: Mail, events: CalendarCheck, activity: History };
+const navIcons: Record<NavIcon, typeof Globe2> = { dns: Network, apply: FilePlus2, claim: FileKey2, requests: FileClock, review: ClipboardCheck, units: Building2, zones: Globe2, users: UserCog, settings: ScrollText, protection: ShieldCheck, mail: Mail, events: CalendarCheck, activity: History, guide: CircleHelp };
 const legacyNavigationStorageKey = "dns-manager-navigation-collapsed";
 const themeCycle = { system: "light", light: "dark", dark: "system" } as const;
 const themeNames = { system: "跟隨系統", light: "淺色", dark: "深色" } as const;

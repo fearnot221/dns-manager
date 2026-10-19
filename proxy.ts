@@ -21,7 +21,7 @@ export async function proxy(request:NextRequest){
   if(["POST","PUT","PATCH","DELETE"].includes(request.method)){
     if(!isSameOrigin(request))return finish(Response.json({error:"Cross-origin request rejected"},{status:403}));
   }
-  const protectedPath=path.startsWith("/api/") || /^\/(contact|inspections|dashboard|dns|requests|units|zones|activity|admin|inventory)(?:\/|$)/.test(path);
+  const protectedPath=path.startsWith("/api/") || /^\/(contact|inspections|dashboard|dns|requests|units|zones|activity|admin|inventory|guide)(?:\/|$)/.test(path);
   if (!protectedPath) return finish(next());
   const token=await getToken({req:request,secret:process.env.AUTH_SECRET??process.env.NEXTAUTH_SECRET,secureCookie:applicationOrigin(request).startsWith("https:")});
   if(!token || !loginProviderAllowed(token.loginProvider)){
@@ -30,5 +30,5 @@ export async function proxy(request:NextRequest){
   }
   return finish(next());
 }
-// Match documents (including login, errors and /dns) and APIs; static assets stay public.
-export const config={matcher:["/((?!_next/static|_next/image|favicon.ico|ncu-emblem.png).*)"]};
+// Match documents (including login, errors and /dns) and APIs; static assets (and tutorial media, so it keeps normal caching) stay public.
+export const config={matcher:["/((?!_next/static|_next/image|favicon.ico|ncu-emblem.png|tutorials/).*)"]};

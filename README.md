@@ -49,14 +49,16 @@
 
 ## 使用教學
 
+依角色整理的操作步驟見 **[使用說明](docs/user-guide.md)**。登入網站後，側欄「說明 › 使用說明」可直接觀看教學影片並依章節跳轉；1080p 成片可從 [GitHub Release](https://github.com/fearnot221/dns-manager/releases/tag/tutorial-videos-v2) 下載。
+
 [`tutorial-videos/`](tutorial-videos/) 收錄兩部繁體中文旁白的操作教學，畫面為本機隔離環境（示範帳號、模擬 PowerDNS）的真實錄影：
 
 | 影片 | 對象 | 內容 |
 | --- | --- | --- |
-| 單位成員與單位管理員篇（約 4.5 分鐘） | 單位成員、單位管理員 | 登入導覽、查看與清查單位 DNS、申請新增／變更／刪除、追蹤申請、以學號管理成員 |
-| 系統管理員篇（約 5.5 分鐘） | 系統管理員 | 審核申請、DNS 管理與歸屬、申請規則、單位管理、刪除保護與清查活動、帳號管理、操作紀錄 |
+| 單位成員與單位管理員篇（約 4.7 分鐘） | 單位成員、單位管理員 | 登入導覽、查看與清查單位 DNS、申請新增、DNS 歸屬申請、申請變更／刪除、追蹤申請、以學號管理成員 |
+| 系統管理員篇（約 6.3 分鐘） | 系統管理員 | 審核申請（含歸屬申請）、DNS 管理與歸屬、申請規則、單位管理、刪除保護與清查活動、郵件服務、帳號管理、操作紀錄 |
 
-成片 MP4 檔案超過 GitHub 單檔上限，不進 Git，另行發布；repo 保留可重新編修的 [HyperFrames](https://hyperframes.heygen.com) 專案（分鏡、版面草圖、合成與旁白音軌）及 `.srt` 字幕。錄影素材與成片需在本機另外產生後再渲染。
+1080p 成片超過 GitHub 單檔上限，不進 Git，改以 Release 發布；網站使用的 720p 版位於 `public/tutorials/`。repo 保留可重新編修的 [HyperFrames](https://hyperframes.heygen.com) 專案（分鏡、版面草圖、合成與旁白音軌）及 `.srt` 字幕。錄影素材與成片需在本機另外產生後再渲染。
 
 ## 遠端部署
 
@@ -195,6 +197,7 @@ UNIT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test
 
 ## 文件
 
+- [使用說明](docs/user-guide.md)：依角色整理的操作步驟與教學影片。
 - [介面與權限](docs/access-matrix.md)：角色、申請、清查、DNS 歷程及已停用功能。
 - [介面流程](docs/unit-ui-review.md)：導覽、表單、草稿與操作行為。
 - [整合狀態](docs/pending-integrations.md)：外部服務能力與驗收範圍。
