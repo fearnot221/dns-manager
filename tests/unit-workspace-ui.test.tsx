@@ -34,13 +34,13 @@ it("exposes unit management only for the active unit manager or system admin", (
   expect(shell([unit, { ...unit, id: "two", role: "ADMIN" }])).not.toContain("單位管理</span>");
 });
 it("does not show an application form before unit eligibility is established", () => {
-  vi.mocked(useResource).mockReturnValue({ data: { units: [], policy: { allowedTypes: [] } }, loading: false, error: "", reload: vi.fn() } as never);
+  vi.mocked(useResource).mockReturnValue({ data: { units: [], policy: { adminOnlyTypes: [] }, admin: false }, loading: false, error: "", reload: vi.fn() } as never);
   const html = inWorkspace(createElement(DnsApplicationForm), []);
   expect(html).toContain("尚未加入單位"); expect(html).not.toContain("送出 1 筆申請");
   expect(html).not.toContain('href="/units"');
 });
 it("fixes the application to the selected unit instead of silently using another eligible unit", () => {
-  vi.mocked(useResource).mockImplementation((url) => ({ data: url === "/api/units" ? { units: [{ ...unit, canApply: true }, { ...unit, id: "two", name: "另一單位", canApply: true }] } : url === "/api/application-policy" ? { policy: { allowedTypes: ["A"], ownership: "UNIT_ONLY" } } : { zones: [{ name: "example.com." }] }, loading: false, error: "", reload: vi.fn() }) as never);
+  vi.mocked(useResource).mockImplementation((url) => ({ data: url === "/api/units" ? { units: [{ ...unit, canApply: true }, { ...unit, id: "two", name: "另一單位", canApply: true }] } : url === "/api/application-policy" ? { policy: { adminOnlyTypes: [], ownership: "UNIT_ONLY" }, admin: false } : { zones: [{ name: "example.com." }] }, loading: false, error: "", reload: vi.fn() }) as never);
   const html = inWorkspace(createElement(DnsApplicationForm));
   const emailInput = html.match(/<input[^>]*name="applicantEmail"[^>]*>/)?.[0];
   expect(emailInput).toContain('type="email"');
@@ -70,7 +70,7 @@ it("lets system administrators switch actual memberships and exposes their appli
   expect(html).toContain('href="/requests/claim"');
 });
 it("explains ownership-only approval and hides TTL editing on claim forms", () => {
-  vi.mocked(useResource).mockImplementation((url) => ({ data: url === "/api/units" ? { units: [{ ...unit, canApply: true }] } : url === "/api/application-policy" ? { policy: { allowedTypes: ["A"], ownership: "UNIT_ONLY" } } : { zones: [{ name: "example.com." }] }, loading: false, error: "", reload: vi.fn() }) as never);
+  vi.mocked(useResource).mockImplementation((url) => ({ data: url === "/api/units" ? { units: [{ ...unit, canApply: true }] } : url === "/api/application-policy" ? { policy: { adminOnlyTypes: [], ownership: "UNIT_ONLY" }, admin: false } : { zones: [{ name: "example.com." }] }, loading: false, error: "", reload: vi.fn() }) as never);
   const html = inWorkspace(createElement(DnsApplicationForm, { operation: "CLAIM" }));
   expect(html).toContain("DNS 歸屬申請");
   expect(html).toContain("核准後歸屬本單位，解析內容維持不變");

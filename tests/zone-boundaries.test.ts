@@ -3,7 +3,6 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class extends Error { status = 401; } }));
 vi.mock("@/lib/audit/service", () => ({ logAuditEvent: vi.fn() }));
 vi.mock("@/lib/powerdns/client", () => ({ powerdns: { listZones: vi.fn(), getZone: vi.fn() } }));
-vi.mock("@/lib/requests/zone-access", () => ({ zoneApplicationAccess: async () => ({}), closedAccess: { enabled: false } }));
 import { requireActor } from "@/lib/auth/session";
 import { powerdns } from "@/lib/powerdns/client";
 import { GET as list } from "@/app/api/zones/route";

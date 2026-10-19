@@ -10,11 +10,11 @@ const user = { id: "user-one", email: "one@example.com", globalRole: "USER" as c
 const request = (path: string, method: string, body: unknown) => new Request(`http://localhost:3000/api/${path}`, { method, headers: { Origin: "http://localhost:3000", "Content-Type": "application/json" }, body: JSON.stringify(body) });
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(requireActor).mockResolvedValue(user); });
 it("restricts policy writes to system admins and accepts the UI payload", async () => {
- const body = { policy: { allowedTypes: ["A"], ownership: "UNIT_ONLY" }, expectedUpdatedAt: null };
+ const body = { policy: { adminOnlyTypes: ["PTR"], ownership: "UNIT_ONLY" }, expectedUpdatedAt: null };
  expect((await policyPut(request("application-policy", "PUT", body))).status).toBe(403);
  expect(saveApplicationPolicy).not.toHaveBeenCalled();
  vi.mocked(requireActor).mockResolvedValue({ ...user, globalRole: "ADMIN" });
- vi.mocked(saveApplicationPolicy).mockResolvedValue({ before: { allowedTypes: [], ownership: "UNIT_ONLY", updatedAt: null }, after: { allowedTypes: ["A"], ownership: "UNIT_ONLY", updatedAt: null } });
+ vi.mocked(saveApplicationPolicy).mockResolvedValue({ before: { adminOnlyTypes: [], ownership: "UNIT_ONLY", updatedAt: null }, after: { adminOnlyTypes: ["PTR"], ownership: "UNIT_ONLY", updatedAt: null } });
  expect((await policyPut(request("application-policy", "PUT", body))).status).toBe(200);
  expect(saveApplicationPolicy).toHaveBeenCalledWith(body.policy, null);
 });

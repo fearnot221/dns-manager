@@ -39,7 +39,7 @@
 | `/requests` | 申請紀錄／申請審核 |
 | `/units` | 單位管理 |
 | `/zones` | DNS 管理與清查 |
-| `/admin/application-policy` | 申請規則與網域開放設定 |
+| `/admin/application-policy` | 申請規則：設定僅系統管理員可申請的 DNS 類型 |
 | `/admin/deletion-protection` | DNS 刪除保護（最高管理員設定密碼） |
 | `/admin/inspection-events` | 清查活動 |
 | `/admin/users` | 帳號管理 |

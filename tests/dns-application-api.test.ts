@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/requests/policy",()=>({assertApplicationPolicy:vi.fn(async()=>undefined)}));
-vi.mock("@/lib/requests/zone-access", () => ({ applicationZoneNames: vi.fn() }));
-import { applicationZoneNames } from "@/lib/requests/zone-access";
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class AuthError extends Error {} }));
 vi.mock("@/lib/powerdns/client", () => ({ powerdns: { listZones: vi.fn() } }));
 vi.mock("@/lib/requests/save-application", () => ({ saveApplication: vi.fn() }));
@@ -20,16 +18,16 @@ const request = (input: unknown) => new Request("http://localhost:3000/api/dns-r
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(applicationZoneNames).mockImplementation(async (names) => names);
   vi.mocked(requireActor).mockResolvedValue({ id: "user", email: "user@example.com", globalRole: "USER", zoneRoles: {} });
   vi.mocked(powerdns.listZones).mockResolvedValue([{ id: "secret-id", name: "example.com.", kind: "Native", serial: 123, dnssec: true, rrsets: [{ name: "private.example.com.", type: "A", ttl: 300, records: [{ content: "10.0.0.1", disabled: false }] }] }]);
   vi.mocked(saveApplication).mockResolvedValue({ applicationId: "batch-id", count: 1 });
 });
 describe("application API boundaries", () => {
-  it("hides closed zones and rejects direct submissions without saving", async () => {
-    vi.mocked(applicationZoneNames).mockResolvedValue([]);
-    expect(await (await GET()).json()).toEqual({ zones: [] });
-    expect((await POST(request(body))).status).toBe(400);
+  it("offers every zone and rejects types that do not match the zone direction", async () => {
+    vi.mocked(powerdns.listZones).mockResolvedValue([{ name: "example.com." }, { name: "2.0.192.in-addr.arpa." }] as never);
+    expect(await (await GET()).json()).toEqual({ zones: [{ name: "2.0.192.in-addr.arpa." }, { name: "example.com." }] });
+    expect((await POST(request({ ...body, records: [{ ...body.records[0], type: "PTR", content: "host.example.com" }] }))).status).toBe(400);
+    expect((await POST(request({ ...body, records: [{ ...body.records[0], zoneName: "2.0.192.in-addr.arpa" }] }))).status).toBe(400);
     expect(saveApplication).not.toHaveBeenCalled();
   });
   it("offers zone names to signed-in users without exposing DNS contents or server metadata", async () => {
