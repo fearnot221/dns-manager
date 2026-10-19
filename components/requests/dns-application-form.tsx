@@ -17,18 +17,20 @@ import { Dialog } from "@/components/ui/dialog";
 import { type UnitRole } from "@/lib/units/policy";
 import { Select } from "@/components/ui/select";
 
+import { zoneCategory } from "@/lib/dns/zone-category";
 import { reverseExample, reverseNameIp, reverseZoneInfo } from "@/lib/dns/reverse";
 import { availableTypes, policyViolation, zoneAcceptsType, type ApplicationPolicy } from "@/lib/requests/policy-model";
 type DraftRecord = { id: number; zoneName: string; name: string; type: RecordType; content: string; ttl: string; purpose: string; notes: string };
 const blankRecord = (id: number, zoneName = ""): DraftRecord => ({ id, zoneName, name: "", type: "A", content: "", ttl: "300", purpose: "", notes: "" });
-const hints: Partial<Record<RecordType, string>> = { A: "192.0.2.10", AAAA: "2001:db8::1", CNAME: "target.example.com", TXT: "v=spf1 include:_spf.example.com ~all", PTR: "host.example.com" };
+// Examples use one of our own zones (`d`), never outside domains.
+const hints = (d: string): Partial<Record<RecordType, string>> => ({ A: "192.0.2.10", AAAA: "2001:db8::1", CNAME: `www.${d}`, TXT: "v=spf1 mx ~all", PTR: `host.${d}` });
 type ContentPart = { label: string; placeholder: string; numeric?: boolean; options?: string[] };
 // Multi-value types get one input per value; the content string stays the single source of truth.
-const contentParts: Partial<Record<RecordType, ContentPart[]>> = {
-  MX: [{ label: "優先序", placeholder: "10", numeric: true }, { label: "郵件伺服器", placeholder: "mail.example.com" }],
-  SRV: [{ label: "優先序", placeholder: "10", numeric: true }, { label: "權重", placeholder: "5", numeric: true }, { label: "連接埠", placeholder: "443", numeric: true }, { label: "目標主機", placeholder: "service.example.com" }],
-  CAA: [{ label: "旗標", placeholder: "0", numeric: true }, { label: "標籤", placeholder: "issue", options: ["issue", "issuewild", "iodef"] }, { label: "值", placeholder: "letsencrypt.org" }],
-};
+const contentParts = (d: string): Partial<Record<RecordType, ContentPart[]>> => ({
+  MX: [{ label: "優先序", placeholder: "10", numeric: true }, { label: "郵件伺服器", placeholder: `mail.${d}` }],
+  SRV: [{ label: "優先序", placeholder: "10", numeric: true }, { label: "權重", placeholder: "5", numeric: true }, { label: "連接埠", placeholder: "443", numeric: true }, { label: "目標主機", placeholder: `service.${d}` }],
+  CAA: [{ label: "旗標", placeholder: "0", numeric: true }, { label: "標籤", placeholder: "issue", options: ["issue", "issuewild", "iodef"] }, { label: "值", placeholder: "CA 的網域" }],
+});
 
 export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREATE" | "CLAIM" }) {
   const claiming = operation === "CLAIM";
@@ -37,6 +39,7 @@ export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREA
   const { data, loading, error: zoneError, reload } = useResource<{ zones: { name: string }[] }>("/api/dns-requests/zones");
   const zones = data?.zones ?? [];
   const zonesFor = (type: RecordType) => zones.filter((zone) => zoneAcceptsType(zone.name, type));
+  const exampleDomain = (record: DraftRecord) => (record.zoneName && zoneCategory(record.zoneName) === "forward" ? record.zoneName : zonesFor("A")[0]?.name ?? "你的網域").replace(/\.$/, "");
   const policyResource = useResource<{ policy: ApplicationPolicy; admin: boolean }>("/api/application-policy");
   const requestTypes: RecordType[] = policyResource.data ? availableTypes(policyResource.data.policy, policyResource.data.admin) : [];
   const unitResource = useResource<{ units: { id: string; name: string; role: UnitRole; canApply: boolean }[] }>("/api/units");
@@ -197,8 +200,8 @@ export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREA
             <label className="type-field">類型<Select aria-label="DNS 類型" value={record.type} onChange={(value) => changeType(record, value as RecordType)} options={[...(!requestTypes.includes(record.type) ? [{ value: record.type, label: `${record.type}（未開放，請改選）`, disabled: true }] : []), ...requestTypes.map((type) => ({ value: type, label: type }))]} /></label>
             <label>名稱<input value={record.name} onChange={(event) => update(record.id, { name: event.target.value })} placeholder={record.type === "PTR" ? reverseExample(record.zoneName)?.name ? `例如 ${reverseExample(record.zoneName)!.name}` : "先選反解網域" : "www 或 @"} required maxLength={253} autoCapitalize="none" spellCheck={false} aria-describedby={`fqdn-${record.id}`} ref={(node) => { if (node && focusId.current === record.id) { if (!record.zoneName) node.closest("fieldset")?.querySelector<HTMLElement>(".zone-field .custom-select-trigger")?.focus(); else node.focus(); focusId.current = null; } }} /><small id={`fqdn-${record.id}`} className="fqdn-preview">{fqdnPreview(record)}</small></label>
             <label className="zone-field">{record.type === "PTR" ? "反解網域" : "網域"}<Select aria-label="網域" value={record.zoneName} required disabled={loading || Boolean(zoneError) || !zones.length} onChange={(value) => update(record.id, { zoneName: value })} options={[{ value: "", label: zonesFor(record.type).length ? "選擇網域" : record.type === "PTR" ? "沒有可申請的反解網域" : "沒有可申請的正解網域", disabled: true }, ...(record.zoneName && !zonesFor(record.type).some((zone) => zone.name === record.zoneName) ? [{ value: record.zoneName, label: `${record.zoneName}（目前無法使用）`, disabled: true }] : []), ...zonesFor(record.type).map((zone) => ({ value: zone.name, label: zone.name.replace(/\.$/, "") }))]} /></label>
-            {record.type === "PTR" && <PtrGuide zoneName={record.zoneName} />}
-            <ContentField record={record} onChange={(content) => update(record.id, { content })} />
+            {record.type === "PTR" && <PtrGuide zoneName={record.zoneName} domain={exampleDomain(record)} />}
+            <ContentField record={record} domain={exampleDomain(record)} onChange={(content) => update(record.id, { content })} />
             {!claiming && <label>TTL<Select aria-label="TTL" value={record.ttl} onChange={(value) => update(record.id, { ttl: value })} options={[{ value: "60", label: "1 分鐘" }, { value: "300", label: "5 分鐘" }, { value: "600", label: "10 分鐘" }, { value: "1800", label: "30 分鐘" }, { value: "3600", label: "1 小時" }]} /></label>}
             <label className="purpose-field">用途<textarea rows={2} required value={record.purpose} onChange={(event) => update(record.id, { purpose: event.target.value })} placeholder="請說明此 DNS 的服務名稱與實際用途，供後續清查使用" maxLength={1000} /></label>
             <label className="purpose-field">備註（選填）<textarea rows={2} value={record.notes} onChange={(event) => update(record.id, { notes: event.target.value })} placeholder="其他需要補充的說明" maxLength={1000} /></label>
@@ -215,10 +218,10 @@ export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREA
   </form>{leaveTarget && <Dialog title="要離開尚未送出的申請嗎？" description="離開後，這次填寫的聯絡資料和 DNS 紀錄不會保留。" onClose={() => setLeaveTarget(null)}><div className="modal-foot"><button type="button" className="button" onClick={() => { dirty.current = false; setLeaveTarget(null); leaveTarget.click(); }}>離開並捨棄</button><button type="button" className="button primary" data-dialog-initial-focus onClick={() => setLeaveTarget(null)}>繼續填寫</button></div></Dialog>}</>;
 }
 
-function ContentField({ record, onChange }: { record: DraftRecord; onChange: (content: string) => void }) {
-  const parts = contentParts[record.type];
-  const help = <small id={`content-help-${record.id}`}>{contentHelp(record.type)}</small>;
-  if (!parts) return <label className="content-field">解析內容<input value={record.content} onChange={(event) => onChange(event.target.value)} placeholder={hints[record.type]} required maxLength={65535} autoCapitalize="none" spellCheck={false} aria-label="解析內容" aria-describedby={`content-help-${record.id}`} />{help}</label>;
+function ContentField({ record, domain, onChange }: { record: DraftRecord; domain: string; onChange: (content: string) => void }) {
+  const parts = contentParts(domain)[record.type];
+  const help = <small id={`content-help-${record.id}`}>{contentHelp(record.type, domain)}</small>;
+  if (!parts) return <label className="content-field">解析內容<input value={record.content} onChange={(event) => onChange(event.target.value)} placeholder={hints(domain)[record.type]} required maxLength={65535} autoCapitalize="none" spellCheck={false} aria-label="解析內容" aria-describedby={`content-help-${record.id}`} />{help}</label>;
   // The last value keeps any spaces (e.g. a CAA value); earlier values are single tokens.
   const values = record.content.split(" ");
   const value = (index: number) => index < parts.length - 1 ? values[index] ?? "" : values.slice(index).join(" ");
@@ -232,7 +235,7 @@ function ContentField({ record, onChange }: { record: DraftRecord; onChange: (co
   </fieldset>;
 }
 
-function PtrGuide({ zoneName }: { zoneName: string }) {
+function PtrGuide({ zoneName, domain }: { zoneName: string; domain: string }) {
   const info = reverseZoneInfo(zoneName);
   const example = reverseExample(zoneName);
   if (!info || !example) return <div className="ptr-guide" role="note"><strong>PTR 反解怎麼填？</strong><p>先選擇 IP 所屬的反解網域，這裡會說明「名稱」要填哪一段。</p></div>;
@@ -243,7 +246,7 @@ function PtrGuide({ zoneName }: { zoneName: string }) {
     <ol>
       <li>名稱：只填 IP 中網域沒涵蓋的 {info.remaining} {ipv4 ? "段" : "個十六進位位數"}，<b>由後往前</b>、以點分隔{ipv4 ? "" : "（每位一格，含 0）"}；不要填完整 IP。</li>
       <li>例如 IP <code>{example.ip}</code>，名稱填 <code>{example.name}</code>。</li>
-      <li>解析內容：填這個 IP 對應的完整主機名稱，例如 <code>host.example.com</code>。</li>
+      <li>解析內容：填這個 IP 對應的完整主機名稱，例如 <code>host.{domain}</code>。</li>
     </ol>
   </div>;
 }
