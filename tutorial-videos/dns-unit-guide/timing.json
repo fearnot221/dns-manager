@@ -1,5 +1,5 @@
 {
-  "total": 282.006,
+  "total": 291.86,
   "scenes": [
     {
       "id": "s01-hook",
@@ -14,51 +14,51 @@
     {
       "id": "s03-login",
       "start": 27.232,
-      "dur": 31.181
+      "dur": 31.244
     },
     {
       "id": "s04-unit-dns",
-      "start": 57.813,
-      "dur": 19.486
+      "start": 57.876,
+      "dur": 19.54
     },
     {
       "id": "s05-inspect",
-      "start": 76.699,
-      "dur": 30.132
+      "start": 76.816,
+      "dur": 30.189
     },
     {
       "id": "s06-apply",
-      "start": 106.231,
-      "dur": 39.944
+      "start": 106.405,
+      "dur": 45.385
     },
     {
       "id": "s07-claim",
-      "start": 145.575,
-      "dur": 33.86
+      "start": 151.19,
+      "dur": 37.784
     },
     {
       "id": "s08-change",
-      "start": 178.835,
-      "dur": 26.426
+      "start": 188.374,
+      "dur": 26.558
     },
     {
       "id": "s09-records",
-      "start": 204.661,
-      "dur": 19.82
+      "start": 214.332,
+      "dur": 19.859
     },
     {
       "id": "s10-unit-admin",
-      "start": 223.881,
-      "dur": 37.649
+      "start": 233.591,
+      "dur": 37.793
     },
     {
       "id": "s11-recap",
-      "start": 260.93,
+      "start": 270.784,
       "dur": 14.15
     },
     {
       "id": "s12-outro",
-      "start": 274.48,
+      "start": 284.334,
       "dur": 7.526
     }
   ]

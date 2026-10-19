@@ -4,8 +4,8 @@
 
 | 專案 | 對象 | 長度 |
 | --- | --- | --- |
-| [`dns-unit-guide/`](dns-unit-guide/) | 單位成員、單位管理員 | 約 4:42 |
-| [`dns-admin-guide/`](dns-admin-guide/) | DNS Manager 系統管理員 | 約 6:16 |
+| [`dns-unit-guide/`](dns-unit-guide/) | 單位成員、單位管理員 | 約 4:52 |
+| [`dns-admin-guide/`](dns-admin-guide/) | DNS Manager 系統管理員 | 約 6:15 |
 
 每個專案包含：
 
