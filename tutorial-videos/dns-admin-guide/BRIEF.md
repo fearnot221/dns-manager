@@ -2,7 +2,7 @@
 workflow: general-video
 flow: automation
 storyboard: yes
-message: "單位送出的申請，在後台審核後立即生效；歸屬、規則、帳號與稽核都在同一處管理"
+message: "單位送出的申請，在後台審核後立即生效；歸屬、規則、郵件、帳號與稽核都在同一處管理"
 destination: internal-training
 aspect: 1920x1080
 language: zh-TW
@@ -15,6 +15,8 @@ angle: tutorial
 
 「使用這些 skill（awesome-claude-video-skills）重新製作一版好看的使用介紹說明影片」。兩部之二：給 DNS Manager 後台 admin。
 沿用前一版的真實操作流程與章節（後台導覽、審核、DNS 管理與歸屬、申請規則、單位管理、刪除保護與清查活動、帳號管理、操作紀錄），升級為有設計感的成片。
+
+v2（2026-10-19）：「重新針對目前的使用者端和管理者端製作兩部教學影片」。依目前介面重錄，新增第 7 章「郵件服務」，審核章節加入歸屬申請核准，DNS 管理改用獨立「歸屬」按鈕，選單導覽改為四組，共 9 章。
 
 ## Assets
 

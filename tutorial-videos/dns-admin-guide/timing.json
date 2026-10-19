@@ -1,5 +1,5 @@
 {
-  "total": 320.442,
+  "total": 376.396,
   "scenes": [
     {
       "id": "s01-hook",
@@ -9,56 +9,61 @@
     {
       "id": "s02-map",
       "start": 12.004,
-      "dur": 12.67
+      "dur": 11.6
     },
     {
       "id": "s03-login",
-      "start": 24.074,
-      "dur": 29.284
+      "start": 23.004,
+      "dur": 34.06
     },
     {
       "id": "s04-review",
-      "start": 52.758,
-      "dur": 49.941
+      "start": 56.464,
+      "dur": 64.415
     },
     {
       "id": "s05-dns",
-      "start": 102.099,
-      "dur": 61.589
+      "start": 120.279,
+      "dur": 55.662
     },
     {
       "id": "s06-policy",
-      "start": 163.088,
-      "dur": 27.237
+      "start": 175.341,
+      "dur": 24.054
     },
     {
       "id": "s07-units",
-      "start": 189.725,
-      "dur": 28.437
+      "start": 198.795,
+      "dur": 32.445
     },
     {
       "id": "s08-protect-events",
-      "start": 217.562,
-      "dur": 34.132
+      "start": 230.64,
+      "dur": 29.414
     },
     {
-      "id": "s09-accounts",
-      "start": 251.094,
-      "dur": 24.566
+      "id": "s09-mail",
+      "start": 259.454,
+      "dur": 40.013
     },
     {
-      "id": "s10-audit",
-      "start": 275.06,
-      "dur": 25.506
+      "id": "s10-accounts",
+      "start": 298.867,
+      "dur": 27.557
     },
     {
-      "id": "s11-recap",
-      "start": 299.966,
-      "dur": 13.166
+      "id": "s11-audit",
+      "start": 325.824,
+      "dur": 29.904
     },
     {
-      "id": "s12-outro",
-      "start": 312.532,
+      "id": "s12-recap",
+      "start": 355.128,
+      "dur": 13.958
+    },
+    {
+      "id": "s13-outro",
+      "start": 368.486,
       "dur": 7.91
     }
   ]

@@ -4,8 +4,8 @@
 
 | 專案 | 對象 | 長度 |
 | --- | --- | --- |
-| [`dns-unit-guide/`](dns-unit-guide/) | 單位成員、單位管理員 | 約 4:28 |
-| [`dns-admin-guide/`](dns-admin-guide/) | DNS Manager 系統管理員 | 約 5:20 |
+| [`dns-unit-guide/`](dns-unit-guide/) | 單位成員、單位管理員 | 約 4:42 |
+| [`dns-admin-guide/`](dns-admin-guide/) | DNS Manager 系統管理員 | 約 6:16 |
 
 每個專案包含：
 
@@ -16,7 +16,7 @@
 
 ## 不在 Git 中的檔案
 
-成片 MP4 超過 GitHub 單檔上限，另行發布；操作錄影素材（`assets/footage.mp4`、`assets/clips/`）與 `node_modules/` 也不進版控。重新渲染前需在本機重新錄製素材並切出各章片段，否則章節畫面會是空白。
+1080p 成片超過 GitHub 單檔上限，以 [GitHub Release](https://github.com/fearnot221/dns-manager/releases/tag/tutorial-videos-v2) 發布；網站「使用說明」頁使用的 720p 版與 `.vtt` 字幕在 [`public/tutorials/`](../public/tutorials/)，重新渲染後需一併更新（章節時間見 [`lib/guide/tutorials.ts`](../lib/guide/tutorials.ts)）。操作錄影素材（`assets/footage.mp4`、`assets/clips/`）與 `node_modules/` 也不進版控。重新渲染前需在本機重新錄製素材並切出各章片段，否則章節畫面會是空白。
 
 ## 重新渲染
 
