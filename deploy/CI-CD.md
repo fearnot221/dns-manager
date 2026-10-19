@@ -36,6 +36,14 @@
 
 strict 保護負責在 GitHub 合併當下阻擋過期 base；`--match-head-commit` 負責鎖定已驗證的功能分支版本。沒有保護時，本地先查再合併仍有競爭空窗，因此 agent 必須先回報並取得設定授權，不能自行降低要求。設定須檢查、保留既有規則，不能直接覆蓋。參考 [GitHub 分支保護說明](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)。
 
+## 部署測試等待時間（2026-10-19）
+
+main `524d388` 的 push webhook 已收到並排入部署（HTTP 202），但 VM Docker build 在 `tests/deployment.test.mjs` 的重試上限測試失敗，未切換舊版容器。重送同一簽章事件後再次出現 `.failed` 不存在；第一次失敗另有清理目錄時的 `ENOTEMPTY`。原因是 `vi.waitFor` 預設只等 1 秒，背景 fixture 尚未完成就逾時並開始清理。
+
+測試改為每個背景結果最多等 5 秒，外層測試提供足夠時間跑完 3 次重試。失敗 fixture 刻意延遲 1.2 秒：舊版測試可重現失敗，修正後通過。簽章驗證、分支過濾、3 次重試上限、去重及正式部署程式均未修改。
+
+本機驗證：`codex/deployment-test-waits`，基於 `524d388` 加本次修正。`npx vitest run tests/deployment.test.mjs tests/vm-deployment.test.mjs`（29 項）、`npm run lint`、`npm run build`（含型別檢查）、相關 shell 語法檢查與 `git diff --check` 通過。本機 Docker daemon 未啟動，容器建置驗證由 PR CI 及 VM 部署執行；未啟動 local demo。
+
 ## 保留與移除
 
 - 保留 `.github/workflows/ci.yml`：push／pull_request 的完整 Verify，以及同事件／ref 過期執行取消。
