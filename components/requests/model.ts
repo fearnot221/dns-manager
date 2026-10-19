@@ -56,12 +56,13 @@ export function displayRecordName(name: string, zone: string) {
   const cleanZone = zone.replace(/\.$/, "");
   return cleanName === cleanZone ? "@" : cleanName.endsWith(`.${cleanZone}`) ? cleanName.slice(0, -cleanZone.length - 1) : cleanName;
 }
-export function contentHelp(type: RecordType) {
+/** `domain` is one of our own forward zones; examples never point at outside domains. */
+export function contentHelp(type: RecordType, domain: string) {
   if (type === "MX") return "優先序數字越小越優先；郵件伺服器填完整主機名稱。";
   if (type === "SRV") return "優先序、權重及連接埠為 0–65535 的數字；目標主機填完整主機名稱。";
-  if (type === "CAA") return "旗標通常為 0；issue／issuewild 填憑證授權單位，iodef 填通報網址。";
-  if (type === "PTR") return "填入此 IP 對應的完整主機名稱，例如 host.example.com。";
+  if (type === "CAA") return "旗標通常為 0；issue／issuewild 填憑證授權單位（CA）的網域，iodef 填通報網址。";
+  if (type === "PTR") return `填入此 IP 對應的完整主機名稱，例如 host.${domain}。`;
   if (type === "A") return "填入 IPv4 位址，例如 192.0.2.10。";
   if (type === "AAAA") return "填入 IPv6 位址，例如 2001:db8::1。";
-  return type === "TXT" ? "需要時，系統會自動加上引號。" : "填入完整目標主機名稱，例如 target.example.com。";
+  return type === "TXT" ? "需要時，系統會自動加上引號。" : `填入完整目標主機名稱，例如 www.${domain}。`;
 }
