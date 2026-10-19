@@ -17,6 +17,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { type UnitRole } from "@/lib/units/policy";
 import { Select } from "@/components/ui/select";
 
+import { reverseExample, reverseNameIp, reverseZoneInfo } from "@/lib/dns/reverse";
 import { availableTypes, policyViolation, zoneAcceptsType, type ApplicationPolicy } from "@/lib/requests/policy-model";
 type DraftRecord = { id: number; zoneName: string; name: string; type: RecordType; content: string; ttl: string; purpose: string; notes: string };
 const blankRecord = (id: number, zoneName = ""): DraftRecord => ({ id, zoneName, name: "", type: "A", content: "", ttl: "300", purpose: "", notes: "" });
@@ -194,8 +195,9 @@ export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREA
           <div className="application-record-head"><h3>紀錄 {index + 1}</h3><button className="icon-button danger-hover" type="button" disabled={records.length === 1 || pending} aria-label={"移除第 " + (index + 1) + " 筆"} title="移除此筆，可復原" onClick={() => removeRecord(record.id)}><Trash2 size={16} /></button></div>
           <div className={"dns-fields" + (claiming ? " no-ttl" : "")}>
             <label className="type-field">類型<Select aria-label="DNS 類型" value={record.type} onChange={(value) => changeType(record, value as RecordType)} options={[...(!requestTypes.includes(record.type) ? [{ value: record.type, label: `${record.type}（未開放，請改選）`, disabled: true }] : []), ...requestTypes.map((type) => ({ value: type, label: type }))]} /></label>
+            <label>名稱<input value={record.name} onChange={(event) => update(record.id, { name: event.target.value })} placeholder={record.type === "PTR" ? reverseExample(record.zoneName)?.name ? `例如 ${reverseExample(record.zoneName)!.name}` : "先選反解網域" : "www 或 @"} required maxLength={253} autoCapitalize="none" spellCheck={false} aria-describedby={`fqdn-${record.id}`} ref={(node) => { if (node && focusId.current === record.id) { if (!record.zoneName) node.closest("fieldset")?.querySelector<HTMLElement>(".zone-field .custom-select-trigger")?.focus(); else node.focus(); focusId.current = null; } }} /><small id={`fqdn-${record.id}`} className="fqdn-preview">{fqdnPreview(record)}</small></label>
             <label className="zone-field">{record.type === "PTR" ? "反解網域" : "網域"}<Select aria-label="網域" value={record.zoneName} required disabled={loading || Boolean(zoneError) || !zones.length} onChange={(value) => update(record.id, { zoneName: value })} options={[{ value: "", label: zonesFor(record.type).length ? "選擇網域" : record.type === "PTR" ? "沒有可申請的反解網域" : "沒有可申請的正解網域", disabled: true }, ...(record.zoneName && !zonesFor(record.type).some((zone) => zone.name === record.zoneName) ? [{ value: record.zoneName, label: `${record.zoneName}（目前無法使用）`, disabled: true }] : []), ...zonesFor(record.type).map((zone) => ({ value: zone.name, label: zone.name.replace(/\.$/, "") }))]} /></label>
-            <label>名稱<input value={record.name} onChange={(event) => update(record.id, { name: event.target.value })} placeholder={record.type === "PTR" ? "IP 末段，例如 10" : "www 或 @"} required maxLength={253} autoCapitalize="none" spellCheck={false} aria-describedby={`fqdn-${record.id}`} ref={(node) => { if (node && focusId.current === record.id) { if (!record.zoneName) node.closest("fieldset")?.querySelector<HTMLElement>(".zone-field .custom-select-trigger")?.focus(); else node.focus(); focusId.current = null; } }} /><small id={`fqdn-${record.id}`} className="fqdn-preview">{fqdnPreview(record)}</small></label>
+            {record.type === "PTR" && <PtrGuide zoneName={record.zoneName} />}
             <ContentField record={record} onChange={(content) => update(record.id, { content })} />
             {!claiming && <label>TTL<Select aria-label="TTL" value={record.ttl} onChange={(value) => update(record.id, { ttl: value })} options={[{ value: "60", label: "1 分鐘" }, { value: "300", label: "5 分鐘" }, { value: "600", label: "10 分鐘" }, { value: "1800", label: "30 分鐘" }, { value: "3600", label: "1 小時" }]} /></label>}
             <label className="purpose-field">用途<textarea rows={2} required value={record.purpose} onChange={(event) => update(record.id, { purpose: event.target.value })} placeholder="請說明此 DNS 的服務名稱與實際用途，供後續清查使用" maxLength={1000} /></label>
@@ -230,12 +232,33 @@ function ContentField({ record, onChange }: { record: DraftRecord; onChange: (co
   </fieldset>;
 }
 
+function PtrGuide({ zoneName }: { zoneName: string }) {
+  const info = reverseZoneInfo(zoneName);
+  const example = reverseExample(zoneName);
+  if (!info || !example) return <div className="ptr-guide" role="note"><strong>PTR 反解怎麼填？</strong><p>先選擇 IP 所屬的反解網域，這裡會說明「名稱」要填哪一段。</p></div>;
+  const ipv4 = info.family === "ipv4";
+  return <div className="ptr-guide" role="note">
+    <strong>PTR 反解怎麼填？</strong>
+    <p>此反解網域負責 <code>{ipv4 ? `${info.prefix.join(".")}.*` : `${info.prefix.join("")}…（IPv6 前 ${info.prefix.length} 位）`}</code> 的 IP。</p>
+    <ol>
+      <li>名稱：只填 IP 中網域沒涵蓋的 {info.remaining} {ipv4 ? "段" : "個十六進位位數"}，<b>由後往前</b>、以點分隔{ipv4 ? "" : "（每位一格，含 0）"}；不要填完整 IP。</li>
+      <li>例如 IP <code>{example.ip}</code>，名稱填 <code>{example.name}</code>。</li>
+      <li>解析內容：填這個 IP 對應的完整主機名稱，例如 <code>host.example.com</code>。</li>
+    </ol>
+  </div>;
+}
+
 function fqdnPreview(record: DraftRecord) {
   // Mirrors normalizeDnsName: "@" is the apex, names already ending in the zone are kept as-is.
   const zone = record.zoneName.toLowerCase().replace(/\.+$/, "");
   const name = record.name.trim().toLowerCase().replace(/\.+$/, "");
   if (!zone) return "選擇網域後顯示完整名稱";
   if (!name) return `完整名稱：…${zone}`;
-  if (name === "@" || name === zone) return `完整名稱：${zone}`;
-  return `完整名稱：${name.endsWith(zone) ? name : `${name}.${zone}`}`;
+  const fqdn = name === "@" || name === zone ? zone : name.endsWith(zone) ? name : `${name}.${zone}`;
+  if (record.type !== "PTR") return `完整名稱：${fqdn}`;
+  const target = reverseNameIp(fqdn);
+  // Typing the full IP is the most common mistake; say so instead of showing a broken name.
+  if (!target) return "名稱只能填數字（IPv6 為單一十六進位位數）並以點分隔";
+  if ("ip" in target) return `對應 IP：${target.ip}`;
+  return target.missing > 0 ? `還少 ${target.missing} 段，對應 IP 尚不完整` : `多了 ${-target.missing} 段，請勿填完整 IP，只填網域以外的部分`;
 }

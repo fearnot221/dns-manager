@@ -66,9 +66,12 @@
 .application-record { min-width: 0; display: grid; gap: var(--space-4); margin: 0; padding: var(--space-4) var(--space-5) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface-soft); scroll-margin-top: 76px; }
 .application-record.has-error { border-color: var(--red); }
 .application-record-head h3 { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-body); }
-.dns-fields { display: grid; grid-template-columns: .65fr 1.2fr 1fr; gap: var(--space-4); }
+.dns-fields { display: grid; grid-template-columns: .65fr 1fr 1.2fr; gap: var(--space-4); }
 .dns-fields .content-field { grid-column: span 2; }
 .dns-fields.no-ttl .content-field { grid-column: 1/-1; }
+.ptr-guide { grid-column: 1/-1; display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-control); background: var(--panel); font-size: var(--text-body); line-height: 1.6; }
+.ptr-guide ol { margin: 0; padding-left: 1.25em; display: grid; gap: var(--space-1); }
+.ptr-guide code { font-family: var(--font-mono), monospace; overflow-wrap: anywhere; }
 .content-parts { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 6px; }
 .content-parts legend { float: left; width: 100%; margin-bottom: 6px; font-size: var(--text-body); font-weight: 500; }
 .content-parts > small { font-size: var(--text-small); color: var(--muted); }
