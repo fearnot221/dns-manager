@@ -80,6 +80,17 @@ describe("mail settings validation and secrets", () => {
     expect(publicMailSettings({ config: defaultMailConfig, revision: null })).not.toHaveProperty("hasPassword");
     expect(safeMailError({ code: "EAUTH", message: "password=secret" })).not.toContain("secret");
   });
+  it("distinguishes temporary SMTP rejection from network and TLS failures without exposing responses", () => {
+    for (const responseCode of [421, 450, 451, 454]) {
+      const message = safeMailError({ code: "ECONNECTION", responseCode, command: "EHLO", message: "secret", response: "private@example.com" });
+      expect(message).toContain(`暫時拒絕寄送（${responseCode}）`);
+      expect(message).not.toMatch(/無法連線|secret|private@example.com/);
+    }
+    expect(safeMailError({ code: "ECONNECTION" })).toContain("無法連線");
+    expect(safeMailError({ code: "EDNS" })).toContain("無法連線");
+    expect(safeMailError(null)).toContain("寄送未完成");
+    expect(safeMailError({ responseCode: 550 })).not.toContain("暫時拒絕");
+  });
   it("limits navigation to global administrators and labels configuration inputs", () => {
     expect(workspaceNavigation(true, false).flatMap(g => g.items).some(i => i.href === "/admin/mail")).toBe(false);
     expect(workspaceNavigation(true, true).flatMap(g => g.items).some(i => i.href === "/admin/mail")).toBe(true);
