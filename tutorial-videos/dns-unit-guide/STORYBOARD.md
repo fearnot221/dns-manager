@@ -1,13 +1,13 @@
 ---
 format: 1920x1080
-duration: 4:42.0
+duration: 4:51.9
 message: "單位同仁不必再寄信或填紙本：在 DNS Manager 就能查看、清查、申請 DNS，並自行管理單位成員"
 arc: Hook（一筆申請）→ 角色與路線圖 → 8 段真實操作 → 回顧 → 識別收尾
 audience: 校內單位成員與單位管理員
 mode: collaborative
 ---
 
-# DNS Manager 使用教學 · 單位成員與單位管理員篇 — v2
+# DNS Manager 使用教學 · 單位成員與單位管理員篇 — v3
 
 ## Decisions
 
@@ -26,6 +26,8 @@ mode: collaborative
 
 - v2（2026-10-19）：依目前介面重錄。使用者確認章節計畫：「計畫可以，照這份章節開始錄影與製作。」版面、字體與票卡 spine 沿用 v1 草圖，只增修章節與旁白。
 
+- v3（2026-10-19）：「根據最新修正後的內容 修正教學影片的內容」。依 main 最新介面重錄：申請表單改為類型→名稱→網域、所有網域開放申請（PTR 只列反解網域）、申請規則改為設定僅限系統管理員申請的類型。
+
 ## Final timing (from index.html)
 
 | Scene | Start | Duration |
@@ -33,17 +35,17 @@ mode: collaborative
 | s01-hook | 0:00.0 | 13.0s |
 | s02-map | 0:12.4 | 15.4s |
 | s03-login | 0:27.2 | 31.2s |
-| s04-unit-dns | 0:57.8 | 19.5s |
-| s05-inspect | 1:16.7 | 30.1s |
-| s06-apply | 1:46.2 | 39.9s |
-| s07-claim | 2:25.6 | 33.9s |
-| s08-change | 2:58.8 | 26.4s |
-| s09-records | 3:24.7 | 19.8s |
-| s10-unit-admin | 3:43.9 | 37.6s |
-| s11-recap | 4:20.9 | 14.2s |
-| s12-outro | 4:34.5 | 7.5s |
+| s04-unit-dns | 0:57.9 | 19.5s |
+| s05-inspect | 1:16.8 | 30.2s |
+| s06-apply | 1:46.4 | 45.4s |
+| s07-claim | 2:31.2 | 37.8s |
+| s08-change | 3:08.4 | 26.6s |
+| s09-records | 3:34.3 | 19.9s |
+| s10-unit-admin | 3:53.6 | 37.8s |
+| s11-recap | 4:30.8 | 14.2s |
+| s12-outro | 4:44.3 | 7.5s |
 
-實際總長 4:42.0（push-left 轉場與相鄰場景重疊 0.6 秒）。章節長度由真實操作錄影決定，旁白長度決定設計場景長度。
+實際總長 4:51.9（push-left 轉場與相鄰場景重疊 0.6 秒）。章節長度由真實操作錄影決定，旁白長度決定設計場景長度。
 ## Frame 1 — 一筆申請（Hook）
 
 - scene: 淺色舞台中央，票卡逐字打出 lab.example.com · A · 140.115.10.50，狀態膠囊彈出「待審核」，上方大標「申請 DNS，不必再寄信、填紙本」
@@ -93,7 +95,7 @@ Why：建立使用介面的方向感，後面每章都從這個選單出發。
 ## Frame 5 — 第 3 章 完成 DNS 清查
 
 - scene: 章節開場 → 錄影：點「清查」→ 更新分機、寫清查備註 → 儲存並記錄清查；成功提示時畫面角落蓋上「已清查」章
-- duration: 30.1s
+- duration: 30.2s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom ＋ spring-pop-entrance（已清查章）
@@ -102,24 +104,24 @@ Why：建立使用介面的方向感，後面每章都從這個選單出發。
 
 ## Frame 6 — 第 4 章 申請新增 DNS
 
-- scene: 章節開場 → 錄影：填申請人資料、網域、名稱 lab、類型 A、IP、用途 → 送出；送出瞬間片頭的票卡從畫面右側滑入並蓋上「待審核」（spine 回收）
-- duration: 39.9s
+- scene: 章節開場 → 錄影：填申請人資料 → 類型 A、名稱 lab、選網域 example.com（顯示完整名稱）→ IP 與用途 → 送出；送出瞬間片頭的票卡從畫面右側滑入並蓋上「待審核」（spine 回收）
+- duration: 45.4s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom（逐欄位 punch-in）＋ card-morph-anchor（票卡回收）
-- voiceover: "要新增 DNS，點選左側的「申請 DNS」。先填申請人資料：姓名、電子郵件與分機必填，申請單位會自動帶入。再填 DNS 紀錄：網域只列出開放申請的網域；名稱輸入主機名稱，下方會顯示完整名稱。類型選 A，填入 IP 位址，並具體說明用途，之後清查會用到。全部填好後按送出。送出後狀態是待審核，管理員核准前 DNS 不會變更。"
+- voiceover: "要新增 DNS，點選左側的「申請 DNS」。先填申請人資料：姓名、電子郵件與分機必填，申請單位會自動帶入。再填 DNS 紀錄：先選類型，這裡用 A；名稱輸入主機名稱，再選擇網域，下方會顯示完整名稱。填入 IP 位址，並具體說明用途，之後清查會用到。所有網域都開放申請，申請 PTR 時只會列出反解網域。全部填好後按送出。送出後狀態是待審核，管理員核准前 DNS 不會變更。"
 - src: compositions/s06-apply.html
 
 Why：全片最重要的任務，票卡在這裡從概念變成真實送出的申請。
 
 ## Frame 7 — 第 5 章 DNS 歸屬申請
 
-- scene: 章節開場 → 錄影：側欄點「DNS 歸屬申請」→ 填申請人資料 → 名稱 api、類型選 AAAA、解析內容 2001:db8::10 → 用途 → 指向表單下方說明並送出
-- duration: 33.9s
+- scene: 章節開場 → 錄影：側欄點「DNS 歸屬申請」→ 填申請人資料 → 類型選 AAAA、名稱 api、選網域 example.com、解析內容 2001:db8::10 → 用途 → 指向表單下方說明並送出
+- duration: 37.8s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom（名稱與類型欄位 punch-in）
-- voiceover: "如果 DNS 已經存在、但還沒歸屬任何單位，可以用「DNS 歸屬申請」把它納入本單位。一樣先填申請人資料，申請單位會自動帶入。再填要歸屬的紀錄：網域、名稱、類型與目前的解析內容。並說明這筆 DNS 的用途。送出後由管理員審核；核准後歸屬本單位並記錄清查，解析內容不會改變。"
+- voiceover: "如果 DNS 已經存在、但還沒歸屬任何單位，可以用「DNS 歸屬申請」把它納入本單位。一樣先填申請人資料，申請單位會自動帶入。再填要歸屬的紀錄：類型、名稱、網域與目前的解析內容。並說明這筆 DNS 的用途。送出後由管理員審核；核准後歸屬本單位並記錄清查，解析內容不會改變。"
 - src: compositions/s07-claim.html
 
 Why：v2 新功能。既有但未歸屬的 DNS 由單位認領，核准後只改歸屬、不改解析。
@@ -127,7 +129,7 @@ Why：v2 新功能。既有但未歸屬的 DNS 由單位認領，核准後只改
 ## Frame 8 — 第 6 章 申請變更或刪除
 
 - scene: 章節開場 → 錄影：在 app 紀錄點「申請變更」→ 新解析內容、變更原因 → 送出；最後 punch-in 到「申請刪除」按鈕
-- duration: 26.4s
+- duration: 26.6s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom
@@ -137,7 +139,7 @@ Why：v2 新功能。既有但未歸屬的 DNS 由單位認領，核准後只改
 ## Frame 9 — 第 7 章 追蹤申請紀錄
 
 - scene: 章節開場 → 錄影：申請紀錄列表；票卡在旁邊浮出並對齊列表中的 lab 那一列（callback Frame 1）
-- duration: 19.8s
+- duration: 19.9s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ card-morph-anchor（callback）
@@ -147,7 +149,7 @@ Why：v2 新功能。既有但未歸屬的 DNS 由單位認領，核准後只改
 ## Frame 10 — 第 8 章 單位管理員：管理成員
 
 - scene: 章節開場（角色膠囊切換成「單位管理員」）→ 錄影：單位管理頁、新增使用者輸入學號、加入成功、管理權限對話框
-- duration: 37.6s
+- duration: 37.8s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom ＋ scale-swap-transition（角色膠囊切換）

@@ -1,13 +1,13 @@
 ---
 format: 1920x1080
-duration: 6:16.4
+duration: 6:14.8
 message: "單位送出的申請，在後台審核後立即生效；歸屬、規則、郵件、帳號與稽核都在同一處管理"
 arc: Hook（票卡翻成已核准）→ 後台地圖 → 9 段真實操作 → 回顧 → 識別收尾
 audience: DNS Manager 系統管理員
 mode: collaborative
 ---
 
-# DNS Manager 使用教學 · 系統管理員篇 — v2
+# DNS Manager 使用教學 · 系統管理員篇 — v3
 
 ## Decisions
 
@@ -26,25 +26,27 @@ mode: collaborative
 
 - v2（2026-10-19）：依目前介面重錄。使用者確認章節計畫：「計畫可以，照這份章節開始錄影與製作。」版面、字體與票卡 spine 沿用 v1 草圖，只增修章節與旁白。
 
+- v3（2026-10-19）：「根據最新修正後的內容 修正教學影片的內容」。依 main 最新介面重錄：申請表單改為類型→名稱→網域、所有網域開放申請（PTR 只列反解網域）、申請規則改為設定僅限系統管理員申請的類型。
+
 ## Final timing (from index.html)
 
 | Scene | Start | Duration |
 | --- | --- | --- |
 | s01-hook | 0:00.0 | 12.6s |
 | s02-map | 0:12.0 | 11.6s |
-| s03-login | 0:23.0 | 34.1s |
-| s04-review | 0:56.5 | 64.4s |
-| s05-dns | 2:00.3 | 55.7s |
-| s06-policy | 2:55.3 | 24.1s |
-| s07-units | 3:18.8 | 32.4s |
-| s08-protect-events | 3:50.6 | 29.4s |
-| s09-mail | 4:19.5 | 40.0s |
-| s10-accounts | 4:58.9 | 27.6s |
-| s11-audit | 5:25.8 | 29.9s |
-| s12-recap | 5:55.1 | 14.0s |
-| s13-outro | 6:08.5 | 7.9s |
+| s03-login | 0:23.0 | 34.2s |
+| s04-review | 0:56.6 | 64.7s |
+| s05-dns | 2:00.7 | 55.8s |
+| s06-policy | 2:55.9 | 33.8s |
+| s07-units | 3:29.2 | 32.6s |
+| s08-protect-events | 4:01.1 | 29.5s |
+| s09-mail | 4:30.0 | 38.6s |
+| s10-accounts | 5:08.0 | 22.1s |
+| s11-audit | 5:29.5 | 24.7s |
+| s12-recap | 5:53.5 | 14.0s |
+| s13-outro | 6:06.9 | 7.9s |
 
-實際總長 6:16.4（push-left 轉場與相鄰場景重疊 0.6 秒）。章節長度由真實操作錄影決定，旁白長度決定設計場景長度。
+實際總長 6:14.8（push-left 轉場與相鄰場景重疊 0.6 秒）。章節長度由真實操作錄影決定，旁白長度決定設計場景長度。
 ## Frame 1 — 待審核 → 已核准（Hook）
 
 - scene: 票卡從畫面外滑入，狀態「待審核」；大標「單位送出的申請，在這裡生效」；狀態膠囊翻轉成綠色「已核准」
@@ -68,7 +70,7 @@ mode: collaborative
 ## Frame 3 — 第 1 章 登入與後台導覽
 
 - scene: 章節開場 → 錄影：登入、系統範圍、四組選單（日常作業／申請作業／審核作業／系統設定）依序圈選
-- duration: 34.1s
+- duration: 34.2s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom
@@ -78,7 +80,7 @@ mode: collaborative
 ## Frame 4 — 第 2 章 審核 DNS 申請
 
 - scene: 章節開場 → 錄影：待審核分頁、展開 lab 申請、核准並填回覆；核准 api 的「歸屬申請」；app 變更申請不核准並填原因；切到已核准分頁。核准瞬間票卡翻成「已核准」（spine）
-- duration: 64.4s
+- duration: 64.7s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom ＋ theme-crossfade-morph（票卡狀態翻轉）
@@ -90,27 +92,27 @@ Why：全片價值主張的證據 —— 單位申請在這裡變成生效的 DN
 ## Frame 5 — 第 3 章 DNS 管理與歸屬單位
 
 - scene: 章節開場 → 錄影：網域分頁、搜尋 lab（票卡對位 callback）、指出已歸屬的 api、以「歸屬」按鈕把 MX 紀錄指派給計算機中心、直接新增 status 紀錄、歷程與 CSV 匯出按鈕
-- duration: 55.7s
+- duration: 55.8s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom ＋ card-morph-anchor（票卡 callback）
 - voiceover: "「DNS 管理」依網域列出所有解析值，以及申請人、單位、用途與清查狀態。剛剛核准的 lab 紀錄已經出現，並帶入申請單位與用途。剛核准歸屬的 api 已經屬於計算機中心。尚未歸屬的紀錄，也可以直接按「歸屬」指派給單位。選擇計算機中心並確認。只會指派這一筆，也不會改變 DNS 解析。系統管理員也可以直接新增紀錄：選擇類型、輸入名稱與 IP，儲存後立即生效。每筆紀錄都有「歷程」；「DNS 歷程」還能查看已刪除紀錄的變更經過。右上角可以匯出全部 DNS 的 CSV 檔，作為清查或備份資料。"
 - src: compositions/s05-dns.html
 
-## Frame 6 — 第 4 章 申請規則與開放網域
+## Frame 6 — 第 4 章 申請規則
 
-- scene: 章節開場 → 錄影：類型勾選區、網域開關、開放 student 網域
-- duration: 24.1s
+- scene: 章節開場 → 錄影：「僅限系統管理員申請的類型」勾選區 punch-in → 勾選 CAA 並儲存 → 指向說明：所有網域開放申請，PTR 只列反解網域
+- duration: 33.8s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom ＋ control-target-sync（開關與狀態文字）
-- voiceover: "「申請規則」設定使用者可以申請的 DNS 類型；取消勾選的類型會暫停新申請。下方是各網域的申請開關，未開放的網域不會出現在申請表單。例如開放 student 網域：按下開關即可。暫停申請不會刪除既有 DNS。"
+- voiceover: "「申請規則」設定哪些 DNS 類型僅限系統管理員申請；沒有勾選的類型，所有單位成員都可以申請。例如勾選 CAA 並儲存，之後只有系統管理員能申請 CAA 紀錄。所有網域都開放申請：申請 PTR 時只列出反解網域，其他類型只列出正解網域。"
 - src: compositions/s06-policy.html
 
 ## Frame 7 — 第 5 章 單位管理
 
 - scene: 章節開場 → 錄影：單位清單、建立單位「電機工程學系」並以學號指定管理人、修改名稱按鈕、使用者管理的「指定單位管理人」
-- duration: 32.4s
+- duration: 32.6s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom
@@ -120,7 +122,7 @@ Why：全片價值主張的證據 —— 單位申請在這裡變成生效的 DN
 ## Frame 8 — 第 6 章 刪除保護與清查活動
 
 - scene: 章節開場 → 錄影：刪除保護說明頁 → 清查活動列表、編輯對話框
-- duration: 29.4s
+- duration: 29.5s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom
@@ -130,7 +132,7 @@ Why：全片價值主張的證據 —— 單位申請在這裡變成生效的 DN
 ## Frame 9 — 第 7 章 郵件服務
 
 - scene: 章節開場 → 錄影：通知設定（啟用開關、加密連線、寄件者、網管小組收件地址）→ 郵件模板分組與即時預覽 → 寄信給單位的收件單位清單 → 寄送紀錄。只瀏覽，不儲存、不寄信
-- duration: 40.0s
+- duration: 38.6s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom（模板面板 punch-in）
@@ -142,7 +144,7 @@ Why：v2 新功能。示範環境未設定 SMTP，畫面停在設定與預覽，
 ## Frame 10 — 第 8 章 帳號管理
 
 - scene: 章節開場 → 錄影：搜尋帳號、管理對話框的角色與狀態欄位、取消
-- duration: 27.6s
+- duration: 22.1s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom
@@ -152,7 +154,7 @@ Why：v2 新功能。示範環境未設定 SMTP，畫面停在設定與預覽，
 ## Frame 11 — 第 9 章 操作紀錄
 
 - scene: 章節開場 → 錄影：搜尋與篩選、展開一筆紀錄查看變更前後內容
-- duration: 29.9s
+- duration: 24.7s
 - transition_in: push-left
 - status: animated
 - blueprint: device-surface-showcase ＋ coordinate-target-zoom
