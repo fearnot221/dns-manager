@@ -1,0 +1,1 @@
+ALTER TABLE "UnitAllowlist" ADD COLUMN "role" "UnitRole" NOT NULL DEFAULT 'EDITOR';

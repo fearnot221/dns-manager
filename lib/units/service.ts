@@ -48,7 +48,10 @@ function requireUnitCreator(actor: Actor) {
 }
 async function resolveUnitManager(tx: Prisma.TransactionClient, studentId: string) {
   const users = await tx.user.findMany({ where: { studentId: studentId.trim(), removedAt: null }, select: { id: true }, take: 2 });
-  if (!users.length) throw new ApiError("找不到此學號的已註冊使用者，請先請管理人登入註冊。", 404);
+  if (!users.length) {
+    if (await tx.user.findFirst({ where: { studentId: studentId.trim(), removedAt: { not: null } }, select: { id: true } })) throw new ApiError("此學號的帳號已移除，請先確認帳號資料。", 404);
+    return null;
+  }
   if (users.length !== 1) throw new ApiError("此學號對應多個帳號，請先確認帳號資料後再指派。", 409);
   return users[0].id;
 }
@@ -60,11 +63,10 @@ export async function isCurrentUnitAdmin(tx: Prisma.TransactionClient, actor: Ac
   return isGlobalAdmin({ ...actor, globalRole: current.globalRole }) ||
     (isOwner(actor) && accountOwnerIdentifier(current.accounts, current.globalRole, current.logtoName) === OWNER_IDENTIFIER);
 }
-async function lockManagerAndActor(tx: Prisma.TransactionClient, actor: Actor, userId: string, studentId: string) {
-  for (const id of [...new Set([actor.id, userId])].sort()) await lockActiveUser(tx, id);
+async function lockManagerAndActor(tx: Prisma.TransactionClient, actor: Actor, userId: string | null, studentId: string) {
+  for (const id of [...new Set([actor.id, ...(userId ? [userId] : [])])].sort()) await lockActiveUser(tx, id);
   if (!await isCurrentUnitAdmin(tx, actor)) throw new ApiError("只有系統管理員可以建立單位或指定管理人。", 403);
-  const user = await tx.user.findUnique({ where: { id: userId }, select: { studentId: true } });
-  if (user?.studentId !== studentId.trim()) throw new ApiError("管理人的學號資料已更新，請重新確認。", 409);
+  if (await resolveUnitManager(tx, studentId) !== userId) throw new ApiError("管理人的學號資料已更新，請重新確認。", 409);
 }
 export async function createUnit(actor: Actor, name: string, managerStudentId?: string, note = "") {
   requireUnitCreator(actor);
@@ -73,12 +75,12 @@ export async function createUnit(actor: Actor, name: string, managerStudentId?: 
     const unit = await db.$transaction(async (tx) => {
       const studentId = managerStudentId?.trim() || null;
       const managerId = studentId ? await resolveUnitManager(tx, studentId) : null;
-      if (managerId && studentId) await lockManagerAndActor(tx, actor, managerId, studentId);
+      if (studentId) await lockManagerAndActor(tx, actor, managerId, studentId);
       else {
         await lockActiveUser(tx, actor.id);
         if (!await isCurrentUnitAdmin(tx, actor)) throw new ApiError("只有系統管理員可以建立單位。", 403);
       }
-      const unit = await tx.dnsUnit.create({ data: { name, note, status: "APPROVED", ...(managerId && studentId ? { allowlist: { create: { studentId, userId: managerId } }, members: { create: { userId: managerId, role: "ADMIN" as const } } } : {}) }, select: { id: true, name: true, note: true, status: true } });
+      const unit = await tx.dnsUnit.create({ data: { name, note, status: "APPROVED", ...(studentId ? { allowlist: { create: { studentId, userId: managerId, role: "ADMIN" as const } }, ...(managerId ? { members: { create: { userId: managerId, role: "ADMIN" as const } } } : {}) } : {}) }, select: { id: true, name: true, note: true, status: true } });
       await unitAudit(tx, actor, "CREATE_DNS_UNIT", null, { ...unit, creatorId: actor.id, managerId, managerStudentId: studentId });
       return unit;
     });
@@ -95,10 +97,9 @@ export async function assignUnitManager(actor: Actor, id: string, studentId: str
     const userId = await resolveUnitManager(tx, studentId);
     await lockManagerAndActor(tx, actor, userId, studentId);
     await lockUnit(tx, id);
-    const where = { unitId_userId: { unitId: id, userId } };
-    const before = await tx.unitMember.findUnique({ where });
-    await tx.unitMember.upsert({ where, create: { unitId: id, userId, role: "ADMIN" }, update: { role: "ADMIN" } });
-    await tx.unitAllowlist.upsert({ where: { unitId_studentId: { unitId: id, studentId: studentId.trim() } }, create: { unitId: id, studentId: studentId.trim(), userId }, update: { userId } });
+    const before = userId ? await tx.unitMember.findUnique({ where: { unitId_userId: { unitId: id, userId } } }) : null;
+    if (userId) await tx.unitMember.upsert({ where: { unitId_userId: { unitId: id, userId } }, create: { unitId: id, userId, role: "ADMIN" }, update: { role: "ADMIN" } });
+    await tx.unitAllowlist.upsert({ where: { unitId_studentId: { unitId: id, studentId: studentId.trim() } }, create: { unitId: id, studentId: studentId.trim(), userId, role: "ADMIN" }, update: { userId, role: "ADMIN" } });
     await unitAudit(tx, actor, "ASSIGN_UNIT_MANAGER", { unitId: id, userId, role: before?.role ?? null }, { unitId: id, userId, studentId: studentId.trim(), role: "ADMIN" });
     return { saved: true };
   });

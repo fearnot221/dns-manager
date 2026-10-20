@@ -42,7 +42,7 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
         const current = (await powerdns.getZone(item.zoneName)).rrsets.find(r => r.name === item.recordName && r.type === item.recordType);
         const before = item.expectedRRSet as unknown as RRSet | null;
         const applied = item.sourceRecordId && before && item.originalContent
-          ? unitChangeState(current, before, item.operation === "DELETE" ? deleteUnitValue(before, item.originalContent) : replaceUnitValue(before, item.originalContent, item.content)) === "APPLIED"
+          ? unitChangeState(current, before, item.operation === "DELETE" ? deleteUnitValue(before, item.originalContent) : replaceUnitValue(before, item.originalContent, item.content, item.ttl)) === "APPLIED"
           : current?.records.some(r => r.content === item.content);
         if (applied) throw new ApiError("DNS 已符合此申請結果，不能直接退回；請重新核准以完成同步。", 409);
       }
@@ -82,15 +82,15 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
         const source = await tx.dnsRecordMetadata.findUnique({ where: { id: item.sourceRecordId } });
         if (!source || source.unitId !== initial.unitId || source.content !== item.originalContent || !item.expectedRRSet) throw new ApiError("原紀錄歸屬已變更，請退回並重新申請。", 409);
         if (item.sourceMetadataUpdatedAt && source.updatedAt.getTime() !== item.sourceMetadataUpdatedAt.getTime()) throw new ApiError("清查或歸屬資料已更新，請退回並重新申請。", 409);
-        if (item.operation !== "DELETE" && target?.unitId) throw new ApiError("目標內容已有紀錄資料，請由系統管理員確認歸屬後處理。", 409);
+        if (item.operation !== "DELETE" && target?.unitId && targetId !== source.id) throw new ApiError("目標內容已有紀錄資料，請由系統管理員確認歸屬後處理。", 409);
         const before = item.expectedRRSet as unknown as RRSet;
         if (source.id !== recordId(scope, source) || source.zoneName !== item.zoneName || source.recordName !== item.recordName || source.recordType !== item.recordType) throw new ApiError("原紀錄識別不符，請重新申請。", 409);
-        next = item.operation === "DELETE" ? deleteUnitValue(before, source.content) : replaceUnitValue(before, source.content, item.content);
+        next = item.operation === "DELETE" ? deleteUnitValue(before, source.content) : replaceUnitValue(before, source.content, item.content, item.ttl);
         const state = recoveryState ?? unitChangeState(current, before, next);
         if (state === "CONFLICT") throw new ApiError("DNS 已被其他操作更新，不能覆蓋；請退回並重新申請。", 409);
         await assertDeletionPassword(actor, deletionPassword);
         if (state === "APPLIED") auditBefore = before;
-        if (state === "READY") {
+        if (state === "READY" && unitRRSetHash(before) !== unitRRSetHash(next)) {
           if (!publication) await beginPublication(id, scope, actor.id, current, next);
           if (next) await powerdns.replaceRRSet(item.zoneName, next);
           else await powerdns.deleteRRSet(item.zoneName, item.recordName, item.recordType as RecordType);
@@ -106,7 +106,7 @@ export async function reviewUnitRequest(actor: Actor, id: string, decision: "APP
           // Its inspections remain attached to the same DNS value, never moved from source.
           await tx.dnsRecordMetadata.upsert({ where: { id: targetId }, create: { id: targetId, ...replacement }, update: replacement });
         }
-        await tx.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId: null } });
+        if (item.operation === "DELETE" || targetId !== source.id) await tx.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId: null } });
       } else {
         const before = item.expectedRRSet as unknown as RRSet | null;
         if (before?.records.some((r) => r.content === item.content)) throw new ApiError("此解析值在申請時已存在，不能取得共享權限。", 409);

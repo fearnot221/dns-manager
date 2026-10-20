@@ -648,10 +648,9 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect((await listUnits(editor)).some((u) => u.id === unit.id && u.canApply)).toBe(true);
     await expect(createUnit(admin, name, editor.studentId!)).rejects.toMatchObject({ status: 409 });
   });
-  it("rejects unknown, disabled, removed and ambiguous student ids without creating units", async () => {
+  it("rejects disabled, removed and ambiguous student ids without creating units", async () => {
     const target = await account();
     const name = `invalid-manager-${crypto.randomUUID()}`;
-    await expect(createUnit(admin, name, `missing-${crypto.randomUUID()}`)).rejects.toMatchObject({ status: 404 });
     await db.user.update({ where: { id: target.id }, data: { disabled: true } });
     await expect(createUnit(admin, name, target.studentId!)).rejects.toMatchObject({ status: 403 });
     await db.user.update({ where: { id: target.id }, data: { removedAt: new Date() } });
@@ -678,8 +677,31 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await expect(manageUnit(outsider, other.unit.id, { action: "member", userId: editor.id, role: "EDITOR" })).rejects.toMatchObject({ status: 403 });
     expect(await db.auditLog.count({ where: { userId: admin.id, action: "ASSIGN_UNIT_MANAGER" } })).toBe(3);
   });
+  it.each(["create", "assign"])("preassigns an unregistered manager through %s and enrolls once with ADMIN role", async (mode) => {
+    const studentId = `future-${crypto.randomUUID()}`;
+    const id = mode === "create" ? (await createUnit(admin, `future-unit-${crypto.randomUUID()}`, studentId)).unit.id : unitId;
+    if (mode === "assign") {
+      await manageAllowlist(creator, id, studentId);
+      await assignUnitManager(admin, id, studentId);
+      await manageAllowlist(creator, id, studentId);
+    }
+    expect(await db.unitAllowlist.findUniqueOrThrow({ where: { unitId_studentId: { unitId: id, studentId } } })).toMatchObject({ userId: null, role: "ADMIN" });
+    const user = await account();
+    await db.user.update({ where: { id: user.id }, data: { studentId } });
+    await Promise.all([enrollAllowlistedUser(user.id), enrollAllowlistedUser(user.id)]);
+    expect(await db.unitMember.findUniqueOrThrow({ where: { unitId_userId: { unitId: id, userId: user.id } } })).toMatchObject({ role: "ADMIN" });
+    expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).globalRole).toBe("USER");
+  });
+  it("revokes pending manager access before registration", async () => {
+    const studentId = `revoked-${crypto.randomUUID()}`;
+    await assignUnitManager(admin, unitId, studentId);
+    await manageAllowlist(creator, unitId, studentId, true);
+    const user = await account();
+    await db.user.update({ where: { id: user.id }, data: { studentId } });
+    await enrollAllowlistedUser(user.id);
+    expect(await db.unitMember.findUnique({ where: { unitId_userId: { unitId, userId: user.id } } })).toBeNull();
+  });
   it("rejects invalid manager assignment without changing membership", async () => {
-    await expect(assignUnitManager(admin, unitId, `missing-${crypto.randomUUID()}`)).rejects.toMatchObject({ status: 404 });
     await db.user.update({ where: { id: outsider.id }, data: { disabled: true } });
     await expect(assignUnitManager(admin, unitId, outsider.studentId!)).rejects.toMatchObject({ status: 403 });
     await db.user.update({ where: { id: outsider.id }, data: { removedAt: new Date() } });
@@ -860,6 +882,43 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect(JSON.stringify(detail)).not.toContain("192.0.2.99");
     expect(JSON.stringify(detail)).not.toContain(editor.email);
     await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toMatchObject({ status: 409 });
+  });
+  it.each(["ttl", "contact"])("approves %s-only changes and retains the same DNS ownership and inspections", async (mode) => {
+    const source = await sourceRecord();
+    const before = structuredClone(zone.rrsets[0]);
+    const metadata = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    await inspectUnitRecord(viewer, unitId, { recordId: source.id, expectedHash: source.expectedHash, note: "保留清查" });
+    const pending = await requestUnitChange(editor, unitId, { ...changeInput(source), content: metadata.content,
+      ...(mode === "ttl" ? { ttl: 600 } : { ownership: { expectedUpdatedAt: metadata.updatedAt.toISOString(), applicantName: "新聯絡人", applicantEmail: "contact@example.com", applicantExtension: "1234", purpose: "新用途" } }) });
+    expect(zone.rrsets[0]).toEqual(before);
+    await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
+    expect(zone.rrsets[0]).toEqual({ ...before, ttl: mode === "ttl" ? 600 : 300 });
+    const saved = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id }, include: { inspections: true } });
+    expect(saved.unitId).toBe(unitId);
+    expect(saved.inspections).toHaveLength(1);
+    if (mode === "contact") {
+      expect(saved).toMatchObject({ applicantName: "新聯絡人", purpose: "新用途" });
+      expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+      expect(await db.dnsRequestPublication.findUnique({ where: { requestId: pending.id } })).toBeNull();
+    }
+  });
+  it("rejects unchanged requests without publishing", async () => {
+    const source = await sourceRecord();
+    await expect(requestUnitChange(editor, unitId, { ...changeInput(source), content: "192.0.2.1" })).rejects.toMatchObject({ status: 409 });
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled();
+  });
+  it("recovers a TTL-only publication after a lost response without losing ownership", async () => {
+    const source = await sourceRecord();
+    const pending = await requestUnitChange(editor, unitId, { ...changeInput(source), content: "192.0.2.1", ttl: 600 });
+    vi.mocked(powerdns.replaceRRSet).mockImplementationOnce(async (_name, rrset) => {
+      zone.rrsets = [structuredClone(rrset)];
+      throw new Error("response lost after TTL write");
+    });
+    await expect(reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password")).rejects.toThrow("response lost");
+    await expect(reviewUnitRequest(admin, pending.id, "REJECT")).rejects.toMatchObject({ status: 409 });
+    await reviewUnitRequest(admin, pending.id, "APPROVE", undefined, "test-delete-password");
+    expect(powerdns.replaceRRSet).toHaveBeenCalledOnce();
+    expect((await unitDetail(viewer, unitId)).records[0]).toMatchObject({ id: source.id, ttl: 600 });
   });
   it("prevents duplicate pending changes even with concurrent requests", async () => {
     const source = await sourceRecord();

@@ -9,7 +9,7 @@ import { isGlobalAdmin } from "@/lib/auth/owner";
 import { ApiError } from "@/lib/api/respond";
 import { lockActiveUser, lockUnit, requireUnitDatabase, unitAccess, unitAudit, requireActiveUnit } from "./service";
 import { replaceUnitValue, deleteUnitValue } from "./change";
-import { normalizeRecordContent } from "@/lib/dns/names";
+import { normalizeRecordContent, validateTtl } from "@/lib/dns/names";
 import { rrsetHash } from "@/lib/dns/rrset";
 import { assertUnitRequestBudget } from "@/lib/requests/limits";
 import { assertApplicationPolicy } from "@/lib/requests/policy";
@@ -24,7 +24,7 @@ export async function unitDetail(actor: Actor, unitId: string, mode: "dns" | "ma
   const unit = await db.dnsUnit.findUnique({ where: { id: unitId }, select: { id: true, name: true, note: true, status: true, members: { select: { userId: true, role: true, user: { select: { name: true, studentId: true, disabled: true } } } } } });
   if (!unit) throw new ApiError("找不到單位。", 404);
   const members = unit.members.map((m) => ({ userId: m.userId, role: m.role, label: m.user.name || m.user.studentId || "未提供姓名", studentId: m.user.studentId, disabled: m.user.disabled }));
-  const allowlist = role === "ADMIN" ? await db.unitAllowlist.findMany({ where: { unitId }, select: { studentId: true, userId: true }, orderBy: { studentId: "asc" } }) : [];
+  const allowlist = role === "ADMIN" ? await db.unitAllowlist.findMany({ where: { unitId }, select: { studentId: true, userId: true, role: true }, orderBy: { studentId: "asc" } }) : [];
   const summary = { allowlist, unit: { id: unit.id, name: unit.name, note: unit.note, status: unit.status }, role, systemAdmin: isGlobalAdmin(actor), canApply: unit.status === "APPROVED" && unit.members.some((m) => m.userId === actor.id && ["EDITOR", "ADMIN"].includes(m.role)), members };
   if (mode === "manage" && !isGlobalAdmin(actor) || unit.status !== "APPROVED") return { ...summary, records: [], recordsError: "" };
   const saved = await db.dnsRecordMetadata.findMany({ where: { unitId }, include: { inspections: { orderBy: { inspectedAt: "desc" }, select: { id: true, inspectedAt: true, inspectorName: true, note: true, eventName: true, eventClassified: true } } } });
@@ -45,7 +45,7 @@ export async function unitDetail(actor: Actor, unitId: string, mode: "dns" | "ma
   return { ...summary, records, recordsError: unavailable.length ? `有 ${unavailable.length} 個網域暫時無法取得 DNS，清單可能不完整；成員管理不受影響。` : "" };
 }
 
-export async function requestUnitChange(actor: Actor, unitId: string, input: { recordId: string; purpose: string; expectedHash: string } & ({ operation?: "UPDATE"; content: string; ownership?: UnitOwnershipInput } | { operation: "DELETE" })) {
+export async function requestUnitChange(actor: Actor, unitId: string, input: { recordId: string; purpose: string; expectedHash: string } & ({ operation?: "UPDATE"; content: string; ttl?: number; ownership?: UnitOwnershipInput } | { operation: "DELETE" })) {
   requireUnitDatabase();
   return db.$transaction(async (tx) => {
     await lockActiveUser(tx, actor.id);
@@ -64,15 +64,17 @@ export async function requestUnitChange(actor: Actor, unitId: string, input: { r
     const zone = await powerdns.getZone(source.zoneName);
     const current = zone.rrsets.find((r) => r.name === source.recordName && r.type === source.recordType);
     if (!current || rrsetHash(current) !== input.expectedHash) throw new ApiError("DNS 紀錄已變更，請重新載入後再申請。", 409);
-    try { if (deleting) deleteUnitValue(current, source.content); else replaceUnitValue(current, source.content, content); }
+    const ttl = deleting ? current.ttl : validateTtl(input.ttl ?? current.ttl);
+    try { if (deleting) deleteUnitValue(current, source.content); else replaceUnitValue(current, source.content, content, ttl); }
     catch (error) { throw new ApiError((error as Error).message, 409); }
     if (await tx.dnsRecordRequest.findFirst({ where: { sourceRecordId: source.id, status: "PENDING" } })) throw new ApiError("此紀錄已有待審核變更，請等待審核結果。", 409);
     const unit = await tx.dnsUnit.findUniqueOrThrow({ where: { id: unitId } });
     const ownership = !deleting ? input.ownership : undefined;
     if (ownership && ownership.expectedUpdatedAt !== source.updatedAt.toISOString()) throw new ApiError("清查資料已更新，請重新載入後再申請。", 409);
+    if (!deleting && content === source.content && ttl === current.ttl && (!ownership || !(["applicantName", "applicantEmail", "applicantExtension", "purpose"] as const).some((field) => ownership[field] !== source[field]))) throw new ApiError("解析內容、TTL 與聯絡／用途資料均未變更，無需申請。", 409);
     await assertUnitRequestBudget(tx,unitId,1,Buffer.byteLength(JSON.stringify({source,current,input}))+512);
-    const saved = await tx.dnsRecordRequest.create({ data: { operation: deleting ? "DELETE" : "UPDATE", userId: actor.id, unitId, sourceRecordId: source.id, originalContent: source.content, expectedRRSet: current as unknown as Prisma.InputJsonValue, connectionScope: scope, zoneName: source.zoneName, recordName: source.recordName, recordType: source.recordType, ttl: current.ttl, content, purpose: input.purpose, sourceMetadataUpdatedAt: source.updatedAt, recordPurpose: ownership?.purpose ?? source.purpose, applicantName: ownership?.applicantName ?? source.applicantName, applicantEmail: ownership?.applicantEmail ?? source.applicantEmail, applicantExtension: ownership?.applicantExtension ?? source.applicantExtension, applicantUnit: unit.name } });
-    await unitAudit(tx, actor, deleting ? "REQUEST_UNIT_DNS_DELETE" : "REQUEST_UNIT_DNS_CHANGE", { recordId: source.id, content: source.content }, { requestId: saved.id, unitId, content, purpose: input.purpose });
+    const saved = await tx.dnsRecordRequest.create({ data: { operation: deleting ? "DELETE" : "UPDATE", userId: actor.id, unitId, sourceRecordId: source.id, originalContent: source.content, expectedRRSet: current as unknown as Prisma.InputJsonValue, connectionScope: scope, zoneName: source.zoneName, recordName: source.recordName, recordType: source.recordType, ttl, content, purpose: input.purpose, sourceMetadataUpdatedAt: source.updatedAt, recordPurpose: ownership?.purpose ?? source.purpose, applicantName: ownership?.applicantName ?? source.applicantName, applicantEmail: ownership?.applicantEmail ?? source.applicantEmail, applicantExtension: ownership?.applicantExtension ?? source.applicantExtension, applicantUnit: unit.name } });
+    await unitAudit(tx, actor, deleting ? "REQUEST_UNIT_DNS_DELETE" : "REQUEST_UNIT_DNS_CHANGE", { recordId: source.id, content: source.content, ttl: current.ttl }, { requestId: saved.id, unitId, content, ttl, purpose: input.purpose });
     await enqueueDnsMail(tx, `dns-request:${saved.id}`, { applicationId: saved.id, applicantName: actor.name || saved.applicantName || "未提供", unitName: unit.name, recordCount: "1", operation: deleting ? "刪除" : "修改" });
     return { id: saved.id };
   }, { timeout: 30000 });

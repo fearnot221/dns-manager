@@ -92,6 +92,13 @@ describe("unit API boundaries", () => {
     vi.mocked(requireActor).mockResolvedValue({ id: "scoped-admin", email: "scoped@example.com", globalRole: "USER", zoneRoles: { "example.com.": "ADMIN" } });
     expect((await (await requests()).json()).requests[0].canReview).toBe(false);
   });
+  it("accepts valid TTL changes while rejecting invalid TTL, names and types", async () => {
+    vi.mocked(requestUnitChange).mockResolvedValue({ id: "request" });
+    const body = { recordId: "record", expectedHash: "a".repeat(64), purpose: "調整快取", content: "192.0.2.1", ttl: 600 };
+    expect((await change(req(body), ctx)).status).toBe(201);
+    expect(requestUnitChange).toHaveBeenCalledWith(expect.objectContaining({ id: "user" }), "unit-1", body);
+    for (const extra of [{ ttl: 29 }, { ttl: 2147483648 }, { ttl: 30.5 }, { ttl: "600" }, { name: "other" }, { type: "TXT" }]) expect((await change(req({ ...body, ...extra }), ctx)).status).toBe(400);
+  });
   it("validates deletion and inspection inputs, authentication and origin", async () => {
     const deletion = { operation: "DELETE", recordId: "record", expectedHash: "a".repeat(64), purpose: "退役" };
     const inspection = { recordId: "record", expectedHash: "a".repeat(64), note: "確認" };

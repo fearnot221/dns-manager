@@ -34,7 +34,7 @@ export async function GET(request:Request=new Request("http://localhost/api/dns-
     ]);
     const page=rows.slice(0,requestPageSize);
     return Response.json({scope:query.scope,total,counts:{...Object.fromEntries(counts.map(row=>[row.status,(typeof row._count==="object" ? row._count._all??0 : 0)])),ALL:counts.reduce((sum,row)=>sum+(typeof row._count==="object" ? row._count._all??0 : 0),0)},nextCursor:rows.length>requestPageSize?encodeRequestCursor(page.at(-1)!):null,requests:page.map(({expectedRRSet:_snapshot,connectionScope:_scope,...item})=>{
-      void _snapshot;void _scope;return {...item,user:{id:item.user.id,name:item.user.name,studentId:item.user.studentId,email:null},canReview:item.status==="PENDING"&&canReviewDnsRequest(actor,item)};
+      void _snapshot;void _scope;return {...item,originalTtl: item.sourceRecordId && _snapshot && typeof _snapshot === "object" && !Array.isArray(_snapshot) && typeof _snapshot.ttl === "number" ? _snapshot.ttl : null,user:{id:item.user.id,name:item.user.name,studentId:item.user.studentId,email:null},canReview:item.status==="PENDING"&&canReviewDnsRequest(actor,item)};
     })},{headers:{"Cache-Control":"private, no-store"}});
   } catch(error){return apiError(error);}
 }

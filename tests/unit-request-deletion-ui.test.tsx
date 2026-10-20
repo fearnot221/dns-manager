@@ -21,3 +21,12 @@ it("shows application notes in history and the admin review", () => {
   expect(renderToStaticMarkup(createElement(RequestCard, { item: application, admin: true, onReview: () => {} }))).toContain("申請補充說明");
   expect(renderToStaticMarkup(createElement(ReviewDialog, { review: { item: application, decision: "APPROVE" }, onClose: () => {}, onSaved: async () => {} }))).toContain("備註：申請補充說明");
 });
+
+it("shows old and requested TTL in history and review with the shared TTL warning", () => {
+  const update = { ...item, operation: "UPDATE" as const, originalTtl: 300, ttl: 600 };
+  const props = { review: { item: update, decision: "APPROVE" as const }, onClose: () => {}, onSaved: async () => {} };
+  expect(renderToStaticMarkup(createElement(RequestCard, { item: update, admin: true, onReview: () => {} }))).toContain("300 → 600");
+  const html = renderToStaticMarkup(createElement(ReviewDialog, props));
+  expect(html).toContain("300 → 600");
+  expect(html).toContain("TTL 套用到同名稱、同類型的所有解析值");
+});

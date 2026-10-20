@@ -18,6 +18,7 @@ export type DnsRequest = {
   recordType: string;
   content: string;
   ttl: number;
+  originalTtl?: number | null;
   notes?: string | null;
   purpose?: string | null;
   status: RequestStatus;
