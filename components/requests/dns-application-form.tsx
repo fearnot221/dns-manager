@@ -157,7 +157,7 @@ export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREA
       }));
       toast.success("已送出 " + result.count + " 筆 DNS 申請，等待管理員審核");
       dirty.current = false;
-      router.push("/requests");
+      router.push("/requests/history");
       router.refresh();
     } catch (caught) {
       const message = (caught instanceof Error ? caught.message : "無法送出申請，請稍後重試。").replace("Invalid IPv4 address", "請填入有效的 IPv4 位址").replace("Invalid IPv6 address", "請填入有效的 IPv6 位址");
@@ -214,7 +214,7 @@ export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREA
       <p className="application-review-note">{claiming ? "核准後歸屬本單位，解析內容維持不變；已有單位歸屬的紀錄須由管理員處理。" : "核准前不會建立 DNS 紀錄。"}</p>
       {error && errorRecordId === null && <div className="form-error" role="alert"><AlertTriangle size={17} /><p ref={errorTarget} tabIndex={-1}>{error}。填寫內容已保留。</p></div>}
     </div>
-    <div className="modal-foot"><span className="application-count" aria-live="polite">共 {records.length} 筆待送出</span><button className="button" type="button" data-leave-workspace disabled={pending} onClick={() => router.push("/requests")}>返回申請紀錄</button><button type="submit" className="button primary" disabled={pending || loading || Boolean(zoneError) || !zones.length || (!selectedUnit || unitResource.loading || Boolean(unitResource.error) || policyResource.loading || Boolean(policyResource.error))}>{pending && <Loader2 className="spin" size={16} />}{pending ? "送出中…" : "送出 " + records.length + " 筆申請"}</button></div>
+    <div className="modal-foot"><span className="application-count" aria-live="polite">共 {records.length} 筆待送出</span><button className="button" type="button" data-leave-workspace disabled={pending} onClick={() => router.push("/requests/history")}>返回申請紀錄</button><button type="submit" className="button primary" disabled={pending || loading || Boolean(zoneError) || !zones.length || (!selectedUnit || unitResource.loading || Boolean(unitResource.error) || policyResource.loading || Boolean(policyResource.error))}>{pending && <Loader2 className="spin" size={16} />}{pending ? "送出中…" : "送出 " + records.length + " 筆申請"}</button></div>
   </form>{leaveTarget && <Dialog title="要離開尚未送出的申請嗎？" description="離開後，這次填寫的聯絡資料和 DNS 紀錄不會保留。" onClose={() => setLeaveTarget(null)}><div className="modal-foot"><button type="button" className="button" onClick={() => { dirty.current = false; setLeaveTarget(null); leaveTarget.click(); }}>離開並捨棄</button><button type="button" className="button primary" data-dialog-initial-focus onClick={() => setLeaveTarget(null)}>繼續填寫</button></div></Dialog>}</>;
 }
 

@@ -342,6 +342,7 @@ model DnsUnit {
 }
 
 model UnitAllowlist {
+  role UnitRole @default(EDITOR)
   unitId String
   studentId String
   userId String?

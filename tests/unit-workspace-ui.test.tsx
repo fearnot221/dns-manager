@@ -76,3 +76,14 @@ it("explains ownership-only approval and hides TTL editing on claim forms", () =
   expect(html).toContain("核准後歸屬本單位，解析內容維持不變");
   expect(html).not.toContain('aria-label="TTL"');
 });
+
+it("shows personal admin history across units and statuses without review controls", () => {
+  const request = { id: "own", user: { id: "me", email: null }, recordType: "A", content: "192.0.2.1", zoneName: "example.com.", status: "APPROVED", createdAt: "2026-09-29T00:00:00Z", canReview: true, recordName: "own.example.com.", unitId: "other-unit" };
+  vi.mocked(useResource).mockReturnValue({ data: { requests: [request, { ...request, id: "other", user: { id: "other-user", email: null }, recordName: "hidden.example.com." }] }, loading: false, error: "", reload: vi.fn() } as never);
+  const html = inWorkspace(createElement(DnsRequestsWorkbench, { admin: true, actorId: "me", personal: true }), []);
+  expect(html).toContain("own.example.com.");
+  expect(html).not.toContain("hidden.example.com.");
+  expect(html).not.toContain("尚未加入單位");
+  expect(html).not.toContain("request-review-actions");
+  expect(useResource).toHaveBeenLastCalledWith("/api/dns-requests?scope=MINE&status=ALL&q=", expect.anything());
+});

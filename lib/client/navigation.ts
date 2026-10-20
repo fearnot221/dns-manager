@@ -7,16 +7,17 @@ export const navigationCookie = "dns-manager-navigation";
 
 // Presentation only. Server routes remain responsible for authorization.
 export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAdmin = false): NavGroup[] {
-  const items: NavItem[] = [{ href: "/dns", label: "單位 DNS", icon: "dns" }];
+  const items: NavItem[] = [];
   if (unitAdmin || systemAdmin) items.push({ href: "/units", label: "單位管理", icon: "units" });
   if (admin) items.push({ href: "/zones", label: "DNS 管理", icon: "zones", nested: true });
   const applications: NavItem[] = [
+    { href: "/dns", label: "單位 DNS", icon: "dns" },
     { href: "/requests/new", label: "申請 DNS", icon: "apply" },
     { href: "/requests/claim", label: "DNS 歸屬申請", icon: "claim" },
   ];
-  // Administrators review every request on the same route; others see only their own records.
+  // Keep personal history separate from the administrator review queue.
   const review: NavItem[] = admin ? [{ href: "/requests", label: "申請審核", icon: "review" }] : [];
-  if (!admin) applications.push({ href: "/requests", label: "申請紀錄", icon: "requests" });
+  applications.push({ href: admin ? "/requests/history" : "/requests", label: "申請紀錄", icon: "requests" });
   const settings: NavItem[] = [];
   if (systemAdmin) settings.push({ href: "/admin/application-policy", label: "申請規則", icon: "settings" });
   if (admin) settings.push({ href: "/admin/deletion-protection", label: "刪除保護", icon: "protection" });

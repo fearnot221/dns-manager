@@ -32,11 +32,16 @@ describe("unit DNS change isolation", () => {
     expect(unitChangeState({ ...before, ttl: 600 }, before, after)).toBe("CONFLICT");
     expect(unitChangeState(undefined, before, after)).toBe("CONFLICT");
   });
-  it("rejects no-ops, missing old values and merging into another record", () => {
-    expect(() => replaceUnitValue(before, "192.0.2.1", "192.0.2.1")).toThrow();
+  it("rejects missing old values and merging into another record", () => {
+    expect(replaceUnitValue(before, "192.0.2.1", "192.0.2.1")).toEqual(before);
     expect(() => replaceUnitValue(before, "192.0.2.1", "192.0.2.2")).toThrow();
     expect(() => replaceUnitValue(before, "192.0.2.9", "192.0.2.3")).toThrow();
   });
 });
 
 it("offers exactly the two unit roles", () => { expect(unitRoleLabels).toEqual({ EDITOR: "成員", ADMIN: "管理員" }); });
+
+it("supports TTL-only changes without altering values, flags or comments", () => {
+  const before: RRSet = { name: "host.example.com.", type: "A", ttl: 300, comments: [{ content: "keep" }], records: [{ content: "192.0.2.1", disabled: true }, { content: "192.0.2.2", disabled: false }] };
+  expect(replaceUnitValue(before, "192.0.2.1", "192.0.2.1", 600)).toEqual({ ...before, ttl: 600 });
+});

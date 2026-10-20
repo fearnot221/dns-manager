@@ -24,7 +24,7 @@ export function RequestCard({ item, admin, onReview }: { item: DnsRequest; admin
         {item.sourceRecordId && !deleting && <div><dt>原解析內容</dt><dd><code>{item.originalContent}</code></dd></div>}
         <div><dt>完整名稱</dt><dd><code>{item.recordName}</code></dd></div>
         <div><dt>{deleting ? "刪除內容" : "內容"}</dt><dd><code>{item.content}</code></dd></div>
-        <div><dt>TTL</dt><dd>{item.ttl} 秒</dd></div>
+        <div><dt>TTL</dt><dd>{item.originalTtl != null && item.originalTtl !== item.ttl ? `${item.originalTtl} → ${item.ttl}` : item.ttl} 秒</dd></div>
         <div><dt>申請時間</dt><dd>{date.toLocaleString("zh-TW")}</dd></div>
         {admin && <div><dt>申請使用者</dt><dd><PersonName name={item.user.name} studentId={item.user.studentId} /></dd></div>}
         {item.applicantName && <><div><dt>申請人</dt><dd>{item.applicantName}</dd></div><div><dt>申請單位</dt><dd>{item.applicantUnit}</dd></div><div><dt>單位分機</dt><dd>{item.applicantExtension}</dd></div></>}

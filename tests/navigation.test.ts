@@ -11,7 +11,7 @@ describe("workspace navigation", () => {
     expect(workspaceNavigation(false, false, true)[0].items.find((item) => item.href === "/units")?.label).toBe("單位管理");
     expect(items(true, false).some((item) => item.href === "/units")).toBe(false);
     expect(items(true, true).find((item) => item.href === "/units")?.label).toBe("單位管理");
-    expect(workspaceNavigation(false, false).map((group) => group.id)).toEqual(["workflow", "applications", "help"]);
+    expect(workspaceNavigation(false, false).map((group) => group.id)).toEqual(["applications", "help"]);
   });
   it("separates zone management from global administration", () => {
     expect(items(true, false).map((item) => item.href)).toContain("/zones");
@@ -32,7 +32,7 @@ describe("workspace navigation", () => {
   it("separates applying from reviewing", () => {
     expect(workspaceNavigation(true, false).map((group) => group.id)).toEqual(["workflow", "applications", "review", "settings", "help"]);
     expect(workspaceNavigation(true, false).find((group) => group.id === "review")?.items.map((item) => item.label)).toEqual(["申請審核"]);
-    expect(workspaceNavigation(false, false).find((group) => group.id === "applications")?.items.map((item) => item.href)).toEqual(["/requests/new", "/requests/claim", "/requests"]);
+    expect(workspaceNavigation(false, false).find((group) => group.id === "applications")?.items.map((item) => item.href)).toEqual(["/dns", "/requests/new", "/requests/claim", "/requests"]);
   });
   it("keeps group IDs and routes unique", () => {
     const groups = workspaceNavigation(true, true);
@@ -61,4 +61,10 @@ it("exposes user DNS workflows to system administrators", () => {
   const routes = workspaceNavigation(true, true, true).flatMap((group) => group.items).map((item) => item.href);
   expect(routes).toContain("/dns"); expect(routes).toContain("/requests/new"); expect(routes).toContain("/requests/claim");
   expect(routes).toContain("/units"); expect(routes).toContain("/requests");
+});
+
+it("places DNS and personal history under applications for administrators", () => {
+  const groups = workspaceNavigation(true, true);
+  expect(groups.find(group => group.id === "applications")?.items.map(item => item.href)).toEqual(["/dns", "/requests/new", "/requests/claim", "/requests/history"]);
+  expect(groups.find(group => group.id === "workflow")?.items.some(item => item.href === "/dns")).toBe(false);
 });
