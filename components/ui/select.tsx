@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 export type SelectOption = { value: string; label: string; disabled?: boolean };
 type Props = {
@@ -22,6 +22,7 @@ export function Select({ name, value, defaultValue, options, onChange, disabled,
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
   const controlled = value !== undefined;
   const [selected, setSelected] = useState(String(value ?? defaultValue ?? options.find((option) => !option.disabled)?.value ?? ""));
   const [open, setOpen] = useState(false);
@@ -34,6 +35,23 @@ export function Select({ name, value, defaultValue, options, onChange, disabled,
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, []);
+
+  // Top-layer popover escapes dialog overflow and sticky footers; place it next to the trigger with whichever side has more room.
+  useLayoutEffect(() => {
+    const list = menu.current;
+    if (!open || !list) return;
+    const place = () => {
+      const box = trigger.current!.getBoundingClientRect();
+      const below = innerHeight - box.bottom - 12, above = box.top - 12;
+      const up = below < Math.min(list.scrollHeight, 240) && above > below;
+      Object.assign(list.style, { left: `${box.left}px`, width: `${box.width}px`, maxHeight: `${Math.max(120, Math.min(360, up ? above : below))}px`, top: up ? "auto" : `${box.bottom + 4}px`, bottom: up ? `${innerHeight - box.top + 4}px` : "auto" });
+    };
+    if (typeof list.showPopover === "function" && !list.matches(":popover-open")) list.showPopover();
+    place();
+    addEventListener("resize", place);
+    addEventListener("scroll", place, true);
+    return () => { removeEventListener("resize", place); removeEventListener("scroll", place, true); };
+  }, [open]);
 
   useEffect(() => {
     if (open) root.current?.querySelector<HTMLElement>(".custom-select-menu .is-active")?.scrollIntoView({ block: "nearest" });
@@ -69,8 +87,8 @@ export function Select({ name, value, defaultValue, options, onChange, disabled,
   return <div ref={root} className={`custom-select ${open ? "is-open" : ""} ${className}`} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
     {name && <input type="hidden" name={name} value={current} required={required} disabled={disabled} />}
     <button ref={trigger} type="button" className="custom-select-trigger" role="combobox" aria-autocomplete="none" aria-required={required || undefined} aria-activedescendant={open && options[activeIndex] ? `${id}-${activeIndex}` : undefined} aria-haspopup="listbox" aria-expanded={open} aria-controls={id} disabled={disabled} onClick={() => { setOpen((isOpen) => !isOpen); setActiveIndex(Math.max(0, options.findIndex((option) => option.value === current))); }} onKeyDown={keyDown} {...aria}>
-      <span>{currentOption?.label ?? "請選擇"}</span><ChevronDown size={16} aria-hidden="true" />
+      <span className={!currentOption || currentOption.disabled ? "is-placeholder" : undefined}>{currentOption?.label ?? "請選擇"}</span><ChevronDown size={16} aria-hidden="true" />
     </button>
-    {open && <div id={id} className="custom-select-menu" role="listbox" aria-label={aria["aria-label"] ?? "選項"}>{options.map((option, index) => <button type="button" id={`${id}-${index}`} tabIndex={-1} role="option" aria-selected={option.value === current} aria-disabled={option.disabled || undefined} disabled={option.disabled} className={index === activeIndex ? "is-active" : ""} key={option.value} onMouseEnter={() => setActiveIndex(index)} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(option)}><span>{option.label}</span>{option.value === current && <Check size={16} aria-hidden="true" />}</button>)}</div>}
+    {open && <div ref={menu} id={id} popover="manual" className="custom-select-menu" role="listbox" aria-label={aria["aria-label"] ?? "選項"}>{options.map((option, index) => <button type="button" id={`${id}-${index}`} tabIndex={-1} role="option" aria-selected={option.value === current} aria-disabled={option.disabled || undefined} disabled={option.disabled} className={index === activeIndex ? "is-active" : ""} key={option.value} onMouseEnter={() => setActiveIndex(index)} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(option)}><span>{option.label}</span>{option.value === current && !option.disabled && <Check size={16} aria-hidden="true" />}</button>)}</div>}
   </div>;
 }
