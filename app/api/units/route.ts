@@ -5,10 +5,11 @@ import { assertSameOrigin } from "@/lib/api/security";
 import { auditMutation } from "@/lib/audit/mutation";
 import { createUnit, listUnits } from "@/lib/units/service";
 import { isGlobalAdmin } from "@/lib/auth/owner";
+import { unitDepartments } from "@/lib/units/policy";
 import { ApiError } from "@/lib/api/respond";
 
 const schema =
-  z.object({ action: z.literal("create"), name: z.string().trim().min(1).max(100), note: z.string().trim().max(2000).default(""), managerStudentId: z.string().trim().max(100).optional() }).strict();
+  z.object({ action: z.literal("create"), name: z.string().trim().min(1).max(100), note: z.string().trim().max(2000).default(""), department: z.enum(unitDepartments), managerStudentId: z.string().trim().max(100).optional() }).strict();
 export async function GET() {
   try { return Response.json({ units: await listUnits(await requireActor()) }, { headers: { "Cache-Control": "no-store" } }); }
   catch (error) { return apiError(error); }
@@ -19,7 +20,7 @@ export const POST = auditMutation(async (request: Request) => {
     const actor = await requireActor();
     const input = schema.parse(await request.json());
     if (input.action === "create" && !isGlobalAdmin(actor)) throw new ApiError("只有系統管理員可以建立單位。", 403);
-    const result = await createUnit(actor, input.name, input.managerStudentId, input.note);
+    const result = await createUnit(actor, input.name, input.managerStudentId, input.note, input.department);
     return Response.json(result, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) { return apiError(error); }
 });

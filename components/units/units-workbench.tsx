@@ -13,7 +13,7 @@ import { Building2, Plus, RefreshCw, Search, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, jsonRequest } from "@/lib/client/api";
 import { useResource } from "@/lib/client/use-resource";
-import { unitRoleLabels, type UnitRole } from "@/lib/units/policy";
+import { unitDepartments, unitRoleLabels, type UnitRole } from "@/lib/units/policy";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState, LoadingPanel, PageHeader, SubmitButton } from "@/components/ui";
 import { ScrollRegion } from "@/components/ui/scroll-region";
@@ -21,10 +21,11 @@ import { Select } from "@/components/ui/select";
 
 type UnitStatus = "PENDING" | "APPROVED" | "REJECTED";
 const statusLabels = { PENDING: "待啟用", APPROVED: "啟用中", REJECTED: "已停用" };
-type Unit = { status: UnitStatus; id: string; name: string; role: UnitRole; memberCount: number };
+const departmentOptions = unitDepartments.map((value) => ({ value, label: value }));
+type Unit = { status: UnitStatus; id: string; name: string; department: string | null; role: UnitRole; memberCount: number };
 type UnitRecord = { id: string; zoneName: string; recordName: string; recordType: string; content: string; ttl: number; disabled: boolean; purpose: string; expectedHash: string; expectedUpdatedAt: string; applicantName?: string; applicantEmail?: string; applicantExtension?: string; applicantUnit?: string; inspections?: (InspectionEventSnapshot & { id: string; inspectedAt: string; inspectorName: string; note: string })[] };
 type Member = { userId: string; label: string; studentId?: string | null; role: UnitRole; disabled: boolean };
-type Detail = { allowlist: { studentId: string; userId: string | null; role?: UnitRole }[]; unit: { id: string; name: string; note?: string; status: UnitStatus }; systemAdmin: boolean; canApply: boolean; role: UnitRole; members: Member[]; records: UnitRecord[]; recordsError: string };
+type Detail = { allowlist: { studentId: string; userId: string | null; role?: UnitRole }[]; unit: { id: string; name: string; note?: string; department?: string | null; status: UnitStatus }; systemAdmin: boolean; canApply: boolean; role: UnitRole; members: Member[]; records: UnitRecord[]; recordsError: string };
 
 export function UnitsWorkbench({ systemAdmin, mode = "manage" }: { systemAdmin: boolean; mode?: "dns" | "manage" }) {
   const workspace = useUnitWorkspace();
@@ -39,15 +40,15 @@ export function UnitsWorkbench({ systemAdmin, mode = "manage" }: { systemAdmin: 
     {loading && !data && <LoadingPanel label="正在載入單位…" />}
     {error && <ResourceError message={error} retry={reload} />}
     {!!data && !error && !units.length && <div className="card"><EmptyState title={mode === "manage" ? "尚無可管理的單位" : "尚未加入單位"} description={mode === "manage" && systemAdmin ? "可先建立單位，之後再透過學號指定管理人或新增使用者。" : mode === "manage" ? "目前單位未授予管理權限。若你管理其他單位，請切換至該單位的工作區。" : "請將學號提供給單位管理員，由管理員將你加入單位。"} /></div>}
-    {!error && active && <div className={units.length > 1 ? "unit-layout" : "unit-layout unit-layout-single"}>{units.length > 1 && <nav className="card unit-selector" aria-label="選擇管理單位">{units.map((unit) => <button key={unit.id} type="button" aria-current={active.id === unit.id ? "true" : undefined} onClick={() => setSelected(unit.id)}><Building2 size={18} aria-hidden="true" /><span><strong>{unit.name}</strong><small>{statusLabels[unit.status]} · {unit.memberCount} 位成員</small></span></button>)}</nav>}<UnitDetail key={active.id} id={active.id} mode={mode} onMembershipChanged={async () => { await reload(); router.refresh(); }} /></div>}
+    {!error && active && <div className={units.length > 1 ? "unit-layout" : "unit-layout unit-layout-single"}>{units.length > 1 && <nav className="card unit-selector" aria-label="選擇管理單位">{units.map((unit) => <button key={unit.id} type="button" aria-current={active.id === unit.id ? "true" : undefined} onClick={() => setSelected(unit.id)}><Building2 size={18} aria-hidden="true" /><span><strong>{unit.name}</strong><small>{unit.department ?? "未設定系所"} · {statusLabels[unit.status]} · {unit.memberCount} 位成員</small></span></button>)}</nav>}<UnitDetail key={active.id} id={active.id} mode={mode} onMembershipChanged={async () => { await reload(); router.refresh(); }} /></div>}
     {creating && <UnitEntryDialog onClose={() => setCreating(false)} onSaved={async (result) => { setCreating(false); setSelected(result.unit.id); toast.success("已建立單位"); await reload(); router.refresh(); }} />}
   </>;
 }
 
 function UnitEntryDialog({ onClose, onSaved }: { onClose: () => void; onSaved: (result: { unit: { id: string; name: string } }) => Promise<void> }) {
   return <ActionDialog title="建立單位" description="可透過學號預先指定管理人，首次登入後自動取得管理權限。" label="建立單位" onClose={onClose} submit={async (form) => {
-    const result = await apiRequest<{ unit: { id: string; name: string } }>("/api/units", jsonRequest("POST", { action: "create", name: form.get("name"), managerStudentId: form.get("managerStudentId"), note: form.get("note") })); await onSaved(result);
-  }}>{(error, errorId) => <><label>單位名稱<input name="name" required maxLength={100} aria-invalid={!!error} aria-describedby={error ? errorId : undefined} /></label><label>單位備註（選填）<textarea name="note" maxLength={2000} rows={3} aria-invalid={!!error} aria-describedby={error ? errorId : undefined} /></label><label>管理人學號（選填）<input name="managerStudentId" maxLength={100} autoComplete="off" spellCheck={false} aria-invalid={!!error} aria-describedby={error ? errorId : undefined} /></label></>}</ActionDialog>;
+    const result = await apiRequest<{ unit: { id: string; name: string } }>("/api/units", jsonRequest("POST", { action: "create", name: form.get("name"), managerStudentId: form.get("managerStudentId"), note: form.get("note"), department: form.get("department") })); await onSaved(result);
+  }}>{(error, errorId) => <><label>單位名稱<input name="name" required maxLength={100} aria-invalid={!!error} aria-describedby={error ? errorId : undefined} /></label><label>所屬系所／組別<Select name="department" aria-label="所屬系所／組別" options={departmentOptions} /></label><label>單位備註（選填）<textarea name="note" maxLength={2000} rows={3} aria-invalid={!!error} aria-describedby={error ? errorId : undefined} /></label><label>管理人學號（選填）<input name="managerStudentId" maxLength={100} autoComplete="off" spellCheck={false} aria-invalid={!!error} aria-describedby={error ? errorId : undefined} /></label></>}</ActionDialog>;
 }
 
 function UnitDetail({ id, mode, onMembershipChanged }: { id: string; mode: "dns" | "manage"; onMembershipChanged: () => Promise<void> }) {
@@ -58,7 +59,7 @@ function UnitDetail({ id, mode, onMembershipChanged }: { id: string; mode: "dns"
   const [deletion, setDeletion] = useState<UnitRecord | null>(null);
   const [inspectionDrafts] = useState<FormDrafts>(() => new Map());
   const [inspection, setInspection] = useState<UnitRecord | null>(null);
-  const [unitAction, setUnitAction] = useState<"rename" | "delete" | null>(null);
+  const [unitAction, setUnitAction] = useState<"rename" | "department" | "delete" | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [manage, setManage] = useState<Member | null>(null);
   const [allowlist, setAllowlist] = useState<{ studentId?: string } | null>(null);
@@ -66,10 +67,14 @@ function UnitDetail({ id, mode, onMembershipChanged }: { id: string; mode: "dns"
   if (error || !data) return <section className="card unit-panel"><p className="form-error" role="alert">{error || "找不到單位"}</p><button className="button" onClick={() => void reload()}>重新載入</button></section>;
   const assignManagerDialog = mode === "manage" && assigning && <AssignManagerDialog unitId={id} onClose={() => setAssigning(false)} onSaved={async () => { setAssigning(false); toast.success("已指定單位管理人"); await onMembershipChanged(); await reload(); }} />;
   const manageUnit = mode === "manage" && data.systemAdmin;
-  const unitControls = manageUnit && <div className="unit-actions"><button className="button" onClick={() => setUnitAction("rename")}>修改單位名稱</button><button className="button danger" disabled={data.members.length > 0} aria-describedby={data.members.length > 0 ? `unit-delete-help-${id}` : undefined} onClick={() => setUnitAction("delete")}>刪除單位</button></div>;
+  const unitControls = manageUnit && <div className="unit-actions"><button className="button" onClick={() => setUnitAction("rename")}>修改單位名稱</button><button className="button" onClick={() => setUnitAction("department")}>設定系所組別</button><button className="button danger" disabled={data.members.length > 0} aria-describedby={data.members.length > 0 ? `unit-delete-help-${id}` : undefined} onClick={() => setUnitAction("delete")}>刪除單位</button></div>;
   const pending = data.allowlist.filter((entry) => !entry.userId);
-  const summary = (meta: string, actions: React.ReactNode, extra?: React.ReactNode) => <div className="card unit-panel unit-summary"><div className="unit-heading"><div><h2><Building2 size={18} aria-hidden="true" />{data.unit.name}</h2><p>{meta}</p></div>{actions}</div>{data.unit.note && <p className="unit-note unit-wrap">{data.unit.note}</p>}{manageUnit && data.members.length > 0 && <p id={`unit-delete-help-${id}`} className="field-help">需先移出所有成員，且單位沒有 DNS 解析值與待審核申請，才能刪除。</p>}{extra}</div>;
-  const unitDialog = unitAction && <ActionDialog title={unitAction === "rename" ? "修改單位名稱" : "刪除單位"} description={unitAction === "rename" ? "更新單位及目前 DNS 歸屬資料的名稱，歷史申請保留原名稱。" : `確定刪除「${data.unit.name}」？已結案申請及清查歷史會保留。`} label={unitAction === "rename" ? "儲存名稱" : "確認刪除"} tone={unitAction === "delete" ? "danger" : "primary"} onClose={() => setUnitAction(null)} submit={async (form) => {
+  const summary = (meta: string, actions: React.ReactNode, extra?: React.ReactNode) => <div className="card unit-panel unit-summary"><div className="unit-heading"><div><h2><Building2 size={18} aria-hidden="true" />{data.unit.name}</h2><p>{data.unit.department ?? "未設定系所"} · {meta}</p></div>{actions}</div>{data.unit.note && <p className="unit-note unit-wrap">{data.unit.note}</p>}{manageUnit && data.members.length > 0 && <p id={`unit-delete-help-${id}`} className="field-help">需先移出所有成員，且單位沒有 DNS 解析值與待審核申請，才能刪除。</p>}{extra}</div>;
+  const unitDialog = unitAction === "department" ? <ActionDialog title="設定系所組別" label="儲存系所組別" onClose={() => setUnitAction(null)} submit={async (form) => {
+    await apiRequest(`/api/units/${encodeURIComponent(id)}`, jsonRequest("PATCH", { action: "department", department: form.get("department") }));
+    setUnitAction(null); toast.success("系所組別已更新");
+    await onMembershipChanged(); await reload();
+  }}><label>所屬系所／組別<Select name="department" aria-label="所屬系所／組別" defaultValue={data.unit.department ?? undefined} options={departmentOptions} /></label></ActionDialog> : unitAction && <ActionDialog title={unitAction === "rename" ? "修改單位名稱" : "刪除單位"} description={unitAction === "rename" ? "更新單位及目前 DNS 歸屬資料的名稱，歷史申請保留原名稱。" : `確定刪除「${data.unit.name}」？已結案申請及清查歷史會保留。`} label={unitAction === "rename" ? "儲存名稱" : "確認刪除"} tone={unitAction === "delete" ? "danger" : "primary"} onClose={() => setUnitAction(null)} submit={async (form) => {
     await apiRequest(`/api/units/${encodeURIComponent(id)}`, jsonRequest("PATCH", unitAction === "rename" ? { action: "rename", name: form.get("name") } : { action: "delete" }));
     const renamed = unitAction === "rename";
     setUnitAction(null); toast.success(renamed ? "單位名稱已更新" : "單位已刪除");
