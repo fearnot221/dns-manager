@@ -25,6 +25,7 @@
 .filter-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 .search-clear { display: grid; place-items: center; flex-shrink: 0; min-width: 30px; min-height: 30px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); padding: 3px; }
 .search-clear:hover:not(:disabled) { color: var(--ink); background: var(--surface-soft); }
+.filter-input:has(.search-clear) input::-webkit-search-cancel-button { display: none; }
 
 /* Lists refresh in place: the previous rows stay readable while new data loads. */
 .is-refreshing { opacity: .6; transition: opacity .2s var(--ease) .15s; }
