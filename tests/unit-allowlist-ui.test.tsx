@@ -52,3 +52,14 @@ it("never offers approval or rejection for legacy inactive units", () => {
   expect(html).toContain("建立單位"); expect(html).toContain("未啟用");
   expect(html).not.toContain("核准單位"); expect(html).not.toContain("退回單位"); expect(html).not.toContain("待系統管理員審核");
 });
+
+it("groups the unit selector by 系所 then 組別 in policy order, unassigned last", () => {
+  const unit = (id: string, name: string, department: string | null) => ({ id, name, department, status: "APPROVED", role: "ADMIN", memberCount: 0 });
+  vi.mocked(useResource).mockImplementation((url) => ({ loading: false, error: "", reload: vi.fn(), data: url === "/api/units" ? { units: [unit("a", "未分組單位", null), unit("b", "電子實驗室", "電機系／電子組"), unit("c", "資通實驗室", "通訊系／資通組"), unit("d", "電通實驗室", "通訊系／電通組")] } : { unit: { id: "a", name: "未分組單位", status: "APPROVED" }, role: "ADMIN", canApply: false, systemAdmin: true, members: [], records: [], recordsError: "", allowlist: [] } }) as never);
+  const html = renderToStaticMarkup(createElement(UnitsWorkbench, { systemAdmin: true }));
+  const nav = html.slice(html.indexOf('aria-label="選擇管理單位"'), html.indexOf("</nav>"));
+  const order = ["<h3>通訊系</h3>", "資通組", "資通實驗室", "電通組", "電通實驗室", "<h3>電機系</h3>", "電子組", "電子實驗室", "<h3>未設定系所</h3>", "未分組單位"].map((text) => nav.indexOf(text));
+  expect(order.every((index) => index >= 0)).toBe(true);
+  expect(order).toEqual([...order].sort((a, b) => a - b));
+  expect(nav).toContain('aria-label="搜尋單位"'); expect(nav).toContain('aria-label="篩選系所"');
+});

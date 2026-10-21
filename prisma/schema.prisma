@@ -328,6 +328,7 @@ model DnsUnit {
   extension String @default("")
   advisor String @default("")
   note String @default("") @db.Text
+  department String?
   status UnitStatus @default(APPROVED)
   reviewedBy String?
   reviewedAt DateTime?

@@ -91,7 +91,7 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
   });
   it("stores unit profiles, limits edits to managers, and audits changes", async () => {
     const profile = { location: "E1-213", extension: "01234", advisor: "王老師" };
-    const created = await createUnit(admin, `profile-${crypto.randomUUID()}`, creator.studentId!, "", profile);
+    const created = await createUnit(admin, `profile-${crypto.randomUUID()}`, creator.studentId!, "", "電機系／系辦", profile);
     expect(created.unit).toMatchObject(profile);
     const id = created.unit.id;
     await manageAllowlist(creator, id, editor.studentId!);

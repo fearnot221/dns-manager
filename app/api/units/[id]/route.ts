@@ -8,12 +8,14 @@ import { assignUnitManager, manageUnit, editUnit, updateUnitProfile } from "@/li
 import { isGlobalAdmin } from "@/lib/auth/owner";
 import { ApiError } from "@/lib/api/respond";
 import { unitDetail } from "@/lib/units/records";
+import { unitDepartments } from "@/lib/units/policy";
 
 import { unitProfileFields } from "@/lib/units/profile";
 
 const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("profile"), ...unitProfileFields }).strict(),
   z.object({ action: z.literal("rename"), name: z.string().trim().min(1).max(100) }).strict(),
+  z.object({ action: z.literal("department"), department: z.enum(unitDepartments) }).strict(),
   z.object({ action: z.literal("delete") }).strict(),
   z.object({ action: z.literal("assign-manager"), studentId: z.string().trim().min(1).max(100) }).strict(),
   z.object({ action: z.literal("allowlist"), studentId: z.string().trim().min(1).max(100), remove: z.boolean().optional() }).strict(),
@@ -34,7 +36,7 @@ export const PATCH = auditMutation(async (request: Request, { params }: Context)
       const { location, extension, advisor } = input;
       return Response.json(await updateUnitProfile(actor, id, { location, extension, advisor }), { headers: { "Cache-Control": "no-store" } });
     }
-    if (input.action === "rename" || input.action === "delete") {
+    if (input.action === "rename" || input.action === "department" || input.action === "delete") {
       if (!isGlobalAdmin(actor)) throw new ApiError("只有系統管理員可以修改或刪除單位。", 403);
       return Response.json(await editUnit(actor, id, input), { headers: { "Cache-Control": "no-store" } });
     }
