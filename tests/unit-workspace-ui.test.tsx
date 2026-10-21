@@ -87,3 +87,14 @@ it("shows personal admin history across units and statuses without review contro
   expect(html).not.toContain("request-review-actions");
   expect(useResource).toHaveBeenLastCalledWith("/api/dns-requests?scope=MINE&status=ALL&q=", expect.anything());
 });
+
+it.each(["CREATE", "CLAIM"] as const)("prefills the signed-in name and active unit extension for %s", (operation) => {
+  vi.mocked(useResource).mockImplementation((url) => ({ data: url === "/api/units" ? { units: [{ ...unit, extension: "01234", canApply: true }, { ...unit, id: "two", extension: "5678", canApply: true }] } : url === "/api/application-policy" ? { policy: { adminOnlyTypes: [], ownership: "UNIT_ONLY" }, admin: false } : { zones: [{ name: "example.com." }] }, loading: false, error: "", reload: vi.fn() }) as never);
+  const html = inWorkspace(createElement(DnsApplicationForm, { operation, applicantName: "登入者姓名" }));
+  expect(html.match(/<input[^>]*name="applicantName"[^>]*>/)?.[0]).toContain('value="登入者姓名"');
+  const extension = html.match(/<input[^>]*name="applicantExtension"[^>]*>/)?.[0];
+  expect(extension).toContain('value="01234"');
+  expect(extension).not.toContain('readOnly');
+  const other = inWorkspace(createElement(DnsApplicationForm, { operation }), [{ ...unit, id: "two" }]);
+  expect(other.match(/<input[^>]*name="applicantExtension"[^>]*>/)?.[0]).toContain('value="5678"');
+});

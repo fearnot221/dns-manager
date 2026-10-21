@@ -1,4 +1,5 @@
 import "server-only";
+import { unitProfileSchema, type UnitProfile } from "./profile";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db/client";
 import { ApiError } from "@/lib/api/respond";
@@ -40,8 +41,8 @@ export async function unitAudit(tx: Prisma.TransactionClient, actor: Actor, acti
 }
 export async function listUnits(actor: Actor) {
   requireUnitDatabase();
-  const units = await db.dnsUnit.findMany({ where: isGlobalAdmin(actor) ? {} : { members: { some: { userId: actor.id } } }, select: { id: true, name: true, department: true, status: true, members: { where: { userId: actor.id }, select: { role: true } }, _count: { select: { members: true } } }, orderBy: { name: "asc" } });
-  return units.map((unit) => ({ id: unit.id, name: unit.name, department: unit.department, status: unit.status, canApply: unit.status === "APPROVED" && canSubmitUnitRequest(unit.members[0]?.role), role: isGlobalAdmin(actor) ? "ADMIN" : unit.members[0].role, memberCount: unit._count.members }));
+  const units = await db.dnsUnit.findMany({ where: isGlobalAdmin(actor) ? {} : { members: { some: { userId: actor.id } } }, select: { id: true, name: true, department: true, extension: true, status: true, members: { where: { userId: actor.id }, select: { role: true } }, _count: { select: { members: true } } }, orderBy: { name: "asc" } });
+  return units.map((unit) => ({ id: unit.id, name: unit.name, department: unit.department, extension: unit.extension, status: unit.status, canApply: unit.status === "APPROVED" && canSubmitUnitRequest(unit.members[0]?.role), role: isGlobalAdmin(actor) ? "ADMIN" : unit.members[0].role, memberCount: unit._count.members }));
 }
 function requireUnitCreator(actor: Actor) {
   if (!isGlobalAdmin(actor)) throw new ApiError("只有系統管理員可以建立單位或透過學號指定管理人。", 403);
@@ -68,9 +69,10 @@ async function lockManagerAndActor(tx: Prisma.TransactionClient, actor: Actor, u
   if (!await isCurrentUnitAdmin(tx, actor)) throw new ApiError("只有系統管理員可以建立單位或指定管理人。", 403);
   if (await resolveUnitManager(tx, studentId) !== userId) throw new ApiError("管理人的學號資料已更新，請重新確認。", 409);
 }
-export async function createUnit(actor: Actor, name: string, managerStudentId?: string, note = "", department: string | null = null) {
+export async function createUnit(actor: Actor, name: string, managerStudentId?: string, note = "", department: string | null = null, profile?: UnitProfile) {
   requireUnitCreator(actor);
   requireUnitDatabase();
+  const details = unitProfileSchema.parse(profile ?? {});
   try {
     const unit = await db.$transaction(async (tx) => {
       const studentId = managerStudentId?.trim() || null;
@@ -80,7 +82,7 @@ export async function createUnit(actor: Actor, name: string, managerStudentId?: 
         await lockActiveUser(tx, actor.id);
         if (!await isCurrentUnitAdmin(tx, actor)) throw new ApiError("只有系統管理員可以建立單位。", 403);
       }
-      const unit = await tx.dnsUnit.create({ data: { name, note, department, status: "APPROVED", ...(studentId ? { allowlist: { create: { studentId, userId: managerId, role: "ADMIN" as const } }, ...(managerId ? { members: { create: { userId: managerId, role: "ADMIN" as const } } } : {}) } : {}) }, select: { id: true, name: true, note: true, department: true, status: true } });
+      const unit = await tx.dnsUnit.create({ data: { name, note, department, ...details, status: "APPROVED", ...(studentId ? { allowlist: { create: { studentId, userId: managerId, role: "ADMIN" as const } }, ...(managerId ? { members: { create: { userId: managerId, role: "ADMIN" as const } } } : {}) } : {}) }, select: { id: true, name: true, note: true, department: true, location: true, extension: true, advisor: true, status: true } });
       await unitAudit(tx, actor, "CREATE_DNS_UNIT", null, { ...unit, creatorId: actor.id, managerId, managerStudentId: studentId });
       return unit;
     });
@@ -186,4 +188,20 @@ export async function editUnit(actor: Actor, id: string, input: { action: "renam
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") throw new ApiError("此單位仍有資料關聯，無法刪除。", 409);
     throw error;
   }
+}
+
+export async function updateUnitProfile(actor: Actor, id: string, input: UnitProfile) {
+  requireUnitDatabase();
+  const profile = unitProfileSchema.parse(input);
+  return db.$transaction(async (tx) => {
+    await lockActiveUser(tx, actor.id);
+    if (isGlobalAdmin(actor) && !await isCurrentUnitAdmin(tx, actor)) throw new ApiError("系統管理員權限已變更，請重新登入。", 403);
+    await lockUnit(tx, id);
+    await unitAccess(actor, id, "manage", tx);
+    const select = { id: true, location: true, extension: true, advisor: true } as const;
+    const before = await tx.dnsUnit.findUniqueOrThrow({ where: { id }, select });
+    const after = await tx.dnsUnit.update({ where: { id }, data: profile, select });
+    await unitAudit(tx, actor, "UPDATE_DNS_UNIT_PROFILE", before, after);
+    return { saved: true };
+  });
 }

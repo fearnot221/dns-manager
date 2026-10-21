@@ -3,13 +3,13 @@ vi.mock("@/lib/units/allowlist", () => ({ manageAllowlist: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class AuthError extends Error {} }));
 vi.mock("@/lib/audit/service", () => ({ logAuditEvent: vi.fn(async () => undefined) }));
-vi.mock("@/lib/units/service", () => ({ createUnit: vi.fn(), listUnits: vi.fn(), manageUnit: vi.fn(), assignUnitManager: vi.fn(), editUnit: vi.fn() }));
+vi.mock("@/lib/units/service", () => ({ createUnit: vi.fn(), listUnits: vi.fn(), manageUnit: vi.fn(), assignUnitManager: vi.fn(), editUnit: vi.fn(), updateUnitProfile: vi.fn() }));
 vi.mock("@/lib/units/records", () => ({ unitDetail: vi.fn(), requestUnitChange: vi.fn(), inspectUnitRecord: vi.fn() }));
 vi.mock("@/lib/requests/dev-store", () => ({ isDevRequestStore: () => false }));
 vi.mock("@/lib/db/client", () => ({ db: { $transaction:vi.fn(async (operations)=>Promise.all(operations)), dnsRecordRequest: { findMany: vi.fn(), count:vi.fn(async()=>1), groupBy:vi.fn(async()=>[{status:"PENDING",_count:{_all:1}}]) } } }));
 import { requireActor, AuthError } from "@/lib/auth/session";
 import { manageAllowlist } from "@/lib/units/allowlist";
-import { createUnit, listUnits, manageUnit, assignUnitManager, editUnit } from "@/lib/units/service";
+import { createUnit, listUnits, manageUnit, assignUnitManager, editUnit, updateUnitProfile } from "@/lib/units/service";
 import { inspectUnitRecord, requestUnitChange } from "@/lib/units/records";
 import { GET, POST } from "@/app/api/units/route";
 import { PATCH } from "@/app/api/units/[id]/route";
@@ -56,7 +56,7 @@ describe("unit API boundaries", () => {
   it("does not cache unit discovery or one-time invitations", async () => {
     expect((await GET()).headers.get("Cache-Control")).toBe("no-store");
     vi.mocked(requireActor).mockResolvedValue({ id: "admin", email: "admin@example.com", globalRole: "ADMIN", zoneRoles: {} });
-    vi.mocked(createUnit).mockResolvedValue({ unit: { id: "unit-1", name: "Lab", note: "", department: "電機系／系辦", status: "APPROVED" } });
+    vi.mocked(createUnit).mockResolvedValue({ unit: { id: "unit-1", name: "Lab", note: "", department: "電機系／系辦", location: "", extension: "", advisor: "", status: "APPROVED" } });
     expect((await POST(req({ action: "create", name: "Lab", department: "電機系／系辦", managerStudentId: "115000001" }))).headers.get("Cache-Control")).toBe("no-store");
   });
   it("rejects ordinary and zone admin creation and student-id assignment before service calls", async () => {
@@ -181,9 +181,9 @@ it("accepts member/admin roles and removal but rejects the retired viewer role",
 
 it.each([undefined, "", "   "])("allows system admins to create without a manager (%s)", async (managerStudentId) => {
   vi.mocked(requireActor).mockResolvedValue({ id: "admin", email: "admin@example.com", globalRole: "ADMIN", zoneRoles: {} });
-  vi.mocked(createUnit).mockResolvedValue({ unit: { id: "unit-1", name: "Lab", note: "", department: "電機系／系辦", status: "APPROVED" } });
+  vi.mocked(createUnit).mockResolvedValue({ unit: { id: "unit-1", name: "Lab", note: "", department: "電機系／系辦", location: "", extension: "", advisor: "", status: "APPROVED" } });
   expect((await POST(req({ action: "create", name: "Lab", department: "電機系／系辦", managerStudentId }))).status).toBe(201);
-  expect(createUnit).toHaveBeenCalledWith(expect.objectContaining({ id: "admin" }), "Lab", managerStudentId?.trim(), "", "電機系／系辦");
+  expect(createUnit).toHaveBeenCalledWith(expect.objectContaining({ id: "admin" }), "Lab", managerStudentId?.trim(), "", "電機系／系辦", { location: "", extension: "", advisor: "" });
   vi.mocked(requireActor).mockResolvedValue({ id: "user", email: "user@example.com", globalRole: "USER", zoneRoles: {} });
   expect((await POST(req({ action: "create", name: "Lab", department: "電機系／系辦", managerStudentId }))).status).toBe(403);
 });
@@ -193,5 +193,21 @@ it("validates and forwards optional unit notes", async () => {
   expect((await POST(req({ action: "create", name: "Lab", department: "電機系／系辦", note: "x".repeat(2001) }))).status).toBe(400);
   expect(createUnit).not.toHaveBeenCalled();
   expect((await POST(req({ action: "create", name: "Lab", department: "電機系／系辦", note: "  聯絡窗口與用途  " }))).status).toBe(201);
-  expect(createUnit).toHaveBeenCalledWith(expect.anything(), "Lab", undefined, "聯絡窗口與用途", "電機系／系辦");
+  expect(createUnit).toHaveBeenCalledWith(expect.anything(), "Lab", undefined, "聯絡窗口與用途", "電機系／系辦", { location: "", extension: "", advisor: "" });
+});
+
+it("validates and forwards unit profiles on create and update", async () => {
+  vi.mocked(updateUnitProfile).mockResolvedValue({ saved: true });
+  const profile = { location: " E1-213 ", extension: " 01234 ", advisor: " 王老師 " };
+  vi.mocked(requireActor).mockResolvedValue({ id: "admin", email: "admin@example.com", globalRole: "ADMIN", zoneRoles: {} });
+  expect((await POST(req({ action: "create", name: "Lab", department: "電機系／系辦", ...profile }))).status).toBe(201);
+  expect(createUnit).toHaveBeenLastCalledWith(expect.anything(), "Lab", undefined, "", "電機系／系辦", { location: "E1-213", extension: "01234", advisor: "王老師" });
+  expect((await PATCH(req({ action: "profile", ...profile }), ctx)).status).toBe(200);
+  expect(updateUnitProfile).toHaveBeenLastCalledWith(expect.anything(), "unit-1", { location: "E1-213", extension: "01234", advisor: "王老師" });
+  vi.mocked(updateUnitProfile).mockClear();
+  for (const invalid of [{ extension: "abc" }, { extension: "1".repeat(11) }, { location: "x".repeat(101) }, { advisor: "x".repeat(101) }, { role: "ADMIN" }]) {
+    expect((await PATCH(req({ action: "profile", ...invalid }), ctx)).status).toBe(400);
+  }
+  expect((await PATCH(req({ action: "profile", ...profile }, "https://evil.invalid"), ctx)).status).toBe(403);
+  expect(updateUnitProfile).not.toHaveBeenCalled();
 });
