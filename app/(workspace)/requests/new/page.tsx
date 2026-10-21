@@ -5,10 +5,10 @@ import { requireActor } from "@/lib/auth/session";
 export const metadata = { title: "申請 DNS" };
 
 export default async function NewDnsRequestPage() {
-  await requireActor();
+  const actor = await requireActor();
 
   return <div className="content application-content">
     <PageHeader title="申請 DNS" />
-    <DnsApplicationForm />
+    <DnsApplicationForm applicantName={actor.name ?? ""} />
   </div>;
 }

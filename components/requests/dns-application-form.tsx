@@ -32,7 +32,7 @@ const contentParts = (d: string): Partial<Record<RecordType, ContentPart[]>> => 
   CAA: [{ label: "旗標", placeholder: "0", numeric: true }, { label: "標籤", placeholder: "issue", options: ["issue", "issuewild", "iodef"] }, { label: "值", placeholder: "CA 的網域" }],
 });
 
-export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREATE" | "CLAIM" }) {
+export function DnsApplicationForm({ operation = "CREATE", applicantName = "" }: { operation?: "CREATE" | "CLAIM"; applicantName?: string }) {
   const claiming = operation === "CLAIM";
   const router = useRouter();
   const workspace = useUnitWorkspace();
@@ -42,7 +42,7 @@ export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREA
   const exampleDomain = (record: DraftRecord) => (record.zoneName && zoneCategory(record.zoneName) === "forward" ? record.zoneName : zonesFor("A")[0]?.name ?? "你的網域").replace(/\.$/, "");
   const policyResource = useResource<{ policy: ApplicationPolicy; admin: boolean }>("/api/application-policy");
   const requestTypes: RecordType[] = policyResource.data ? availableTypes(policyResource.data.policy, policyResource.data.admin) : [];
-  const unitResource = useResource<{ units: { id: string; name: string; role: UnitRole; canApply: boolean }[] }>("/api/units");
+  const unitResource = useResource<{ units: { id: string; name: string; extension?: string; role: UnitRole; canApply: boolean }[] }>("/api/units");
   const unitId = workspace.active?.id ?? "";
   const eligibleUnits = unitResource.data?.units.filter((unit) => unit.canApply) ?? [];
   const selectedUnit = eligibleUnits.find((unit) => unit.id === unitId);
@@ -180,10 +180,10 @@ export function DnsApplicationForm({ operation = "CREATE" }: { operation?: "CREA
         <p className="application-help">本次申請歸屬「{selectedUnit.name}」。</p>
         <div className="applicant-grid">
           <ContactPicker />
-          <label>申請人姓名<input name="applicantName" autoComplete="name" required maxLength={100} placeholder="請填寫姓名" /></label>
+          <label>申請人姓名<input name="applicantName" defaultValue={applicantName} autoComplete="name" required maxLength={100} placeholder="請填寫姓名" /></label>
           <label>申請單位<input value={selectedUnit?.name || "請先選擇單位"} readOnly /></label>
           <label>申請人電子郵件<input name="applicantEmail" type="email" required autoComplete="email" maxLength={320} placeholder="可聯絡的電子郵件" /></label>
-          <label>單位分機<input name="applicantExtension" inputMode="numeric" autoComplete="tel-extension" required pattern="[0-9]{1,10}" maxLength={10} title="請填入 1–10 位數字" placeholder="例如 1234" /></label>
+          <label>單位分機<input key={selectedUnit.id} defaultValue={selectedUnit.extension ?? ""} name="applicantExtension" inputMode="numeric" autoComplete="tel-extension" required pattern="[0-9]{1,10}" maxLength={10} title="請填入 1–10 位數字" placeholder="例如 1234" /></label>
         </div>
       </fieldset>
 
