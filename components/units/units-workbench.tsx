@@ -22,7 +22,7 @@ import { Select } from "@/components/ui/select";
 type UnitStatus = "PENDING" | "APPROVED" | "REJECTED";
 const statusLabels = { PENDING: "待啟用", APPROVED: "啟用中", REJECTED: "已停用" };
 const departmentOptions = unitDepartments.map((value) => ({ value, label: value }));
-type Unit = { status: UnitStatus; id: string; name: string; department: string | null; role: UnitRole; memberCount: number };
+type Unit = { status: UnitStatus; id: string; name: string; department: string | null; role: UnitRole };
 type UnitRecord = { id: string; zoneName: string; recordName: string; recordType: string; content: string; ttl: number; disabled: boolean; purpose: string; expectedHash: string; expectedUpdatedAt: string; applicantName?: string; applicantEmail?: string; applicantExtension?: string; applicantUnit?: string; inspections?: (InspectionEventSnapshot & { id: string; inspectedAt: string; inspectorName: string; note: string })[] };
 type Member = { userId: string; label: string; studentId?: string | null; role: UnitRole; disabled: boolean };
 type Detail = { allowlist: { studentId: string; userId: string | null; role?: UnitRole }[]; unit: { id: string; name: string; note?: string; department?: string | null; status: UnitStatus }; systemAdmin: boolean; canApply: boolean; role: UnitRole; members: Member[]; records: UnitRecord[]; recordsError: string };
@@ -40,9 +40,40 @@ export function UnitsWorkbench({ systemAdmin, mode = "manage" }: { systemAdmin: 
     {loading && !data && <LoadingPanel label="正在載入單位…" />}
     {error && <ResourceError message={error} retry={reload} />}
     {!!data && !error && !units.length && <div className="card"><EmptyState title={mode === "manage" ? "尚無可管理的單位" : "尚未加入單位"} description={mode === "manage" && systemAdmin ? "可先建立單位，之後再透過學號指定管理人或新增使用者。" : mode === "manage" ? "目前單位未授予管理權限。若你管理其他單位，請切換至該單位的工作區。" : "請將學號提供給單位管理員，由管理員將你加入單位。"} /></div>}
-    {!error && active && <div className={units.length > 1 ? "unit-layout" : "unit-layout unit-layout-single"}>{units.length > 1 && <nav className="card unit-selector" aria-label="選擇管理單位">{units.map((unit) => <button key={unit.id} type="button" aria-current={active.id === unit.id ? "true" : undefined} onClick={() => setSelected(unit.id)}><span className="unit-selector-text"><strong>{unit.name}</strong><small>{unit.department ?? "未設定系所"}{unit.status === "APPROVED" ? "" : ` · ${statusLabels[unit.status]}`}</small></span><span className="unit-selector-count"><Users size={13} aria-hidden="true" />{unit.memberCount}<span className="sr-only"> 位成員</span></span></button>)}</nav>}<UnitDetail key={active.id} id={active.id} mode={mode} onMembershipChanged={async () => { await reload(); router.refresh(); }} /></div>}
+    {!error && active && <div className={units.length > 1 ? "unit-layout" : "unit-layout unit-layout-single"}>{units.length > 1 && <UnitSelector units={units} activeId={active.id} onSelect={setSelected} />}<UnitDetail key={active.id} id={active.id} mode={mode} onMembershipChanged={async () => { await reload(); router.refresh(); }} /></div>}
     {creating && <UnitEntryDialog onClose={() => setCreating(false)} onSaved={async (result) => { setCreating(false); setSelected(result.unit.id); toast.success("已建立單位"); await reload(); router.refresh(); }} />}
   </>;
+}
+
+const unassigned = "未設定系所";
+const departmentNames = [...new Set(unitDepartments.map((value) => value.split("／")[0]))];
+const departmentFilterOptions = [{ value: "", label: "全部系所" }, ...departmentNames.map((value) => ({ value, label: value })), { value: unassigned, label: unassigned }];
+
+/** Units grouped by 系所 → 組別 in policy order, with name/department search and a 系所 filter. */
+function UnitSelector({ units, activeId, onSelect }: { units: Unit[]; activeId: string; onSelect: (id: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [department, setDepartment] = useState("");
+  const needle = query.trim().toLowerCase();
+  const visible = units
+    .filter((unit) => (!department || (unit.department?.split("／")[0] ?? unassigned) === department) && (!needle || `${unit.name} ${unit.department ?? unassigned}`.toLowerCase().includes(needle)))
+    .sort((a, b) => (a.department ? unitDepartments.indexOf(a.department) : unitDepartments.length) - (b.department ? unitDepartments.indexOf(b.department) : unitDepartments.length));
+  const sections: { name: string; groups: { name: string; units: Unit[] }[] }[] = [];
+  for (const unit of visible) {
+    const [name, group = ""] = unit.department?.split("／") ?? [unassigned];
+    let section = sections.at(-1);
+    if (section?.name !== name) sections.push(section = { name, groups: [] });
+    let bucket = section.groups.at(-1);
+    if (bucket?.name !== group) section.groups.push(bucket = { name: group, units: [] });
+    bucket.units.push(unit);
+  }
+  return <nav className="card unit-selector" aria-label="選擇管理單位">
+    <div className="unit-selector-filters">
+      <div className="filter-input"><Search size={15} aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); setQuery(""); } }} placeholder="搜尋單位或組別" aria-label="搜尋單位" />{query && <button type="button" className="search-clear" aria-label="清除搜尋" onClick={() => setQuery("")}><X size={15} /></button>}</div>
+      <Select aria-label="篩選系所" value={department} onChange={setDepartment} options={departmentFilterOptions} />
+    </div>
+    {sections.map((section) => <section key={section.name} className="unit-selector-section" aria-label={section.name}><h3>{section.name}</h3>{section.groups.map((group) => <div key={group.name} className="unit-selector-group">{group.name && <p>{group.name}</p>}<div className="unit-selector-items">{group.units.map((unit) => <button key={unit.id} type="button" aria-current={activeId === unit.id ? "true" : undefined} onClick={() => onSelect(unit.id)}><span className="unit-selector-text"><strong>{unit.name}</strong>{unit.status !== "APPROVED" && <small>{statusLabels[unit.status]}</small>}</span></button>)}</div></div>)}</section>)}
+    {!sections.length && <p className="field-help unit-selector-empty" role="status">沒有符合條件的單位</p>}
+  </nav>;
 }
 
 function UnitEntryDialog({ onClose, onSaved }: { onClose: () => void; onSaved: (result: { unit: { id: string; name: string } }) => Promise<void> }) {
@@ -82,7 +113,7 @@ function UnitDetail({ id, mode, onMembershipChanged }: { id: string; mode: "dns"
   }}>{unitAction === "rename" && <label>單位名稱<input name="name" required maxLength={100} defaultValue={data.unit.name} /></label>}</ActionDialog>;
   if (data.unit.status !== "APPROVED") return <section className="unit-detail">{summary(statusLabels[data.unit.status], unitControls, <p role="status" className="field-help">此單位未啟用，無法加入或申請 DNS。</p>)}{unitDialog}</section>;
   const records = data.records.filter((record) => matchesDnsRecord(query, record.recordName, record.zoneName, [record.recordType, record.content, record.purpose]));
-  return <section className="unit-detail">{mode === "dns" ? summary(unitRoleLabels[workspace.active?.role ?? "EDITOR"], <div className="unit-actions">{data.canApply && <Link className="button primary" href="/requests/new">申請 DNS</Link>}<Link className="button" href="/requests/history">申請紀錄</Link></div>) : summary(`${statusLabels.APPROVED} · ${data.members.length} 位成員${pending.length ? ` · ${pending.length} 位待加入` : ""}`, unitControls)}{unitDialog}{(mode === "dns" || data.systemAdmin) && <div className="card unit-panel"><div className="unit-heading"><div><h2>DNS 紀錄</h2><p>{data.records.length} 筆目前有效的 DNS{mode === "manage" ? " · 僅供查看" : ""}</p></div><button className="button" aria-label="重新載入 DNS" onClick={() => void reload()}><RefreshCw size={16} aria-hidden="true" /></button></div><div className="filter-input unit-search"><Search size={15} aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); setQuery(""); } }} placeholder="搜尋名稱、類型、解析內容或用途" aria-label="搜尋 DNS" />{query && <button type="button" className="search-clear" aria-label="清除搜尋" onClick={() => setQuery("")}><X size={15} /></button>}</div>
+  return <section className="unit-detail">{mode === "dns" ? summary(unitRoleLabels[workspace.active?.role ?? "EDITOR"], <div className="unit-actions">{data.canApply && <Link className="button primary" href="/requests/new">申請 DNS</Link>}<Link className="button" href="/requests/history">申請紀錄</Link></div>) : summary(`${statusLabels.APPROVED}${pending.length ? ` · ${pending.length} 位待加入` : ""}`, unitControls)}{unitDialog}{(mode === "dns" || data.systemAdmin) && <div className="card unit-panel"><div className="unit-heading"><div><h2>DNS 紀錄</h2><p>{data.records.length} 筆目前有效的 DNS{mode === "manage" ? " · 僅供查看" : ""}</p></div><button className="button" aria-label="重新載入 DNS" onClick={() => void reload()}><RefreshCw size={16} aria-hidden="true" /></button></div><div className="filter-input unit-search"><Search size={15} aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); setQuery(""); } }} placeholder="搜尋名稱、類型、解析內容或用途" aria-label="搜尋 DNS" />{query && <button type="button" className="search-clear" aria-label="清除搜尋" onClick={() => setQuery("")}><X size={15} /></button>}</div>
     <ScrollRegion label="單位 DNS 紀錄" className="unit-record-scroll"><table className="unit-table"><thead><tr><th scope="col">名稱／類型</th><th scope="col">解析內容</th><th scope="col">用途</th>{mode === "dns" && <th scope="col">操作</th>}</tr></thead><tbody>{records.map((record) => <tr key={record.id}><td><strong>{record.recordName}</strong><small>{record.recordType} · TTL {record.ttl}s{record.disabled ? " · 已停用" : ""}</small></td><td><code>{record.content}</code></td><td>{record.purpose || "—"}</td>{mode === "dns" && <td><div className="unit-actions unit-row-actions"><button className="button compact" onClick={() => setInspection(record)}>清查</button>{data.canApply && ["A", "AAAA", "CNAME", "MX", "TXT", "SRV", "CAA", "PTR"].includes(record.recordType) && <><button className="button compact" onClick={() => setChange(record)}>申請變更</button><button className="button compact danger" onClick={() => setDeletion(record)}>申請刪除</button></>}</div></td>}</tr>)}</tbody></table></ScrollRegion>
     {data.recordsError && <p className="form-error" role="alert">{data.recordsError}</p>}
     {!records.length && !data.recordsError && <EmptyState title={query ? "沒有符合條件的 DNS" : "尚無單位 DNS"} />}</div>}
