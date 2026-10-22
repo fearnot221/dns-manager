@@ -102,3 +102,26 @@ describe("DNS ownership and inspection", () => {
     vi.mocked(requireActor).mockResolvedValue({ ...actor, globalRole: "USER" }); expect((await GET()).status).toBe(403);
   });
 });
+
+it.each(["IN_USE", "DEPRECATED", "RESERVED", "DISABLED"] as const)("saves inspection status %s and its history without changing DNS", async (recordStatus) => {
+  const beforeDns = structuredClone(zone);
+  const response = await PUT(new Request("http://localhost/api/inventory", { method: "PUT", headers: { Origin: "http://localhost" }, body: JSON.stringify({ ...input, mode: "inspect-and-metadata", recordStatus }) }));
+  expect(response.status).toBe(200);
+  const saved = await current();
+  expect(saved.recordStatus).toBe(recordStatus);
+  expect(saved.inspections[0]).toMatchObject({ recordStatus, inspectorId: actor.id });
+  expect(logAuditEvent).toHaveBeenCalledWith(expect.objectContaining({ action: "INSPECT_DNS_RECORD", after: expect.objectContaining({ recordStatus }) }));
+  await saveInventory(actor, { ...input, expectedUpdatedAt: saved.updatedAt });
+  const edited = await current();
+  expect(edited.recordStatus).toBe(recordStatus);
+  await saveInventory(actor, { ...input, mode: "inspect", expectedUpdatedAt: edited.updatedAt });
+  expect((await current()).inspections[0].recordStatus).toBe(recordStatus);
+  expect(zone).toEqual(beforeDns);
+});
+it("rejects unknown inspection status and does not let metadata-only saves change it", async () => {
+  const request = (body: unknown) => new Request("http://localhost/api/inventory", { method: "PUT", headers: { Origin: "http://localhost" }, body: JSON.stringify(body) });
+  expect((await PUT(request({ ...input, mode: "inspect", recordStatus: "DELETE_NOW" }))).status).toBe(400);
+  expect((await current()).inspections).toHaveLength(0);
+  expect((await PUT(request({ ...input, recordStatus: "DEPRECATED" }))).status).toBe(200);
+  expect((await current()).recordStatus).toBeNull();
+});

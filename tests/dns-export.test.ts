@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.mocked(logAuditEvent).mockResolvedValue(undefined);
   vi.mocked(powerdns.listZones).mockResolvedValue([makeZone("example.com."), makeZone("2.0.192.in-addr.arpa."), makeZone("8.b.d.0.1.0.0.2.ip6.arpa.")]);
   vi.mocked(powerdns.getZone).mockImplementation(async (name) => makeZone(name));
-  vi.mocked(describeRecords).mockImplementation(async (_actor, zoneName, rrsets) => rrsets.flatMap((set) => set.records.map((record) => ({ zoneName, recordName: set.name, recordType: set.type, content: record.content, ttl: set.ttl, disabled: record.disabled, ownership: { id: "record", applicantName: "申請人", applicantEmail: "person@example.com", applicantUnit: "實驗室", applicantExtension: "1234", purpose: "研究\nDNS", updatedAt: null, updatedBy: "", inspections: [] } }))));
+  vi.mocked(describeRecords).mockImplementation(async (_actor, zoneName, rrsets) => rrsets.flatMap((set) => set.records.map((record) => ({ zoneName, recordName: set.name, recordType: set.type, content: record.content, ttl: set.ttl, disabled: record.disabled, ownership: { id: "record", applicantName: "申請人", applicantEmail: "person@example.com", applicantUnit: "實驗室", applicantExtension: "1234", purpose: "研究\nDNS", recordStatus: "DEPRECATED", updatedAt: null, updatedBy: "", inspections: [] } }))));
 });
 describe("CSV encoding", () => {
   it("escapes quotes, commas, Unicode and newlines, with consistent CRLF rows", () => {
@@ -56,7 +56,7 @@ describe("admin DNS export", () => {
     const bytes = new Uint8Array(await response.arrayBuffer());
     expect([...bytes.slice(0, 3)]).toEqual([239, 187, 191]);
     const csv = new TextDecoder().decode(bytes);
-    for (const name of ["example.com.", "2.0.192.in-addr.arpa.", "8.b.d.0.1.0.0.2.ip6.arpa.", "申請人", "實驗室", "person@example.com", "second value"]) expect(csv).toContain(name);
+    for (const name of ["example.com.", "2.0.192.in-addr.arpa.", "8.b.d.0.1.0.0.2.ip6.arpa.", "申請人", "實驗室", "person@example.com", "second value", "清查狀態", "棄用"]) expect(csv).toContain(name);
     expect(powerdns.getZone).toHaveBeenCalledTimes(3);
     expect(logAuditEvent).toHaveBeenCalledWith(expect.objectContaining({ action: "EXPORT_ALL_DNS_CSV", after: { zoneCount: 3, recordCount: 6, format: "csv" }, success: true }));
   });

@@ -1,3 +1,4 @@
+import { recordStatusSchema } from "@/lib/inventory/record-status";
 import { z } from "zod";
 import { requestOwnershipSchema } from "@/lib/validation/api";
 import { requireActor } from "@/lib/auth/session";
@@ -5,7 +6,7 @@ import { apiError } from "@/lib/api/respond";
 import { assertSameOrigin } from "@/lib/api/security";
 import { auditMutation } from "@/lib/audit/mutation";
 import { inspectUnitRecord } from "@/lib/units/records";
-const schema = z.object({ recordId: z.string().min(1).max(100), expectedHash: z.string().min(10).max(100), ownership: requestOwnershipSchema.optional(), note: z.string().trim().max(1000) }).strict();
+const schema = z.object({ recordStatus: recordStatusSchema, recordId: z.string().min(1).max(100), expectedHash: z.string().min(10).max(100), ownership: requestOwnershipSchema.optional(), note: z.string().trim().max(1000) }).strict();
 export const POST = auditMutation(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
   try {
     assertSameOrigin(request);

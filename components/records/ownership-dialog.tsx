@@ -1,4 +1,6 @@
 "use client";
+import { InspectionStatusField } from "./inspection-status-field";
+import { recordStatusLabel } from "@/lib/inventory/record-status";
 import { ContactPicker } from "@/components/units/contact-picker";
 import { useFormDraft, type FormDrafts } from "@/lib/client/form-draft";
 import { useResource } from "@/lib/client/use-resource";
@@ -16,7 +18,8 @@ export function OwnershipDialog({ drafts, record, inspection = false, canDeleteI
   const [pending, setPending] = useState(false); const [error, setError] = useState(""); const sending = useRef(false);
   const errorId = useId();
   const owner = record.ownership;
-  const { attachForm, onChange: captureDraft, clear: clearDraft } = useFormDraft(drafts, JSON.stringify([owner.id, owner.updatedAt, record.zoneName, record.recordName, record.recordType, record.content]));
+  const draftKey = JSON.stringify([owner.id, owner.updatedAt, record.zoneName, record.recordName, record.recordType, record.content]);
+  const { attachForm, onChange: captureDraft, clear: clearDraft } = useFormDraft(drafts, draftKey);
   const errorRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   async function removeInspection(id: string) {
@@ -33,7 +36,7 @@ export function OwnershipDialog({ drafts, record, inspection = false, canDeleteI
     const data = new FormData(event.currentTarget);
     const inspecting = inspection && (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "inspect-and-metadata";
     try {
-      await apiRequest("/api/inventory", jsonRequest("PUT", { id: owner.id, zoneName: record.zoneName, recordName: record.recordName, recordType: record.recordType, content: record.content, expectedUpdatedAt: owner.updatedAt, mode: inspecting ? "inspect-and-metadata" : "metadata", note: inspecting ? data.get("note") : "", applicantName: data.get("applicantName"), applicantEmail: data.get("applicantEmail"), applicantUnit: data.get("applicantUnit"), applicantExtension: data.get("applicantExtension"), purpose: data.get("purpose") }));
+      await apiRequest("/api/inventory", jsonRequest("PUT", { id: owner.id, zoneName: record.zoneName, recordName: record.recordName, recordType: record.recordType, content: record.content, expectedUpdatedAt: owner.updatedAt, mode: inspecting ? "inspect-and-metadata" : "metadata", ...(inspecting ? { recordStatus: data.get("recordStatus") || null } : {}), note: inspecting ? data.get("note") : "", applicantName: data.get("applicantName"), applicantEmail: data.get("applicantEmail"), applicantUnit: data.get("applicantUnit"), applicantExtension: data.get("applicantExtension"), purpose: data.get("purpose") }));
       clearDraft();
       toast.success(inspecting ? "已儲存歸屬資料並新增清查紀錄。" : "已儲存歸屬資料，DNS 解析內容未變更。"); await onSaved();
     } catch (error) { setError(error instanceof Error ? error.message : "儲存失敗，請重試。"); }
@@ -50,6 +53,7 @@ export function OwnershipDialog({ drafts, record, inspection = false, canDeleteI
       {owner.updatedAt && <p className="description">最近更新：{new Date(owner.updatedAt).toLocaleString("zh-TW")} · {owner.updatedByName || (owner.updatedBy.endsWith("@accounts.invalid") ? "未提供姓名" : owner.updatedBy)}</p>}
       {inspection && <>
         <h3>記錄清查</h3>
+        <InspectionStatusField status={owner.recordStatus} drafts={drafts} draftKey={draftKey} />
         <label>清查備註<textarea name="note" maxLength={2000} placeholder="例如：已與使用單位確認，服務持續使用中。" rows={3} /></label>
       </>}
       <InspectionHistory record={record} onDelete={canDeleteInspections ? removeInspection : undefined} />
@@ -58,7 +62,7 @@ export function OwnershipDialog({ drafts, record, inspection = false, canDeleteI
 }
 
 function InspectionHistory({ record, onDelete }: { record: InventoryRecord; onDelete?: (id: string) => Promise<void> }) {
-  return (<section className="inspection-history"><h3>歷次清查 <span>（{record.ownership.inspections.length}）</span></h3>{record.ownership.inspections.length ? <ol>{record.ownership.inspections.map((item) => <li key={item.id}><strong>{new Date(item.inspectedAt).toLocaleString("zh-TW")}</strong><PersonName name={item.inspectorName} email={item.inspectorEmail} studentId={item.inspectorStudentId} /><p>{inspectionEventLabel(item)}</p><p>{item.note || "未填備註"}</p>{onDelete && <button type="button" className="button danger" aria-label={`刪除 ${new Date(item.inspectedAt).toLocaleString("zh-TW")} 的清查紀錄`} onClick={() => void onDelete(item.id)}>刪除</button>}</li>)}</ol> : <p className="description">尚無清查紀錄。</p>}</section>);
+  return (<section className="inspection-history"><h3>歷次清查 <span>（{record.ownership.inspections.length}）</span></h3>{record.ownership.inspections.length ? <ol>{record.ownership.inspections.map((item) => <li key={item.id}><strong>{new Date(item.inspectedAt).toLocaleString("zh-TW")}</strong><PersonName name={item.inspectorName} email={item.inspectorEmail} studentId={item.inspectorStudentId} /><p>{inspectionEventLabel(item)}</p><p>狀態：{recordStatusLabel(item.recordStatus)}</p><p>{item.note || "未填備註"}</p>{onDelete && <button type="button" className="button danger" aria-label={`刪除 ${new Date(item.inspectedAt).toLocaleString("zh-TW")} 的清查紀錄`} onClick={() => void onDelete(item.id)}>刪除</button>}</li>)}</ol> : <p className="description">尚無清查紀錄。</p>}</section>);
 }
 
 export function UnitAssignmentDialog({ record, onClose, onSaved }: { record: InventoryRecord; onClose: () => void; onSaved: () => Promise<void> }) {

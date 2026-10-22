@@ -211,3 +211,17 @@ it("validates and forwards unit profiles on create and update", async () => {
   expect((await PATCH(req({ action: "profile", ...profile }, "https://evil.invalid"), ctx)).status).toBe(403);
   expect(updateUnitProfile).not.toHaveBeenCalled();
 });
+
+it("accepts known inspection statuses and rejects unrecognized values", async () => {
+  vi.mocked(inspectUnitRecord).mockResolvedValue({ id: "inspection" });
+  for (const recordStatus of ["IN_USE", "DEPRECATED", "RESERVED", "DISABLED", null]) {
+    const body = { recordId: "record", expectedHash: "a".repeat(64), note: "確認", recordStatus };
+    expect((await inspect(req(body), ctx)).status).toBe(201);
+    expect(inspectUnitRecord).toHaveBeenLastCalledWith(expect.anything(), "unit-1", body);
+  }
+  vi.mocked(inspectUnitRecord).mockClear();
+  for (const recordStatus of ["DELETE_NOW", "使用中", "", 123]) {
+    expect((await inspect(req({ recordId: "record", expectedHash: "a".repeat(64), note: "", recordStatus }), ctx)).status).toBe(400);
+  }
+  expect(inspectUnitRecord).not.toHaveBeenCalled();
+});

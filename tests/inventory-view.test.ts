@@ -31,3 +31,9 @@ it("uses unit assignment rather than free-text applicant unit for unassigned fil
   const assigned = { ...record, ownership: { ...record.ownership, unitId: "unit-1" } };
   expect(groupInventory([record, assigned], "zoneName", "unassigned", "")[0][1]).toEqual([record]);
 });
+
+it("searches current record status by its visible label", () => {
+  const deprecated = { ...record, ownership: { ...record.ownership, recordStatus: "DEPRECATED" } };
+  expect(groupInventory([deprecated], "zoneName", "all", "棄用")[0][1]).toEqual([deprecated]);
+  expect(groupInventory([deprecated], "zoneName", "all", "使用中")).toEqual([]);
+});

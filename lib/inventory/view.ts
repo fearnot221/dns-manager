@@ -1,3 +1,4 @@
+import { recordStatusLabel } from "./record-status";
 import { matchesDnsRecord } from "@/lib/dns/search";
 import type { InventoryRecord } from "./types";
 
@@ -13,7 +14,7 @@ export function groupInventory(records: InventoryRecord[], group: InventoryGroup
     if (status === "unreviewed" && owner.inspections.length) continue;
     if (status === "reviewed" && !owner.inspections.length) continue;
     if (status === "missing" && [owner.applicantName, owner.applicantUnit, owner.purpose].every((value) => value.trim())) continue;
-    if (!matchesDnsRecord(query, record.recordName, record.zoneName, [record.zoneName, record.recordType, record.content, owner.applicantName, owner.applicantEmail, owner.applicantUnit, owner.applicantExtension, owner.purpose])) continue;
+    if (!matchesDnsRecord(query, record.recordName, record.zoneName, [record.zoneName, record.recordType, record.content, owner.applicantName, owner.applicantEmail, owner.applicantUnit, owner.applicantExtension, owner.purpose, recordStatusLabel(owner.recordStatus)])) continue;
     const key = (group === "zoneName" ? record.zoneName : owner[group]).trim() || "尚未填寫";
     const bucket = groups.get(key);
     if (bucket) bucket.push(record); else groups.set(key, [record]);

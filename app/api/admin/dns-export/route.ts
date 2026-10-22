@@ -1,3 +1,4 @@
+import { recordStatusLabel } from "@/lib/inventory/record-status";
 import { requireActor } from "@/lib/auth/session";
 import { isGlobalAdmin } from "@/lib/auth/owner";
 import { apiError, ApiError } from "@/lib/api/respond";
@@ -25,7 +26,7 @@ export const POST = auditMutation(async (request: Request) => {
         const comments = new Map(zone.rrsets.map((r) => [JSON.stringify([r.name, r.type]), r.comments ?? []]));
         return records.map((record) => {
           const owner = record.ownership;
-          return csvRow([zone.name, zone.kind, zone.serial, zone.dnssec, record.recordName, record.recordType, record.content, record.ttl, record.disabled, owner.applicantName, owner.applicantEmail, owner.applicantUnit, owner.applicantExtension, owner.purpose, owner.updatedAt, JSON.stringify(owner.inspections), JSON.stringify(comments.get(JSON.stringify([record.recordName, record.recordType])) ?? [])]);
+          return csvRow([zone.name, zone.kind, zone.serial, zone.dnssec, record.recordName, record.recordType, record.content, record.ttl, record.disabled, owner.applicantName, owner.applicantEmail, owner.applicantUnit, owner.applicantExtension, owner.purpose, recordStatusLabel(owner.recordStatus), owner.updatedAt, JSON.stringify(owner.inspections), JSON.stringify(comments.get(JSON.stringify([record.recordName, record.recordType])) ?? [])]);
         });
       }));
       for (const rows of batch) { recordCount += rows.length; chunks.push(rows.join("")); }
