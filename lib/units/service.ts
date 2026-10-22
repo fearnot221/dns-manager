@@ -1,5 +1,5 @@
 import "server-only";
-import { unitProfileSchema, type UnitProfile } from "./profile";
+import { unitProfileSchema, unitProfileUpdateSchema, type UnitProfile, type UnitProfileUpdate } from "./profile";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db/client";
 import { ApiError } from "@/lib/api/respond";
@@ -190,18 +190,25 @@ export async function editUnit(actor: Actor, id: string, input: { action: "renam
   }
 }
 
-export async function updateUnitProfile(actor: Actor, id: string, input: UnitProfile) {
+export async function updateUnitProfile(actor: Actor, id: string, input: UnitProfileUpdate) {
   requireUnitDatabase();
-  const profile = unitProfileSchema.parse(input);
-  return db.$transaction(async (tx) => {
-    await lockActiveUser(tx, actor.id);
-    if (isGlobalAdmin(actor) && !await isCurrentUnitAdmin(tx, actor)) throw new ApiError("系統管理員權限已變更，請重新登入。", 403);
-    await lockUnit(tx, id);
-    await unitAccess(actor, id, "manage", tx);
-    const select = { id: true, location: true, extension: true, advisor: true } as const;
-    const before = await tx.dnsUnit.findUniqueOrThrow({ where: { id }, select });
-    const after = await tx.dnsUnit.update({ where: { id }, data: profile, select });
-    await unitAudit(tx, actor, "UPDATE_DNS_UNIT_PROFILE", before, after);
-    return { saved: true };
-  });
+  const profile = unitProfileUpdateSchema.parse(input);
+  try {
+    return await db.$transaction(async (tx) => {
+      await lockActiveUser(tx, actor.id);
+      if (isGlobalAdmin(actor) && !await isCurrentUnitAdmin(tx, actor)) throw new ApiError("系統管理員權限已變更，請重新登入。", 403);
+      if ((profile.name !== undefined || profile.department !== undefined) && !isGlobalAdmin(actor)) throw new ApiError("只有系統管理員可以修改單位名稱與系所組別。", 403);
+      await lockUnit(tx, id);
+      if (!isGlobalAdmin(actor)) await unitAccess(actor, id, "manage", tx);
+      const select = { id: true, name: true, department: true, location: true, extension: true, advisor: true } as const;
+      const before = await tx.dnsUnit.findUniqueOrThrow({ where: { id }, select });
+      const after = await tx.dnsUnit.update({ where: { id }, data: profile, select });
+      if (after.name !== before.name) await tx.dnsRecordMetadata.updateMany({ where: { unitId: id }, data: { applicantUnit: after.name, updatedBy: actor.email } });
+      await unitAudit(tx, actor, "UPDATE_DNS_UNIT_PROFILE", before, after);
+      return { saved: true };
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new ApiError("此單位名稱已存在，請使用不同名稱。", 409);
+    throw error;
+  }
 }

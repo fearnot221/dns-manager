@@ -33,7 +33,7 @@ import { describeRecords, saveInventory } from "@/lib/inventory/service";
 import { memberWorkspaces } from "@/lib/units/workspace";
 import { db } from "@/lib/db/client";
 import { powerdns } from "@/lib/powerdns/client";
-import { createUnit, listUnits, manageUnit, unitAccess, assignUnitManager, editUnit, updateUnitProfile } from "@/lib/units/service";
+import { createUnit as createUnitService, listUnits, manageUnit, unitAccess, assignUnitManager, editUnit, updateUnitProfile } from "@/lib/units/service";
 import { inspectUnitRecord, requestUnitChange, unitDetail } from "@/lib/units/records";
 import { hashPassword } from "@/lib/auth/password";
 import { saveDeletionPassword, assertDeletionPassword, deletionProtectionStatus } from "@/lib/security/deletion-protection";
@@ -45,6 +45,10 @@ import { rrsetHash } from "@/lib/dns/rrset";
 import { removeUser } from "@/lib/users/remove";
 import { assertApplicationPolicy, saveApplicationPolicy, readApplicationPolicy } from "@/lib/requests/policy";
 
+const createUnit = (...args: Parameters<typeof createUnitService>) => {
+  args[5] ??= { location: "E1-213", extension: "1234", advisor: "" };
+  return createUnitService(...args);
+};
 const url = process.env.UNIT_TEST_DATABASE_URL;
 let zone: Zone;
 let creator: Actor, viewer: Actor, editor: Actor, outsider: Actor, admin: Actor;
@@ -100,11 +104,34 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect((await unitDetail(creator, id, "manage")).unit).toMatchObject({ ...profile, location: "E1-214" });
     expect((await listUnits(editor)).find((unit) => unit.id === id)).toMatchObject({ extension: "01234" });
     expect(await db.auditLog.findFirst({ where: { action: "UPDATE_DNS_UNIT_PROFILE", userId: creator.id } })).toMatchObject({ oldValue: expect.objectContaining(profile), newValue: expect.objectContaining({ ...profile, location: "E1-214" }) });
-    await updateUnitProfile(admin, id, { location: "", extension: "", advisor: "" });
+    await expect(updateUnitProfile(admin, id, { location: "", extension: "", advisor: "" })).rejects.toThrow();
+    await updateUnitProfile(admin, id, profile);
     await db.user.update({ where: { id: admin.id }, data: { globalRole: "USER" } });
     await expect(updateUnitProfile(admin, id, profile)).rejects.toMatchObject({ status: 403 });
     await db.user.update({ where: { id: creator.id }, data: { disabled: true } });
     await expect(updateUnitProfile(creator, id, profile)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("atomically edits identity and required profile fields while preserving manager permissions", async () => {
+    const source = await sourceRecord();
+    const profile = { name: `renamed-${unitId}`, department: "通訊系／資通組", location: "E1-214", extension: "01234", advisor: "王老師" };
+    const before = await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } });
+    const history = await db.dnsRecordRequest.create({ data: { userId: editor.id, unitId, applicantUnit: before.name, zoneName: zone.name, recordName: "history.example.com.", recordType: "A", content: "192.0.2.55", ttl: 300 } });
+    for (const identity of [{ name: profile.name }, { department: profile.department }]) await expect(updateUnitProfile(creator, unitId, { location: profile.location, extension: profile.extension, advisor: profile.advisor, ...identity })).rejects.toMatchObject({ status: 403 });
+    expect(await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } })).toEqual(before);
+    await updateUnitProfile(admin, unitId, profile);
+    expect(await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } })).toMatchObject(profile);
+    expect(await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).toMatchObject({ applicantUnit: profile.name });
+    expect(await db.dnsRecordRequest.findUniqueOrThrow({ where: { id: history.id } })).toMatchObject({ applicantUnit: before.name });
+    const other = await createUnit(admin, `other-${unitId}`);
+    await expect(updateUnitProfile(admin, unitId, { ...profile, name: other.unit.name, location: "不得部分更新" })).rejects.toMatchObject({ status: 409 });
+    expect(await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } })).toMatchObject(profile);
+    await db.dnsUnit.update({ where: { id: unitId }, data: { status: "PENDING" } });
+    await updateUnitProfile(admin, unitId, { ...profile, location: "E1-215" });
+    expect(await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } })).toMatchObject({ location: "E1-215" });
+    await expect(updateUnitProfile(creator, unitId, { location: "E1-216", extension: "01234", advisor: "" })).rejects.toMatchObject({ status: 403 });
+    await expect(createUnitService(admin, `invalid-${unitId}`)).rejects.toThrow();
+    await expect(updateUnitProfile(admin, unitId, { location: "  ", extension: "", advisor: "" })).rejects.toThrow();
   });
 
   async function claimInput() {
