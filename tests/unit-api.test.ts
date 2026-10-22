@@ -245,3 +245,15 @@ it("forwards combined identity and profile fields without accepting invalid name
   for (const invalid of [{ name: " " }, { name: "x".repeat(101) }, { department: "任意系所" }]) expect((await PATCH(req({ action: "profile", ...profile, ...invalid }), ctx)).status).toBe(400);
   expect(updateUnitProfile).not.toHaveBeenCalled();
 });
+
+it("accepts optional unit notes, including explicit clearing, and rejects oversized notes", async () => {
+  vi.mocked(updateUnitProfile).mockResolvedValue({ saved: true });
+  const profile = { location: "E1-213", extension: "1234" };
+  for (const note of [undefined, "", "  單位備註  "]) {
+    expect((await PATCH(req({ action: "profile", ...profile, note }), ctx)).status).toBe(200);
+    expect(updateUnitProfile).toHaveBeenLastCalledWith(expect.anything(), "unit-1", { ...profile, advisor: "", ...(note === undefined ? {} : { note: note.trim() }) });
+  }
+  vi.mocked(updateUnitProfile).mockClear();
+  expect((await PATCH(req({ action: "profile", ...profile, note: "x".repeat(2001) }), ctx)).status).toBe(400);
+  expect(updateUnitProfile).not.toHaveBeenCalled();
+});

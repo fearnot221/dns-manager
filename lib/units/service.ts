@@ -200,7 +200,7 @@ export async function updateUnitProfile(actor: Actor, id: string, input: UnitPro
       if ((profile.name !== undefined || profile.department !== undefined) && !isGlobalAdmin(actor)) throw new ApiError("只有系統管理員可以修改單位名稱與系所組別。", 403);
       await lockUnit(tx, id);
       if (!isGlobalAdmin(actor)) await unitAccess(actor, id, "manage", tx);
-      const select = { id: true, name: true, department: true, location: true, extension: true, advisor: true } as const;
+      const select = { id: true, name: true, department: true, note: true, location: true, extension: true, advisor: true } as const;
       const before = await tx.dnsUnit.findUniqueOrThrow({ where: { id }, select });
       const after = await tx.dnsUnit.update({ where: { id }, data: profile, select });
       if (after.name !== before.name) await tx.dnsRecordMetadata.updateMany({ where: { unitId: id }, data: { applicantUnit: after.name, updatedBy: actor.email } });

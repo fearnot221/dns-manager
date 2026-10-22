@@ -72,3 +72,10 @@ it.each([false, true])("combines identity fields with required location and exte
   for (const name of ["location", "extension"]) expect(html.match(new RegExp(`<input[^>]*name="${name}"[^>]*>`))?.[0]).toContain('required=""');
   expect(html).not.toContain("單位位置（選填）"); expect(html).not.toContain("單位分機（選填）");
 });
+
+it("keeps unit notes optional and prefills existing notes in the unified editor", () => {
+  const html = renderToStaticMarkup(createElement(UnitProfileFields, { unit: { name: "實驗室", location: "E1-213", extension: "1234", note: "既有備註" } }));
+  expect(html).toContain("單位備註（選填）");
+  const field = html.match(/<textarea[^>]*name="note"[^>]*>既有備註<\/textarea>/)?.[0];
+  expect(field).toBeTruthy(); expect(field).not.toContain("required");
+});
