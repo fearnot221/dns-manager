@@ -255,6 +255,7 @@ model DnsRequestPublication {
 }
 
 model DnsRecordMetadata {
+  recordStatus String?
   id                 String   @id
   zoneName           String
   recordName         String
@@ -371,6 +372,7 @@ model UnitMember {
 }
 
 model DnsInspection {
+  recordStatus String?
   // Snapshot fields intentionally survive event rename/deletion.
   eventId       String?
   eventName     String?

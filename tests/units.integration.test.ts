@@ -147,15 +147,16 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
     expect(await db.dnsInspection.count({ where: { recordId: source.id } })).toBe(1);
   });
-  it("preserves earlier inspections when a tracked value is claimed", async () => {
+  it("preserves earlier inspections and snapshots the current status when a tracked value is claimed", async () => {
     const { source, input } = await claimInput();
+    await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { recordStatus: "RESERVED" } });
     const history = await db.dnsInspection.create({ data: { recordId: source.id, inspectorId: admin.id, inspectorEmail: admin.email, inspectorName: "原清查人", note: "既有清查" } });
     const result = await saveApplication(editor, input, httpRequest());
     const item = await db.dnsRecordRequest.findFirstOrThrow({ where: { applicationId: result.applicationId } });
     await reviewUnitRequest(admin, item.id, "APPROVE");
     const inspections = await db.dnsInspection.findMany({ where: { recordId: source.id } });
     expect(inspections).toHaveLength(2);
-    expect(inspections).toEqual(expect.arrayContaining([expect.objectContaining({ id: history.id, note: "既有清查" }), expect.objectContaining({ eventClassified: true })]));
+    expect(inspections).toEqual(expect.arrayContaining([expect.objectContaining({ id: history.id, note: "既有清查" }), expect.objectContaining({ eventClassified: true, recordStatus: "RESERVED" })]));
   });
   it("serializes competing ownership approvals without replacing the winning unit", async () => {
     const { source, input, item } = await submitClaim();
@@ -1240,6 +1241,28 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await expect(inspectUnitRecord(viewer, unitId, { ...input, ownership: { ...ownership, expectedUpdatedAt: "2000-01-01T00:00:00.000Z", purpose: "不得覆蓋" } })).rejects.toMatchObject({ status: 409 });
     expect(await db.dnsInspection.count({ where: { recordId: source.id } })).toBe(1);
     expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).purpose).toBe("系所網站");
+    expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
+  });
+
+  it("stores current inspection status and immutable snapshots for members and admins", async () => {
+    const source = await sourceRecord();
+    const beforeDns = structuredClone(zone);
+    const input = { recordId: source.id, expectedHash: source.expectedHash, note: "狀態清查", recordStatus: "DEPRECATED" as const };
+    await expect(inspectUnitRecord(outsider, unitId, input)).rejects.toMatchObject({ status: 403 });
+    const first = await inspectUnitRecord(viewer, unitId, input);
+    expect((await unitDetail(viewer, unitId)).records[0]).toMatchObject({ recordStatus: "DEPRECATED", inspections: [expect.objectContaining({ recordStatus: "DEPRECATED" })] });
+    const metadata = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } });
+    await saveInventory(admin, { ...metadata, expectedUpdatedAt: metadata.updatedAt.toISOString(), mode: "inspect-and-metadata", recordStatus: "RESERVED", note: "管理端確認保留" });
+    const current = await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id }, include: { inspections: true } });
+    expect(current.recordStatus).toBe("RESERVED");
+    expect(current.inspections).toEqual(expect.arrayContaining([expect.objectContaining({ id: first.id, recordStatus: "DEPRECATED" }), expect.objectContaining({ recordStatus: "RESERVED" })]));
+    expect((await describeRecords(admin, zone.name, zone.rrsets)).find((record) => record.ownership.id === source.id)?.ownership.recordStatus).toBe("RESERVED");
+    await inspectUnitRecord(viewer, unitId, { recordId: source.id, expectedHash: source.expectedHash, note: "保留原狀態" });
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).recordStatus).toBe("RESERVED");
+    expect(await db.auditLog.findFirst({ where: { action: "INSPECT_UNIT_DNS", userId: viewer.id } })).toMatchObject({ newValue: expect.objectContaining({ recordStatus: expect.any(String) }) });
+    await inspectUnitRecord(viewer, unitId, { ...input, recordStatus: null });
+    expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).recordStatus).toBeNull();
+    expect(zone).toEqual(beforeDns);
     expect(powerdns.replaceRRSet).not.toHaveBeenCalled(); expect(powerdns.deleteRRSet).not.toHaveBeenCalled();
   });
 

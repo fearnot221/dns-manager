@@ -78,3 +78,14 @@ it("opens a standalone assignment dialog with a cancel action and approved units
   expect(html).not.toContain("不可指派單位");
   expect(html).not.toContain('name="applicantName"');
 });
+
+it("shows inspection status and the post-inspection deletion notice, including saved history", () => {
+  const record = { ...records[0], ownership: { ...records[0].ownership, recordStatus: "DEPRECATED", inspections: [{ id: "status-inspection", inspectedAt: "2026-10-22T00:00:00Z", inspectorId: "admin", inspectorEmail: "admin@example.com", inspectorName: "Admin", note: "服務退役", recordStatus: "DEPRECATED" }] } };
+  const html = renderToStaticMarkup(createElement(OwnershipDialog, { record, inspection: true, onClose: vi.fn(), onSaved: vi.fn(async () => {}) }));
+  expect(html).toContain('name="recordStatus"');
+  expect(html).toContain('value="DEPRECATED"');
+  expect(html).toContain("設為「棄用」的紀錄，將由機房端於清查後刪除。");
+  expect(html).toContain("狀態：棄用");
+  const ordinary = renderToStaticMarkup(createElement(OwnershipDialog, { record, onClose: vi.fn(), onSaved: vi.fn(async () => {}) }));
+  expect(ordinary).not.toContain('name="recordStatus"');
+});

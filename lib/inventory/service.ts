@@ -1,4 +1,5 @@
 import "server-only";
+import { recordStatusSchema } from "./record-status";
 import type { Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db/client";
@@ -38,7 +39,7 @@ export async function describeRecords(actor: Actor, zoneName: string, rrsets: RR
   const applications = new Map(approved.map((r) => [identityKey(r), r]));
   return records.map((record) => {
     const id = recordId(scope, record); const saved = savedById.get(id); const application = applications.get(identityKey(record));
-    const ownership: Ownership = saved ? { id, unitId: saved.unitId, unitName: "unit" in saved ? saved.unit?.name : saved.unitName, applicantName: saved.applicantName, applicantEmail: saved.applicantEmail, applicantUnit: saved.applicantUnit, applicantExtension: saved.applicantExtension, purpose: saved.purpose, updatedBy: saved.updatedBy, updatedByName: updaterNames.get(saved.updatedBy), updatedAt: new Date(saved.updatedAt!).toISOString(), inspections: saved.inspections.map((review) => ({ ...review, inspectorName: inspectorById.get(review.inspectorId)?.name || review.inspectorName, inspectorEmail: inspectorById.get(review.inspectorId)?.portalEmail || review.inspectorEmail, inspectorStudentId: inspectorById.get(review.inspectorId)?.studentId, inspectedAt: new Date(review.inspectedAt).toISOString() })) } : { ...emptyOwnership(id), applicantName: application?.applicantName || application?.user.name || "", applicantEmail: application?.applicantEmail ?? application?.user.email ?? "", applicantUnit: application?.applicantUnit || "", applicantExtension: application?.applicantExtension || "", purpose: application?.purpose || "" };
+    const ownership: Ownership = saved ? { id, recordStatus: saved.recordStatus ?? null, unitId: saved.unitId, unitName: "unit" in saved ? saved.unit?.name : saved.unitName, applicantName: saved.applicantName, applicantEmail: saved.applicantEmail, applicantUnit: saved.applicantUnit, applicantExtension: saved.applicantExtension, purpose: saved.purpose, updatedBy: saved.updatedBy, updatedByName: updaterNames.get(saved.updatedBy), updatedAt: new Date(saved.updatedAt!).toISOString(), inspections: saved.inspections.map((review) => ({ ...review, inspectorName: inspectorById.get(review.inspectorId)?.name || review.inspectorName, inspectorEmail: inspectorById.get(review.inspectorId)?.portalEmail || review.inspectorEmail, inspectorStudentId: inspectorById.get(review.inspectorId)?.studentId, inspectedAt: new Date(review.inspectedAt).toISOString() })) } : { ...emptyOwnership(id), applicantName: application?.applicantName || application?.user.name || "", applicantEmail: application?.applicantEmail ?? application?.user.email ?? "", applicantUnit: application?.applicantUnit || "", applicantExtension: application?.applicantExtension || "", purpose: application?.purpose || "" };
     return { ...record, ownership };
   });
 }
@@ -61,24 +62,26 @@ export async function captureApprovedRequest(actor: Actor, request: Identity & {
   await db.dnsRecordMetadata.upsert({ where: { id }, create: fields, update: {} });
 }
 
-export async function saveInventory(actor: Actor, input: Identity & { id: string; expectedUpdatedAt: string | null; mode: "metadata" | "inspect" | "inspect-and-metadata"; applicantName: string; applicantEmail: string; applicantUnit: string; applicantExtension: string; purpose: string; note: string }) {
+export async function saveInventory(actor: Actor, input: Identity & { id: string; expectedUpdatedAt: string | null; mode: "metadata" | "inspect" | "inspect-and-metadata"; applicantName: string; applicantEmail: string; applicantUnit: string; applicantExtension: string; purpose: string; note: string; recordStatus?: string | null }) {
   if (!canManageRecord(actor, input.zoneName, input.recordName, input.recordType)) throw new ApiError("找不到可管理的 DNS 紀錄。", 404);
   if (input.id !== recordId(await connectionScope(), input)) throw new ApiError("DNS 連線已變更，請重新載入。", 409);
   const zone = await powerdns.getZone(input.zoneName);
   const live = (await describeRecords(actor, input.zoneName, zone.rrsets)).find((record) => record.ownership.id === input.id);
   if (!live) throw new ApiError("此解析值已不存在，請重新載入。", 409);
+  const recordStatus = recordStatusSchema.parse(input.recordStatus);
+  const statusFields = { recordStatus: input.mode !== "metadata" && recordStatus !== undefined ? recordStatus : live.ownership.recordStatus ?? null };
   const { zoneName, recordName, recordType, content } = input;
   const fields = input.mode !== "inspect" ? { applicantName: input.applicantName, applicantEmail: input.applicantEmail, applicantUnit: input.applicantUnit, applicantExtension: input.applicantExtension, purpose: input.purpose } : { applicantName: live.ownership.applicantName, applicantEmail: live.ownership.applicantEmail, applicantUnit: live.ownership.applicantUnit, applicantExtension: live.ownership.applicantExtension, purpose: live.ownership.purpose };
-  const inspection = { id: crypto.randomUUID(), inspectedAt: new Date().toISOString(), inspectorId: actor.id, inspectorEmail: actor.email, inspectorName: actor.name || actor.email, note: input.note, eventId: null as string | null, eventName: null as string | null, eventClassified: true };
+  const inspection = { id: crypto.randomUUID(), inspectedAt: new Date().toISOString(), inspectorId: actor.id, inspectorEmail: actor.email, inspectorName: actor.name || actor.email, ...statusFields, note: input.note, eventId: null as string | null, eventName: null as string | null, eventClassified: true };
   const checkVersion = (updatedAt: string | Date | null | undefined) => { if ((updatedAt ? new Date(updatedAt).toISOString() : null) !== input.expectedUpdatedAt) throw new ApiError("資料已由其他人更新，請重新載入後再儲存。", 409); };
   if (isLocalDemo()) return localDocument("inventory", async () => ({ records: {} } as Store), (data) => {
     const previous = data.records[input.id]; checkVersion(previous?.updatedAt);
-    data.records[input.id] = { id: input.id, zoneName, recordName, recordType, content, ...fields, updatedAt: new Date().toISOString(), updatedBy: actor.email, inspections: input.mode !== "metadata" ? [inspection, ...(previous?.inspections || [])] : previous?.inspections || [] };
+    data.records[input.id] = { id: input.id, zoneName, recordName, recordType, content, ...fields, ...statusFields, updatedAt: new Date().toISOString(), updatedBy: actor.email, inspections: input.mode !== "metadata" ? [inspection, ...(previous?.inspections || [])] : previous?.inspections || [] };
     return { before: previous ?? live.ownership, after: data.records[input.id] };
   }, true);
   return db.$transaction(async (tx) => {
     const current = await tx.dnsRecordMetadata.findUnique({ where: { id: input.id } }); checkVersion(current?.updatedAt);
-    const saved = await tx.dnsRecordMetadata.upsert({ where: { id: input.id }, create: { id: input.id, zoneName, recordName, recordType, content, ...fields, updatedBy: actor.email }, update: { ...fields, updatedBy: actor.email, updatedAt: new Date() } });
+    const saved = await tx.dnsRecordMetadata.upsert({ where: { id: input.id }, create: { id: input.id, zoneName, recordName, recordType, content, ...fields, ...statusFields, updatedBy: actor.email }, update: { ...fields, ...statusFields, updatedBy: actor.email, updatedAt: new Date() } });
     if (input.mode !== "metadata") {
       Object.assign(inspection, await inspectionEventSnapshot(new Date(inspection.inspectedAt), tx));
       await tx.dnsInspection.create({ data: { ...inspection, recordId: input.id, inspectedAt: new Date(inspection.inspectedAt) } });

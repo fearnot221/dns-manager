@@ -1,4 +1,5 @@
 import "server-only";
+import { recordStatusSchema } from "@/lib/inventory/record-status";
 import { enqueueDnsMail } from "@/lib/mail/queue";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db/client";
@@ -27,7 +28,7 @@ export async function unitDetail(actor: Actor, unitId: string, mode: "dns" | "ma
   const allowlist = role === "ADMIN" ? await db.unitAllowlist.findMany({ where: { unitId }, select: { studentId: true, userId: true, role: true }, orderBy: { studentId: "asc" } }) : [];
   const summary = { allowlist, unit: { id: unit.id, name: unit.name, note: unit.note, department: unit.department, location: unit.location, extension: unit.extension, advisor: unit.advisor, status: unit.status }, role, systemAdmin: isGlobalAdmin(actor), canApply: unit.status === "APPROVED" && unit.members.some((m) => m.userId === actor.id && ["EDITOR", "ADMIN"].includes(m.role)), members };
   if (mode === "manage" && !isGlobalAdmin(actor) || unit.status !== "APPROVED") return { ...summary, records: [], recordsError: "" };
-  const saved = await db.dnsRecordMetadata.findMany({ where: { unitId }, include: { inspections: { orderBy: { inspectedAt: "desc" }, select: { id: true, inspectedAt: true, inspectorName: true, note: true, eventName: true, eventClassified: true } } } });
+  const saved = await db.dnsRecordMetadata.findMany({ where: { unitId }, include: { inspections: { orderBy: { inspectedAt: "desc" }, select: { id: true, inspectedAt: true, inspectorName: true, recordStatus: true, note: true, eventName: true, eventClassified: true } } } });
   const scope = await connectionScope();
   const scoped = saved.filter((record) => record.id === recordId(scope, record));
   const zones = new Map<string, RRSet[]>();
@@ -39,7 +40,7 @@ export async function unitDetail(actor: Actor, unitId: string, mode: "dns" | "ma
   const records = scoped.flatMap((record) => {
     const rrset = zones.get(record.zoneName)?.find((r) => r.name === record.recordName && r.type === record.recordType);
     const live = rrset?.records.find((r) => r.content === record.content);
-    return live && rrset ? [{ id: record.id, zoneName: record.zoneName, recordName: record.recordName, recordType: record.recordType, content: record.content, ttl: rrset.ttl, disabled: live.disabled, purpose: record.purpose, expectedUpdatedAt: record.updatedAt.toISOString(), applicantName: record.applicantName, applicantEmail: record.applicantEmail, applicantExtension: record.applicantExtension, applicantUnit: unit.name, expectedHash: rrsetHash(rrset), inspections: record.inspections }] : [];
+    return live && rrset ? [{ id: record.id, zoneName: record.zoneName, recordName: record.recordName, recordType: record.recordType, content: record.content, ttl: rrset.ttl, disabled: live.disabled, purpose: record.purpose, recordStatus: record.recordStatus, expectedUpdatedAt: record.updatedAt.toISOString(), applicantName: record.applicantName, applicantEmail: record.applicantEmail, applicantExtension: record.applicantExtension, applicantUnit: unit.name, expectedHash: rrsetHash(rrset), inspections: record.inspections }] : [];
   });
   // Only return this unit's record contact details, never account emails or other units' RRset values.
   return { ...summary, records, recordsError: unavailable.length ? `有 ${unavailable.length} 個網域暫時無法取得 DNS，清單可能不完整；成員管理不受影響。` : "" };
@@ -81,7 +82,7 @@ export async function requestUnitChange(actor: Actor, unitId: string, input: { r
 }
 
 /** Unit members can update contact/purpose fields and append history, never reassign units or publish DNS. */
-export async function inspectUnitRecord(actor: Actor, unitId: string, input: { recordId: string; expectedHash: string; note: string; ownership?: UnitOwnershipInput }) {
+export async function inspectUnitRecord(actor: Actor, unitId: string, input: { recordId: string; expectedHash: string; note: string; recordStatus?: string | null; ownership?: UnitOwnershipInput }) {
   requireUnitDatabase();
   return db.$transaction(async (tx) => {
     await lockActiveUser(tx, actor.id);
@@ -96,18 +97,20 @@ export async function inspectUnitRecord(actor: Actor, unitId: string, input: { r
     const zone = await powerdns.getZone(source.zoneName);
     const current = zone.rrsets.find((r) => r.name === source.recordName && r.type === source.recordType);
     if (!current?.records.some((r) => r.content === source.content) || rrsetHash(current) !== input.expectedHash) throw new ApiError("DNS 紀錄已變更，請重新載入後再清查。", 409);
+    const recordStatus = recordStatusSchema.parse(input.recordStatus);
     let fields;
     if (input.ownership) {
       const { expectedUpdatedAt, ...contact } = input.ownership;
       if (source.updatedAt.toISOString() !== expectedUpdatedAt) throw new ApiError("清查資料已更新，請重新載入後再儲存。", 409);
       const unit = await tx.dnsUnit.findUniqueOrThrow({ where: { id: unitId }, select: { name: true } });
       fields = { ...contact, applicantUnit: unit.name };
-      await tx.dnsRecordMetadata.update({ where: { id: source.id }, data: { ...fields, updatedBy: actor.email } });
     }
+    const status = recordStatus === undefined ? source.recordStatus : recordStatus;
+    if (fields || recordStatus !== undefined) await tx.dnsRecordMetadata.update({ where: { id: source.id }, data: { ...fields, recordStatus: status, updatedBy: actor.email } });
     const inspectedAt = new Date();
     const eventSnapshot = await inspectionEventSnapshot(inspectedAt, tx);
-    const saved = await tx.dnsInspection.create({ data: { recordId: source.id, inspectedAt, ...eventSnapshot, inspectorId: actor.id, inspectorEmail: actor.email, inspectorName: actor.name || actor.studentId || "單位成員", note: input.note } });
-    await unitAudit(tx, actor, "INSPECT_UNIT_DNS", input.ownership ? { applicantName: source.applicantName, applicantEmail: source.applicantEmail, applicantUnit: source.applicantUnit, applicantExtension: source.applicantExtension, purpose: source.purpose } : null, { ...fields, ...eventSnapshot, unitId, recordId: source.id, inspectionId: saved.id, note: input.note });
+    const saved = await tx.dnsInspection.create({ data: { recordId: source.id, inspectedAt, ...eventSnapshot, inspectorId: actor.id, inspectorEmail: actor.email, inspectorName: actor.name || actor.studentId || "單位成員", recordStatus: status, note: input.note } });
+    await unitAudit(tx, actor, "INSPECT_UNIT_DNS", input.ownership ? { applicantName: source.applicantName, applicantEmail: source.applicantEmail, applicantUnit: source.applicantUnit, applicantExtension: source.applicantExtension, purpose: source.purpose, recordStatus: source.recordStatus } : { recordStatus: source.recordStatus }, { ...fields, recordStatus: status, ...eventSnapshot, unitId, recordId: source.id, inspectionId: saved.id, note: input.note });
     return { id: saved.id };
   }, { timeout: 30000 });
 }
