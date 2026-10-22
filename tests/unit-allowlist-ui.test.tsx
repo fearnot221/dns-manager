@@ -5,7 +5,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/components/units/unit-workspace", () => ({ useUnitWorkspace: () => ({ active: { id: "lab", name: "實驗室", role: "ADMIN" } }) }));
 vi.mock("@/lib/client/use-resource", () => ({ useResource: vi.fn() }));
 import { useResource } from "@/lib/client/use-resource";
-import { UnitsWorkbench } from "@/components/units/units-workbench";
+import { UnitsWorkbench, UnitProfileFields } from "@/components/units/units-workbench";
 
 it.each(["EDITOR", "ADMIN"])("shows allowlist management only to unit admins: %s", (role) => {
   vi.mocked(useResource).mockImplementation((url) => ({ loading: false, error: "", reload: vi.fn(), data: url === "/api/units" ? { units: [{ id: "lab", name: "實驗室", status: "APPROVED", role, memberCount: 1 }] } : { unit: { id: "lab", name: "實驗室", note: "研究單位備註", location: "E1-213", extension: "01234", advisor: "王老師", status: "APPROVED" }, role, canApply: false, systemAdmin: false, members: [], records: [], recordsError: "", allowlist: [{ studentId: "115000001", userId: null }] } }) as never);
@@ -29,7 +29,7 @@ it("shows system admins the selected unit users and DNS without application acti
   const html = renderToStaticMarkup(createElement(UnitsWorkbench, { systemAdmin: true }));
   expect(html).toContain("研究單位備註");
   for (const value of ["單位資訊", "E1-213", "01234", "王老師", "編輯單位資訊"]) expect(html).toContain(value);
-  expect(html).toContain("修改單位名稱"); expect(html).toContain("刪除單位");
+  expect(html).not.toContain("修改單位名稱"); expect(html).not.toContain("設定系所組別"); expect(html).toContain("刪除單位");
   expect(html).toMatch(/<button class="button danger" disabled="" aria-describedby="unit-delete-help-lab">刪除單位<\/button>/);
   expect(html).toContain('id="unit-delete-help-lab"'); expect(html).toContain("需先移出所有成員");
   expect(html).toContain("單位成員"); expect(html).toContain("lab.example.com."); expect(html).toContain("192.0.2.1");
@@ -62,4 +62,13 @@ it("groups the unit selector by 系所 then 組別 in policy order, unassigned l
   expect(order.every((index) => index >= 0)).toBe(true);
   expect(order).toEqual([...order].sort((a, b) => a - b));
   expect(nav).toContain('aria-label="搜尋單位"'); expect(nav).toContain('aria-label="篩選系所"');
+});
+
+it.each([false, true])("combines identity fields with required location and extension (system admin: %s)", (systemAdmin) => {
+  const html = renderToStaticMarkup(createElement(UnitProfileFields, { systemAdmin, unit: { name: "實驗室", department: "電機系／系辦", location: "E1-213", extension: "01234", advisor: "王老師" } }));
+  expect(html).toContain("單位名稱"); expect(html).toContain("所屬系所／組別");
+  expect(html.includes('name="name"')).toBe(systemAdmin);
+  expect(html.includes('name="department"')).toBe(systemAdmin);
+  for (const name of ["location", "extension"]) expect(html.match(new RegExp(`<input[^>]*name="${name}"[^>]*>`))?.[0]).toContain('required=""');
+  expect(html).not.toContain("單位位置（選填）"); expect(html).not.toContain("單位分機（選填）");
 });
