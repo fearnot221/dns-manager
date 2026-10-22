@@ -9,6 +9,7 @@ export const unitProfileFields = {
 export const unitProfileSchema = z.object(unitProfileFields).strict();
 export type UnitProfile = z.infer<typeof unitProfileSchema>;
 export const unitProfileUpdateSchema = unitProfileSchema.extend({
+  note: z.string().trim().max(2000).optional(),
   name: z.string().trim().min(1).max(100).optional(),
   department: z.enum(unitDepartments).optional(),
 });

@@ -134,6 +134,17 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     await expect(updateUnitProfile(admin, unitId, { location: "  ", extension: "", advisor: "" })).rejects.toThrow();
   });
 
+  it("lets unit managers edit optional notes without clearing notes omitted by older clients", async () => {
+    const profile = { location: "E1-213", extension: "1234", advisor: "" };
+    await updateUnitProfile(creator, unitId, { ...profile, note: "  聯絡時間與用途  " });
+    expect((await unitDetail(creator, unitId, "manage")).unit.note).toBe("聯絡時間與用途");
+    await updateUnitProfile(admin, unitId, profile);
+    expect((await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } })).note).toBe("聯絡時間與用途");
+    await updateUnitProfile(creator, unitId, { ...profile, note: "" });
+    expect((await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } })).note).toBe("");
+    expect(await db.auditLog.findFirst({ where: { action: "UPDATE_DNS_UNIT_PROFILE", userId: creator.id, newValue: { path: ["note"], equals: "" } } })).toMatchObject({ oldValue: expect.objectContaining({ note: "聯絡時間與用途" }), newValue: expect.objectContaining({ note: "" }) });
+  });
+
   async function claimInput() {
     const source = await sourceRecord();
     await db.dnsRecordMetadata.update({ where: { id: source.id }, data: { unitId: null } });
