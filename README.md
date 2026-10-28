@@ -198,6 +198,7 @@ UNIT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:PORT/dns_units_test
 ## 文件
 
 - [使用說明](docs/user-guide.md)：依角色整理的操作步驟與教學影片。
+- [API 文件](docs/API.md)：OpenAPI 規格、登入方式與文件維護；線上入口為 `/guide/api`。
 - [介面與權限](docs/access-matrix.md)：角色、申請、清查、DNS 歷程及已停用功能。
 - [介面流程](docs/unit-ui-review.md)：導覽、表單、草稿與操作行為。
 - [整合狀態](docs/pending-integrations.md)：外部服務能力與驗收範圍。
