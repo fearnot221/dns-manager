@@ -27,8 +27,8 @@
 .custom-select-trigger:disabled { cursor: not-allowed; opacity: .65; background: var(--surface-soft); box-shadow: none; }
 .custom-select-trigger > .is-placeholder { color: var(--muted); }
 /* Shown as a fixed top-layer popover; Select sets top/bottom, left, width and max-height. */
-.custom-select-menu { position: fixed; inset: auto; z-index: 30; margin: 0; height: auto; display: grid; align-content: start; gap: 2px; max-height: min(320px, 45dvh); overflow-y: auto; overscroll-behavior: contain; padding: var(--space-1); color: var(--ink); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--panel); box-shadow: var(--shadow-overlay); }
-.custom-select-menu > button { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); width: 100%; min-height: 36px; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink); font-size: var(--text-body); text-align: left; cursor: pointer; }
+.custom-select-menu { position: fixed; inset: auto; z-index: 30; margin: 0; height: auto; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 2px; max-height: min(320px, 45dvh); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-1); color: var(--ink); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--panel); box-shadow: var(--shadow-overlay); }
+.custom-select-menu > button { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); width: 100%; min-width: 0; min-height: 36px; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink); font-size: var(--text-body); text-align: left; cursor: pointer; }
 .custom-select-menu > button:hover:not(:disabled), .custom-select-menu > button.is-active:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
 .custom-select-menu > button[aria-selected="true"] { font-weight: 600; }
 .custom-select-menu > button:disabled { color: var(--muted); cursor: not-allowed; opacity: .55; }
@@ -74,7 +74,7 @@ select option:disabled { color: var(--muted); }
   [data-theme="dark"] select:not([multiple]):is(:not([size]), [size="1"]) { appearance: auto; background-image: none; }
 }
 
-.custom-select-menu > button > span { min-width: 0; overflow-wrap: anywhere; }
+.custom-select-menu > button > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: no-preference) {
   .custom-select-menu { animation: select-menu-in .12s var(--ease); }
   @keyframes select-menu-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }

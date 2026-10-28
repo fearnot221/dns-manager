@@ -22,8 +22,8 @@ import { reverseExample, reverseNameIp, reverseZoneInfo } from "@/lib/dns/revers
 import { availableTypes, policyViolation, zoneAcceptsType, type ApplicationPolicy } from "@/lib/requests/policy-model";
 type DraftRecord = { id: number; zoneName: string; name: string; type: RecordType; content: string; ttl: string; purpose: string; notes: string };
 const blankRecord = (id: number, zoneName = ""): DraftRecord => ({ id, zoneName, name: "", type: "A", content: "", ttl: "300", purpose: "", notes: "" });
-// Examples use one of our own zones (`d`), never outside domains.
-const hints = (d: string): Partial<Record<RecordType, string>> => ({ A: "192.0.2.10", AAAA: "2001:db8::1", CNAME: `www.${d}`, TXT: "v=spf1 mx ~all", PTR: `host.${d}` });
+// PTR targets may belong to any forward domain, independently of the reverse zone.
+const hints = (d: string): Partial<Record<RecordType, string>> => ({ A: "192.0.2.10", AAAA: "2001:db8::1", CNAME: `www.${d}`, TXT: "v=spf1 mx ~all", PTR: "host.example.com" });
 type ContentPart = { label: string; placeholder: string; numeric?: boolean; options?: string[] };
 // Multi-value types get one input per value; the content string stays the single source of truth.
 const contentParts = (d: string): Partial<Record<RecordType, ContentPart[]>> => ({
@@ -200,7 +200,7 @@ export function DnsApplicationForm({ operation = "CREATE", applicantName = "" }:
             <label className="type-field">類型<Select aria-label="DNS 類型" value={record.type} onChange={(value) => changeType(record, value as RecordType)} options={[...(!requestTypes.includes(record.type) ? [{ value: record.type, label: `${record.type}（未開放，請改選）`, disabled: true }] : []), ...requestTypes.map((type) => ({ value: type, label: type }))]} /></label>
             <label>名稱<input value={record.name} onChange={(event) => update(record.id, { name: event.target.value })} placeholder={record.type === "PTR" ? reverseExample(record.zoneName)?.name ? `例如 ${reverseExample(record.zoneName)!.name}` : "先選反解網域" : "www 或 @"} required maxLength={253} autoCapitalize="none" spellCheck={false} aria-describedby={`fqdn-${record.id}`} ref={(node) => { if (node && focusId.current === record.id) { if (!record.zoneName) node.closest("fieldset")?.querySelector<HTMLElement>(".zone-field .custom-select-trigger")?.focus(); else node.focus(); focusId.current = null; } }} /><small id={`fqdn-${record.id}`} className="fqdn-preview">{fqdnPreview(record)}</small></label>
             <label className="zone-field">{record.type === "PTR" ? "反解網域" : "網域"}<Select aria-label="網域" value={record.zoneName} required disabled={loading || Boolean(zoneError) || !zones.length} onChange={(value) => update(record.id, { zoneName: value })} options={[{ value: "", label: zonesFor(record.type).length ? "選擇網域" : record.type === "PTR" ? "沒有可申請的反解網域" : "沒有可申請的正解網域", disabled: true }, ...(record.zoneName && !zonesFor(record.type).some((zone) => zone.name === record.zoneName) ? [{ value: record.zoneName, label: `${record.zoneName}（目前無法使用）`, disabled: true }] : []), ...zonesFor(record.type).map((zone) => ({ value: zone.name, label: zone.name.replace(/\.$/, "") }))]} /></label>
-            {record.type === "PTR" && <PtrGuide zoneName={record.zoneName} domain={exampleDomain(record)} />}
+            {record.type === "PTR" && <PtrGuide zoneName={record.zoneName} />}
             <ContentField record={record} domain={exampleDomain(record)} onChange={(content) => update(record.id, { content })} />
             {!claiming && <label>TTL<Select aria-label="TTL" value={record.ttl} onChange={(value) => update(record.id, { ttl: value })} options={[{ value: "60", label: "1 分鐘" }, { value: "300", label: "5 分鐘" }, { value: "600", label: "10 分鐘" }, { value: "1800", label: "30 分鐘" }, { value: "3600", label: "1 小時" }]} /></label>}
             <label className="purpose-field">用途<textarea rows={2} required value={record.purpose} onChange={(event) => update(record.id, { purpose: event.target.value })} placeholder="請說明此 DNS 的服務名稱與實際用途，供後續清查使用" maxLength={1000} /></label>
@@ -235,7 +235,7 @@ function ContentField({ record, domain, onChange }: { record: DraftRecord; domai
   </fieldset>;
 }
 
-function PtrGuide({ zoneName, domain }: { zoneName: string; domain: string }) {
+function PtrGuide({ zoneName }: { zoneName: string }) {
   const info = reverseZoneInfo(zoneName);
   const example = reverseExample(zoneName);
   if (!info || !example) return <div className="ptr-guide" role="note"><strong>PTR 反解怎麼填？</strong><p>先選擇 IP 所屬的反解網域，這裡會說明「名稱」要填哪一段。</p></div>;
@@ -246,7 +246,7 @@ function PtrGuide({ zoneName, domain }: { zoneName: string; domain: string }) {
     <ol>
       <li>名稱：只填 IP 中網域沒涵蓋的 {info.remaining} {ipv4 ? "段" : "個十六進位位數"}，<b>由後往前</b>、以點分隔{ipv4 ? "" : "（每位一格，含 0）"}；不要填完整 IP。</li>
       <li>例如 IP <code>{example.ip}</code>，名稱填 <code>{example.name}</code>。</li>
-      <li>解析內容：填這個 IP 對應的完整主機名稱，例如 <code>host.{domain}</code>。</li>
+      <li>解析內容：填這個 IP 對應的完整主機名稱，例如 <code>host.example.com</code>；不限於系統列出的正解網域。</li>
     </ol>
   </div>;
 }

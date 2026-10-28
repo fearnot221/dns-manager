@@ -34,15 +34,22 @@ export function UnitsWorkbench({ systemAdmin, mode = "manage" }: { systemAdmin: 
   const router = useRouter();
   const { data, loading, error, reload } = useResource<{ units: Unit[] }>("/api/units");
   const [selected, setSelected] = useState("");
+  const layout = useRef<HTMLDivElement>(null);
+  const [minimumHeight, setMinimumHeight] = useState(0);
   const [creating, setCreating] = useState(false);
   const units = (data?.units ?? []).filter((unit) => mode === "dns" ? unit.id === workspace.active?.id : systemAdmin || unit.role === "ADMIN" && unit.id === workspace.active?.id);
   const active = units.find((unit) => unit.id === selected) ?? units[0];
+  function selectUnit(id: string) {
+    // Keep the viewport filled while details load so scrolling and the sticky selector stay put.
+    setMinimumHeight(Math.max(0, window.innerHeight - layout.current!.getBoundingClientRect().top));
+    setSelected(id);
+  }
   return <>
     {mode === "manage" && <PageHeader title="單位管理" actions={<>{systemAdmin && <button className="button primary" onClick={() => setCreating(true)}><Plus size={16} aria-hidden="true" />建立單位</button>}<button className="button" disabled={loading} onClick={() => { void reload(); router.refresh(); }} aria-label="重新載入單位"><RefreshCw size={16} className={loading ? "spin" : ""} aria-hidden="true" /></button></>} />}
     {loading && !data && <LoadingPanel label="正在載入單位…" />}
     {error && <ResourceError message={error} retry={reload} />}
     {!!data && !error && !units.length && <div className="card"><EmptyState title={mode === "manage" ? "尚無可管理的單位" : "尚未加入單位"} description={mode === "manage" && systemAdmin ? "可先建立單位，之後再透過學號指定管理人或新增使用者。" : mode === "manage" ? "目前單位未授予管理權限。若你管理其他單位，請切換至該單位的工作區。" : "請將學號提供給單位管理員，由管理員將你加入單位。"} /></div>}
-    {!error && active && <div className={units.length > 1 ? "unit-layout" : "unit-layout unit-layout-single"}>{units.length > 1 && <UnitSelector units={units} activeId={active.id} onSelect={setSelected} />}<UnitDetail key={active.id} id={active.id} mode={mode} onMembershipChanged={async () => { await reload(); router.refresh(); }} /></div>}
+    {!error && active && <div ref={layout} style={{ minHeight: minimumHeight }} className={units.length > 1 ? "unit-layout" : "unit-layout unit-layout-single"}>{units.length > 1 && <UnitSelector units={units} activeId={active.id} onSelect={selectUnit} />}<UnitDetail key={active.id} id={active.id} mode={mode} onMembershipChanged={async () => { await reload(); router.refresh(); }} /></div>}
     {creating && <UnitEntryDialog onClose={() => setCreating(false)} onSaved={async (result) => { setCreating(false); setSelected(result.unit.id); toast.success("已建立單位"); await reload(); router.refresh(); }} />}
   </>;
 }

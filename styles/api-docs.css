@@ -1,0 +1,13 @@
+.api-docs { display: grid; gap: var(--space-6); }
+.api-docs .page-head { margin-bottom: 0; }
+.api-docs-intro { padding: var(--space-5); }
+.api-docs-intro p { margin-top: var(--space-3); overflow-wrap: anywhere; }
+.api-docs nav { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin-top: var(--space-4); }
+.api-docs section > h2 { margin-bottom: var(--space-3); scroll-margin-top: calc(var(--header-height) + var(--space-4)); }
+.api-operation { margin-top: var(--space-2); overflow: hidden; }
+.api-operation summary { padding: var(--space-4); cursor: pointer; overflow-wrap: anywhere; }
+.api-operation summary > :is(code, span) { margin-right: var(--space-3); }
+.api-operation summary > code { color: var(--accent); }
+.api-operation > div { padding: 0 var(--space-4) var(--space-4); }
+.api-operation p + p { margin-top: var(--space-2); }
+.api-operation pre { margin: var(--space-3) 0 0; padding: var(--space-4); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-soft); font-size: var(--text-caption); }

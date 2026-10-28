@@ -1,7 +1,14 @@
 import { expect, it } from "vitest";
-import { filterRequests, scopeRequests, statuses, type DnsRequest } from "@/components/requests/model";
+import { contentHelp, filterRequests, scopeRequests, statuses, type DnsRequest } from "@/components/requests/model";
 
 const item: DnsRequest = { id: "one", zoneName: "example.com.", recordName: "Lab.example.com.", recordType: "TXT", content: "test", ttl: 300, status: "PENDING", createdAt: "2026-09-14T00:00:00Z", canReview: false, user: { id: "u", email: "student@example.com", name: "王小明", studentId: "115500001" }, applicantUnit: "實驗室", applicantExtension: "1234", purpose: "研究服務", reviewNote: "請補說明" };
+it("does not tie PTR target guidance to the first managed forward domain", () => {
+  for (const domain of ["ce.ncu.edu.tw", "ee.ncu.edu.tw", "你的網域"]) {
+    expect(contentHelp("PTR", domain)).toContain("host.example.com");
+    expect(contentHelp("PTR", domain)).not.toContain(domain);
+  }
+  expect(contentHelp("CNAME", "ee.ncu.edu.tw")).toContain("www.ee.ncu.edu.tw");
+});
 it("searches visible identity, contact and purpose fields ignoring whitespace and case", () => {
   for (const query of [" LAB ", "115500001", "王小明", "實驗室", "1234", "研究服務", "請補說明"]) expect(filterRequests([item], query, "ALL")).toEqual([item]);
   expect(filterRequests([item], "student@example.com", "ALL")).toEqual([]);
