@@ -74,7 +74,7 @@ select option:disabled { color: var(--muted); }
   [data-theme="dark"] select:not([multiple]):is(:not([size]), [size="1"]) { appearance: auto; background-image: none; }
 }
 
-.custom-select-menu > button > span { min-width: 0; overflow-wrap: anywhere; }
+.custom-select-menu > button > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: no-preference) {
   .custom-select-menu { animation: select-menu-in .12s var(--ease); }
   @keyframes select-menu-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
