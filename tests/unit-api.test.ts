@@ -3,13 +3,13 @@ vi.mock("@/lib/units/allowlist", () => ({ manageAllowlist: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/session", () => ({ requireActor: vi.fn(), AuthError: class AuthError extends Error {} }));
 vi.mock("@/lib/audit/service", () => ({ logAuditEvent: vi.fn(async () => undefined) }));
-vi.mock("@/lib/units/service", () => ({ createUnit: vi.fn(), listUnits: vi.fn(), manageUnit: vi.fn(), assignUnitManager: vi.fn(), editUnit: vi.fn(), updateUnitProfile: vi.fn() }));
+vi.mock("@/lib/units/service", () => ({ addUnitMember: vi.fn(), createUnit: vi.fn(), listUnits: vi.fn(), manageUnit: vi.fn(), assignUnitManager: vi.fn(), editUnit: vi.fn(), updateUnitProfile: vi.fn() }));
 vi.mock("@/lib/units/records", () => ({ unitDetail: vi.fn(), requestUnitChange: vi.fn(), inspectUnitRecord: vi.fn() }));
 vi.mock("@/lib/requests/dev-store", () => ({ isDevRequestStore: () => false }));
 vi.mock("@/lib/db/client", () => ({ db: { $transaction:vi.fn(async (operations)=>Promise.all(operations)), dnsRecordRequest: { findMany: vi.fn(), count:vi.fn(async()=>1), groupBy:vi.fn(async()=>[{status:"PENDING",_count:{_all:1}}]) } } }));
 import { requireActor, AuthError } from "@/lib/auth/session";
 import { manageAllowlist } from "@/lib/units/allowlist";
-import { createUnit, listUnits, manageUnit, assignUnitManager, editUnit, updateUnitProfile } from "@/lib/units/service";
+import { addUnitMember, createUnit, listUnits, manageUnit, assignUnitManager, editUnit, updateUnitProfile } from "@/lib/units/service";
 import { inspectUnitRecord, requestUnitChange } from "@/lib/units/records";
 import { GET, POST } from "@/app/api/units/route";
 import { PATCH } from "@/app/api/units/[id]/route";
@@ -51,7 +51,7 @@ describe("unit API boundaries", () => {
     expect(manageAllowlist).not.toHaveBeenCalled();
     vi.mocked(manageAllowlist).mockResolvedValue({ saved: true });
     expect((await PATCH(req({ action: "allowlist", studentId: " 115000001 " }), ctx)).status).toBe(200);
-    expect(manageAllowlist).toHaveBeenCalledWith(expect.objectContaining({ id: "user" }), "unit-1", "115000001", false);
+    expect(manageAllowlist).toHaveBeenCalledWith(expect.objectContaining({ id: "user" }), "unit-1", "115000001", false, undefined);
   });
   it("does not cache unit discovery or one-time invitations", async () => {
     expect((await GET()).headers.get("Cache-Control")).toBe("no-store");
@@ -256,4 +256,26 @@ it("accepts optional unit notes, including explicit clearing, and rejects oversi
   vi.mocked(updateUnitProfile).mockClear();
   expect((await PATCH(req({ action: "profile", ...profile, note: "x".repeat(2001) }), ctx)).status).toBe(400);
   expect(updateUnitProfile).not.toHaveBeenCalled();
+});
+
+it("validates optional onboarding recipient and rejects notifications on removal", async () => {
+  for (const body of [{ notificationEmail: "invalid" }, { notificationEmail: "student@example.com", remove: true }, { notificationEmail: "student@example.com", role: "ADMIN" }]) {
+    expect((await PATCH(req({ action: "allowlist", studentId: "115000001", ...body }), ctx)).status).toBe(400);
+  }
+  expect(manageAllowlist).not.toHaveBeenCalled();
+  vi.mocked(manageAllowlist).mockResolvedValue({ saved: true, notificationQueued: 1 });
+  const response = await PATCH(req({ action: "allowlist", studentId: "115000001", notificationEmail: "student@example.com" }), ctx);
+  expect(await response.json()).toEqual({ saved: true, notificationQueued: 1 });
+  expect(manageAllowlist).toHaveBeenCalledWith(expect.anything(), "unit-1", "115000001", false, "student@example.com");
+});
+it("accepts account membership addition with only known roles and same-origin requests", async () => {
+  vi.mocked(addUnitMember).mockResolvedValue({ saved: true });
+  for (const role of ["EDITOR", "ADMIN"]) {
+    expect((await PATCH(req({ action: "add-member", userId: "target", role }), ctx)).status).toBe(200);
+    expect(addUnitMember).toHaveBeenLastCalledWith(expect.anything(), "unit-1", "target", role);
+  }
+  vi.mocked(addUnitMember).mockClear();
+  for (const role of [null, "VIEWER", "SUPER_ADMIN"]) expect((await PATCH(req({ action: "add-member", userId: "target", role }), ctx)).status).toBe(400);
+  expect((await PATCH(req({ action: "add-member", userId: "target", role: "EDITOR" }, "https://evil.invalid"), ctx)).status).toBe(403);
+  expect(addUnitMember).not.toHaveBeenCalled();
 });

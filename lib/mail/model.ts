@@ -18,13 +18,14 @@ const sampleRequest = (operation: string, recordCount: string): Record<string, s
 const sampleReview = (result: string, reviewNote: string): Record<string, string> => ({ requestId: "範例申請編號", applicantName: "王小明", unitName: "資訊工程學系", operation: "新增", recordName: "www.example.edu.tw.", recordType: "A", content: "192.0.2.10", result, reviewNote, reviewedAt: "2026/10/15 09:30（台北時間）", requestsUrl: "https://dns.example.edu.tw/requests" });
 const sampleUnit: Record<string, string> = { recipientName: "陳大文", unitName: "資訊工程學系", eventName: "115 學年度上學期 DNS 清查", startsOn: "2026-11-01", endsOn: "2026-11-30", dnsUrl: "https://dns.example.edu.tw/dns" };
 
-export const scenarioKeys = ["requestCreate", "requestUpdate", "requestDelete", "reviewApproved", "reviewRejected", "inspectionCreated"] as const;
+export const scenarioKeys = ["requestCreate", "requestUpdate", "requestDelete", "reviewApproved", "reviewRejected", "inspectionCreated", "unitOpened"] as const;
 export type ScenarioKey = typeof scenarioKeys[number];
 export type Scenario = { label: string; group: string; audience: string; variables: Vars; sample: Record<string, string>; defaults: TemplateConfig };
 export type TemplateConfig = { enabled: boolean; ccTeam: boolean; subject: string; body: string };
 export const scenarioGroups = [
   { id: "request", label: "申請通知", audience: "網管小組" },
   { id: "review", label: "審核結果", audience: "申請人" },
+  { id: "unit", label: "單位開通", audience: "新增使用者" },
   { id: "inspection", label: "清查活動", audience: "單位管理員" },
 ] as const;
 export const scenarios: Record<ScenarioKey, Scenario> = {
@@ -33,6 +34,7 @@ export const scenarios: Record<ScenarioKey, Scenario> = {
   requestDelete: { label: "刪除申請", group: "request", audience: "網管小組", variables: requestVars, sample: sampleRequest("刪除", "1"), defaults: { enabled: true, ccTeam: true, subject: "[DNS Manager] {{unitName}} — 刪除申請", body: requestBody("刪除") } },
   reviewApproved: { label: "申請核准", group: "review", audience: "申請人", variables: reviewVars, sample: sampleReview("核准", ""), defaults: { enabled: false, ccTeam: false, subject: "[DNS Manager] DNS {{operation}}申請已核准：{{recordName}}", body: "{{applicantName}} 您好：\n\n您為「{{unitName}}」提出的 DNS {{operation}}申請已核准並生效。\n紀錄：{{recordName}}（{{recordType}}）\n內容：{{content}}\n審核時間：{{reviewedAt}}\n\n申請紀錄：\n{{requestsUrl}}" } },
   reviewRejected: { label: "申請退回", group: "review", audience: "申請人", variables: reviewVars, sample: sampleReview("退回", "解析內容與用途不符，請確認後重新申請。"), defaults: { enabled: false, ccTeam: false, subject: "[DNS Manager] DNS {{operation}}申請已退回：{{recordName}}", body: "{{applicantName}} 您好：\n\n您為「{{unitName}}」提出的 DNS {{operation}}申請已退回。\n紀錄：{{recordName}}（{{recordType}}）\n內容：{{content}}\n退回原因：{{reviewNote}}\n\n如需協助，請直接回覆此郵件。\n申請紀錄：\n{{requestsUrl}}" } },
+  unitOpened: { label: "單位開通通知", group: "unit", audience: "新增使用者", variables: ["studentId", "unitName", "dnsUrl"], sample: { studentId: "115000001", ...sampleUnit }, defaults: { enabled: true, ccTeam: false, subject: "[DNS Manager] {{unitName}} 單位開通通知", body: "您好：\n\n您已獲准使用「{{unitName}}」的 DNS 單位功能。\n請以學號 {{studentId}} 對應的帳號登入系統，即可選擇此單位進行 DNS 申請與清查。\n{{dnsUrl}}\n\n如有疑問，請聯絡單位管理員。" } },
   inspectionCreated: { label: "清查活動排定", group: "inspection", audience: "單位管理員", variables: inspectionVars, sample: sampleUnit, defaults: { enabled: false, ccTeam: false, subject: "[DNS Manager] {{eventName}} 清查通知", body: "{{recipientName}} 您好：\n\n網管小組將於 {{startsOn}} 至 {{endsOn}} 進行「{{eventName}}」。\n請協助確認「{{unitName}}」的 DNS 用途與聯絡資料，並於期間內完成清查：\n{{dnsUrl}}\n\n如有疑問，請直接回覆此郵件。" } },
 };
 export const customSample: Record<string, string> = { recipientName: sampleUnit.recipientName, unitName: sampleUnit.unitName, dnsUrl: sampleUnit.dnsUrl };

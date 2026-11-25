@@ -99,3 +99,15 @@ describe("mail settings validation and secrets", () => {
     for (const match of html.matchAll(/<(?:input|textarea|select)[^>]*id="([^"]+)"/g)) expect(html).toContain(`for="${match[1]}"`);
   });
 });
+
+it("upgrades existing mail settings with an optional onboarding template", () => {
+  const { unitOpened: _onboarding, ...previous } = defaultMailConfig.templates;
+  void _onboarding;
+  const config = mailConfigSchema.parse({ ...defaultMailConfig, templates: previous });
+  expect(config.enabled).toBe(false);
+  expect(config.templates.unitOpened).toMatchObject({ enabled: true, ccTeam: false });
+  const mail = renderMail(config.templates.unitOpened, { unitName: "研究室", studentId: "115000001", dnsUrl: "https://dns.example.com/dns" });
+  expect(mail.text).toContain("115000001");
+  expect(mail.text).toContain("研究室");
+  expect(mail.text).not.toContain("{{");
+});
