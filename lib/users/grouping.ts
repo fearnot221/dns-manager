@@ -1,4 +1,4 @@
-export type AccountUnit = { id: string; name: string };
+export type AccountUnit = { id: string; name: string; role?: "EDITOR" | "ADMIN" };
 export function groupAccounts<T extends { globalRole: string; protected?: boolean; units?: AccountUnit[] }>(users: T[]) {
   const groups = new Map<string, { id: string; name: string; users: T[] }>();
   for (const user of users) {

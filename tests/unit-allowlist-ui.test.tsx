@@ -5,7 +5,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/components/units/unit-workspace", () => ({ useUnitWorkspace: () => ({ active: { id: "lab", name: "實驗室", role: "ADMIN" } }) }));
 vi.mock("@/lib/client/use-resource", () => ({ useResource: vi.fn() }));
 import { useResource } from "@/lib/client/use-resource";
-import { UnitsWorkbench, UnitProfileFields } from "@/components/units/units-workbench";
+import { UnitsWorkbench, UnitProfileFields, UnitOnboardingFields } from "@/components/units/units-workbench";
 
 it.each(["EDITOR", "ADMIN"])("shows allowlist management only to unit admins: %s", (role) => {
   vi.mocked(useResource).mockImplementation((url) => ({ loading: false, error: "", reload: vi.fn(), data: url === "/api/units" ? { units: [{ id: "lab", name: "實驗室", status: "APPROVED", role, memberCount: 1 }] } : { unit: { id: "lab", name: "實驗室", note: "研究單位備註", location: "E1-213", extension: "01234", advisor: "王老師", status: "APPROVED" }, role, canApply: false, systemAdmin: false, members: [], records: [], recordsError: "", allowlist: [{ studentId: "115000001", userId: null }] } }) as never);
@@ -78,4 +78,13 @@ it("keeps unit notes optional and prefills existing notes in the unified editor"
   expect(html).toContain("單位備註（選填）");
   const field = html.match(/<textarea[^>]*name="note"[^>]*>既有備註<\/textarea>/)?.[0];
   expect(field).toBeTruthy(); expect(field).not.toContain("required");
+});
+
+it("makes onboarding mail an explicit choice with a labeled recipient", () => {
+  const html = renderToStaticMarkup(createElement(UnitOnboardingFields, { error: "", errorId: "onboarding-error" }));
+  expect(html).toContain("寄送單位開通通知信");
+  expect(html).toMatch(/name="notify"[^>]*type="checkbox"|type="checkbox"[^>]*name="notify"/);
+  expect(html).not.toContain("checked=");
+  expect(html).toMatch(/<input(?=[^>]*name="notificationEmail")(?=[^>]*disabled)[^>]*>/);
+  expect(html).toContain("通知收件電子郵件");
 });

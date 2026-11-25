@@ -4,7 +4,7 @@ import { requireActor } from "@/lib/auth/session";
 import { apiError } from "@/lib/api/respond";
 import { assertSameOrigin } from "@/lib/api/security";
 import { auditMutation } from "@/lib/audit/mutation";
-import { assignUnitManager, manageUnit, editUnit, updateUnitProfile } from "@/lib/units/service";
+import { addUnitMember, assignUnitManager, manageUnit, editUnit, updateUnitProfile } from "@/lib/units/service";
 import { isGlobalAdmin } from "@/lib/auth/owner";
 import { ApiError } from "@/lib/api/respond";
 import { unitDetail } from "@/lib/units/records";
@@ -18,7 +18,8 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("department"), department: z.enum(unitDepartments) }).strict(),
   z.object({ action: z.literal("delete") }).strict(),
   z.object({ action: z.literal("assign-manager"), studentId: z.string().trim().min(1).max(100) }).strict(),
-  z.object({ action: z.literal("allowlist"), studentId: z.string().trim().min(1).max(100), remove: z.boolean().optional() }).strict(),
+  z.object({ action: z.literal("allowlist"), studentId: z.string().trim().min(1).max(100), remove: z.boolean().optional(), notificationEmail: z.email().max(254).optional() }).strict(),
+  z.object({ action: z.literal("add-member"), userId: z.string().min(1).max(100), role: z.enum(["EDITOR", "ADMIN"]) }).strict(),
   z.object({ action: z.literal("member"), userId: z.string().min(1).max(100), role: z.enum(["EDITOR", "ADMIN"]).nullable() }).strict(),
 ]);
 type Context = { params: Promise<{ id: string }> };
@@ -41,7 +42,9 @@ export const PATCH = auditMutation(async (request: Request, { params }: Context)
       if (!isGlobalAdmin(actor)) throw new ApiError("只有系統管理員可以修改或刪除單位。", 403);
       return Response.json(await editUnit(actor, id, input), { headers: { "Cache-Control": "no-store" } });
     }
-    if (input.action === "allowlist") return Response.json(await manageAllowlist(actor, id, input.studentId, input.remove ?? false), { headers: { "Cache-Control": "no-store" } });
+    if (input.action === "add-member") return Response.json(await addUnitMember(actor, id, input.userId, input.role), { headers: { "Cache-Control": "no-store" } });
+    if (input.action === "allowlist" && input.remove && input.notificationEmail) throw new ApiError("移除使用者時不可寄送開通通知。", 400);
+    if (input.action === "allowlist") return Response.json(await manageAllowlist(actor, id, input.studentId, input.remove ?? false, input.notificationEmail), { headers: { "Cache-Control": "no-store" } });
     if (input.action === "assign-manager") {
       if (!isGlobalAdmin(actor)) throw new ApiError("只有系統管理員可以透過學號指定管理人。", 403);
       return Response.json(await assignUnitManager(actor, id, input.studentId), { headers: { "Cache-Control": "no-store" } });

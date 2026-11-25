@@ -56,6 +56,9 @@
     "nodemailer": "$nodemailer",
     "@next/eslint-plugin-next@16.4.3": {
       "fast-glob": "$fast-glob"
+    },
+    "@prisma/config@6.19.3": {
+      "effect": "^3.22.1"
     }
   }
 }

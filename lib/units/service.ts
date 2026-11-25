@@ -106,9 +106,38 @@ export async function assignUnitManager(actor: Actor, id: string, studentId: str
     return { saved: true };
   });
 }
+/** Account management adds one membership without replacing the user's other units. */
+export async function addUnitMember(actor: Actor, id: string, userId: string, role: UnitRole) {
+  if (!isGlobalAdmin(actor)) throw new ApiError("只有系統管理員可以從帳號管理加入單位。", 403);
+  requireUnitDatabase();
+  return db.$transaction(async (tx) => {
+    for (const target of [...new Set([actor.id, userId])].sort()) await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${target} FOR UPDATE`;
+    await lockActiveUser(tx, actor.id);
+    if (!await isCurrentUnitAdmin(tx, actor)) throw new ApiError("系統管理員權限已變更，請重新登入。", 403);
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { removedAt: true, disabled: true, studentId: true } });
+    if (!user || user.removedAt) throw new ApiError("找不到可管理的使用者。", 404);
+    if (role === "ADMIN" && user.disabled) throw new ApiError("停用帳號不可指派為單位管理員。", 400);
+    await lockUnit(tx, id);
+    await requireActiveUnit(tx, id);
+    const where = { unitId_userId: { unitId: id, userId } };
+    if (await tx.unitMember.findUnique({ where })) throw new ApiError("此使用者已在單位內，請重新載入。", 409);
+    if (user.studentId) {
+      const pending = await tx.unitAllowlist.findUnique({ where: { unitId_studentId: { unitId: id, studentId: user.studentId } } });
+      if (pending && pending.userId !== userId) {
+        if (pending.userId || await tx.user.count({ where: { studentId: user.studentId, removedAt: null } }) !== 1) throw new ApiError("此學號的單位資格對應不明，請先確認帳號資料。", 409);
+        await tx.unitAllowlist.update({ where: { unitId_studentId: { unitId: id, studentId: user.studentId } }, data: { userId, role } });
+      }
+    }
+    await tx.unitMember.create({ data: { unitId: id, userId, role } });
+    await unitAudit(tx, actor, "ADD_UNIT_MEMBER", null, { unitId: id, userId, role });
+    return { saved: true };
+  });
+}
+
 export async function manageUnit(actor: Actor, id: string, input: { action: "member"; userId: string; role: UnitRole | null }) {
   requireUnitDatabase();
   return db.$transaction(async (tx) => {
+    for (const target of [...new Set([actor.id, input.userId])].sort()) await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${target} FOR UPDATE`;
     await lockActiveUser(tx, actor.id);
     const systemAdmin = isGlobalAdmin(actor);
     if (systemAdmin && !await isCurrentUnitAdmin(tx, actor)) throw new ApiError("系統管理員權限已變更，請重新登入。", 403);
@@ -122,6 +151,7 @@ export async function manageUnit(actor: Actor, id: string, input: { action: "mem
     if (!(systemAdmin && input.role === null) && !targetUser?.disabled && wouldRemoveLastAdmin(before.role, input.role, count)) throw new ApiError("必須保留至少一位可登入的單位管理員。", 409);
     if (input.role === "ADMIN" && targetUser?.disabled !== false) throw new ApiError("停用帳號不可指派為單位管理員。", 400);
     const after = input.role ? await tx.unitMember.update({ where, data: { role: input.role } }) : (await tx.unitMember.delete({ where }), null);
+    if (input.role) await tx.unitAllowlist.updateMany({ where: { unitId: id, userId: input.userId }, data: { role: input.role } });
     if (!input.role) await tx.unitAllowlist.deleteMany({ where: { unitId: id, OR: [{ userId: input.userId }, ...(targetUser?.studentId ? [{ studentId: targetUser.studentId, userId: null }] : [])] } });
     await unitAudit(tx, actor, "MANAGE_UNIT_MEMBER", { unitId: id, userId: input.userId, role: before.role }, { unitId: id, userId: input.userId, role: after?.role ?? null, allowlistRevoked: !input.role });
     return { saved: true };

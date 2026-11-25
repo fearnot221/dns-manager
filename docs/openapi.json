@@ -287,11 +287,11 @@
       "patch": {
         "operationId": "patch_api_units_id",
         "summary": "更新單位或管理成員",
-        "description": "由 action 選擇操作。不得移除最後一位管理員；未啟用單位的管理操作受限。delete 需無成員、DNS 歸屬及待審申請。",
+        "description": "由 action 選擇操作。allowlist 新增可提供 notificationEmail，依已啟用的郵件設定排入單位開通通知；移除時禁止提供，重複請求不重複排入相同資格及收件地址。add-member 為帳號加入單一已啟用單位，不取代其他所屬單位。不得移除最後一位管理員；未啟用單位的管理操作受限。delete 需無成員、DNS 歸屬及待審申請。",
         "tags": [
           "units"
         ],
-        "x-access": "profile：單位管理員或系統管理員；name／department、rename／department／delete／assign-manager：系統管理員；allowlist／member：單位管理員或系統管理員。",
+        "x-access": "profile：單位管理員或系統管理員；name／department、rename／department／delete／assign-manager：系統管理員；allowlist／member：單位管理員或系統管理員；add-member：僅系統管理員。",
         "parameters": [
           {
             "name": "id",
@@ -309,7 +309,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Saved"
+                  "type": "object",
+                  "properties": {
+                    "saved": {
+                      "const": true
+                    },
+                    "notificationQueued": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "saved"
+                  ]
                 }
               }
             }
@@ -7032,11 +7043,19 @@
                 },
                 "name": {
                   "type": "string"
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "EDITOR",
+                    "ADMIN"
+                  ]
                 }
               },
               "required": [
                 "id",
-                "name"
+                "name",
+                "role"
               ]
             }
           }
@@ -7560,11 +7579,44 @@
               },
               "remove": {
                 "type": "boolean"
+              },
+              "notificationEmail": {
+                "type": "string",
+                "maxLength": 254,
+                "format": "email",
+                "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
               }
             },
             "required": [
               "action",
               "studentId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "add-member"
+              },
+              "userId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "EDITOR",
+                  "ADMIN"
+                ]
+              }
+            },
+            "required": [
+              "action",
+              "userId",
+              "role"
             ],
             "additionalProperties": false
           },
@@ -9074,6 +9126,33 @@
                   "subject",
                   "body"
                 ]
+              },
+              "unitOpened": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "ccTeam": {
+                    "type": "boolean"
+                  },
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "ccTeam",
+                  "subject",
+                  "body"
+                ]
               }
             },
             "required": [
@@ -9082,7 +9161,8 @@
               "requestDelete",
               "reviewApproved",
               "reviewRejected",
-              "inspectionCreated"
+              "inspectionCreated",
+              "unitOpened"
             ]
           },
           "customTemplates": {

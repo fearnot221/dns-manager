@@ -1,3 +1,5 @@
+import { defaultMailConfig } from "@/lib/mail/model";
+import { mailSettingsKey } from "@/lib/mail/settings";
 import * as auditService from "@/lib/audit/service";
 import { DELETE as deleteDnsZone } from "@/app/api/zones/[zone]/route";
 import { prepareApplication } from "@/lib/requests/application";
@@ -33,7 +35,7 @@ import { describeRecords, saveInventory } from "@/lib/inventory/service";
 import { memberWorkspaces } from "@/lib/units/workspace";
 import { db } from "@/lib/db/client";
 import { powerdns } from "@/lib/powerdns/client";
-import { createUnit as createUnitService, listUnits, manageUnit, unitAccess, assignUnitManager, editUnit, updateUnitProfile } from "@/lib/units/service";
+import { addUnitMember, createUnit as createUnitService, listUnits, manageUnit, unitAccess, assignUnitManager, editUnit, updateUnitProfile } from "@/lib/units/service";
 import { inspectUnitRecord, requestUnitChange, unitDetail } from "@/lib/units/records";
 import { hashPassword } from "@/lib/auth/password";
 import { saveDeletionPassword, assertDeletionPassword, deletionProtectionStatus } from "@/lib/security/deletion-protection";
@@ -1501,4 +1503,68 @@ describe.skipIf(!url)("units with real PostgreSQL and isolated fake PowerDNS", (
     });
     expect((await db.dnsRecordMetadata.findUniqueOrThrow({ where: { id: source.id } })).unitId).toBe(unitId);
   });
+  it("rolls back onboarding when requested mail is disabled and leaves silent additions available", async () => {
+    await db.systemSetting.deleteMany({ where: { key: mailSettingsKey } });
+    await expect(manageAllowlist(creator, unitId, outsider.studentId!, false, "student@example.com")).rejects.toMatchObject({ status: 409 });
+    expect(await db.unitMember.findUnique({ where: { unitId_userId: { unitId, userId: outsider.id } } })).toBeNull();
+    expect(await db.unitAllowlist.findUnique({ where: { unitId_studentId: { unitId, studentId: outsider.studentId! } } })).toBeNull();
+    await expect(manageAllowlist(creator, unitId, outsider.studentId!)).resolves.toEqual({ saved: true });
+  });
+  it("queues optional onboarding once for registered and pending students without sending SMTP", async () => {
+    const config = { ...defaultMailConfig, enabled: true, fromEmail: "sender@example.com", recipients: ["team@example.com"] };
+    await db.systemSetting.upsert({ where: { key: mailSettingsKey }, create: { key: mailSettingsKey, value: { config, revision: crypto.randomUUID() } }, update: { value: { config, revision: crypto.randomUUID() } } });
+    try {
+      const pendingStudent = crypto.randomUUID();
+      const registered = await manageAllowlist(creator, unitId, outsider.studentId!, false, "Student@EXAMPLE.com");
+      expect(registered.notificationQueued).toBe(1);
+      expect((await manageAllowlist(creator, unitId, outsider.studentId!, false, "student@example.com")).notificationQueued).toBe(0);
+      expect((await manageAllowlist(creator, unitId, pendingStudent, false, "pending@example.com")).notificationQueued).toBe(1);
+      const unit = await db.dnsUnit.findUniqueOrThrow({ where: { id: unitId } });
+      const mail = await db.mailDelivery.findMany({ where: { text: { contains: unit.name } } });
+      expect(mail).toHaveLength(2);
+      expect(mail.every(message => message.status === "PENDING" && message.attempts === 0)).toBe(true);
+      expect(mail.find(message => message.recipient === "pending@example.com")?.text).toContain(pendingStudent);
+      expect(mail.some(message => message.recipient === "student@example.com")).toBe(true);
+      expect(await db.unitAllowlist.findUnique({ where: { unitId_studentId: { unitId, studentId: pendingStudent } } })).toMatchObject({ userId: null });
+      await expect(manageAllowlist(viewer, unitId, "forged", false, "victim@example.com")).rejects.toMatchObject({ status: 403 });
+      await expect(manageAllowlist(creator, unitId, pendingStudent, true, "victim@example.com")).rejects.toMatchObject({ status: 400 });
+    } finally { await db.systemSetting.deleteMany({ where: { key: mailSettingsKey } }); }
+  });
+  it("manages account memberships without replacing other units or restoring revoked access on login", async () => {
+    const other = await createUnit(admin, `other-${crypto.randomUUID()}`, outsider.studentId!);
+    await expect(addUnitMember(creator, unitId, outsider.id, "EDITOR")).rejects.toMatchObject({ status: 403 });
+    await addUnitMember(admin, unitId, outsider.id, "EDITOR");
+    expect(await db.unitMember.count({ where: { userId: outsider.id } })).toBe(2);
+    await expect(addUnitMember(admin, unitId, outsider.id, "ADMIN")).rejects.toMatchObject({ status: 409 });
+    await manageUnit(admin, unitId, { action: "member", userId: outsider.id, role: "ADMIN" });
+    expect(await unitAccess(outsider, unitId, "manage")).toBe("ADMIN");
+    await manageUnit(admin, unitId, { action: "member", userId: outsider.id, role: null });
+    await enrollAllowlistedUser(outsider.id);
+    expect(await db.unitMember.findUnique({ where: { unitId_userId: { unitId, userId: outsider.id } } })).toBeNull();
+    expect(await db.unitMember.findUnique({ where: { unitId_userId: { unitId: other.unit.id, userId: outsider.id } } })).not.toBeNull();
+  });
+  it("binds pending qualifications to the selected role and keeps later login from restoring admin", async () => {
+    await db.unitAllowlist.create({ data: { unitId, studentId: outsider.studentId!, role: "ADMIN" } });
+    await addUnitMember(admin, unitId, outsider.id, "EDITOR");
+    await enrollAllowlistedUser(outsider.id);
+    expect(await unitAccess(outsider, unitId, "edit")).toBe("EDITOR");
+    await manageUnit(admin, unitId, { action: "member", userId: outsider.id, role: "ADMIN" });
+    await manageUnit(admin, unitId, { action: "member", userId: outsider.id, role: "EDITOR" });
+    expect(await db.unitAllowlist.findUnique({ where: { unitId_studentId: { unitId, studentId: outsider.studentId! } } })).toMatchObject({ role: "EDITOR", userId: outsider.id });
+    await manageUnit(admin, unitId, { action: "member", userId: outsider.id, role: null });
+    await enrollAllowlistedUser(outsider.id);
+    expect(await db.unitMember.findUnique({ where: { unitId_userId: { unitId, userId: outsider.id } } })).toBeNull();
+  });
+  it("rejects inactive units, removed accounts and disabled managers but permits data account membership", async () => {
+    await db.user.update({ where: { id: outsider.id }, data: { disabled: true } });
+    await expect(addUnitMember(admin, unitId, outsider.id, "ADMIN")).rejects.toMatchObject({ status: 400 });
+    await addUnitMember(admin, unitId, outsider.id, "EDITOR");
+    await db.user.update({ where: { id: editor.id }, data: { removedAt: new Date() } });
+    await expect(addUnitMember(admin, unitId, editor.id, "EDITOR")).rejects.toMatchObject({ status: 404 });
+    await db.dnsUnit.update({ where: { id: unitId }, data: { status: "REJECTED" } });
+    await expect(addUnitMember(admin, unitId, admin.id, "EDITOR")).rejects.toMatchObject({ status: 403 });
+    await db.user.update({ where: { id: admin.id }, data: { globalRole: "USER" } });
+    await expect(addUnitMember(admin, unitId, admin.id, "EDITOR")).rejects.toMatchObject({ status: 403 });
+  });
+
 });

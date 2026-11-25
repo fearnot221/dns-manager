@@ -1,4 +1,5 @@
 import "server-only";
+import { ApiError } from "@/lib/api/respond";
 import type { Prisma } from "@prisma/client";
 import { readMailSettings } from "./settings";
 import { renderMail, requestScenario, type MailConfig, type MailVariables, type ScenarioKey } from "./model";
@@ -74,4 +75,11 @@ export async function enqueueManualMail(tx: Tx, batchId: string, input: { unitId
     count += await queue(tx, config, `manual:${batchId}:${message.unitId}`, input, input.ccTeam, [message]);
   }
   return count;
+}
+
+export async function enqueueUnitOpenedMail(tx: Tx, entryId: string, recipient: string, values: { studentId: string; unitName: string }) {
+  const { config } = await readMailSettings(tx);
+  const template = config.templates.unitOpened;
+  if (!config.enabled || !template.enabled) throw new ApiError("單位開通通知尚未啟用，請聯絡系統管理員，或取消勾選寄送通知。", 409);
+  return queue(tx, config, `unit-opened:${entryId}`, template, template.ccTeam, [{ recipient, values: { ...values, dnsUrl: appUrl("/dns") } }]);
 }
