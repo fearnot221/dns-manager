@@ -4,7 +4,7 @@ import { isNavActive, workspaceNavigation } from "@/lib/client/navigation";
 describe("workspace navigation", () => {
   const items = (admin: boolean, systemAdmin: boolean) => workspaceNavigation(admin, systemAdmin).flatMap((group) => group.items);
   it("keeps unit workflows flat without exposing management links", () => {
-    expect(items(false, false).map((item) => item.href)).toEqual(["/dns", "/requests/new", "/requests/claim", "/requests", "/guide"]);
+    expect(items(false, false).map((item) => item.href)).toEqual(["/dns", "/requests/new", "/requests", "/guide"]);
     expect(items(false, false).find((item) => item.href === "/requests")?.label).toBe("申請紀錄");
   });
   it("only exposes unit management to unit or global administrators", () => {
@@ -32,7 +32,7 @@ describe("workspace navigation", () => {
   it("separates applying from reviewing", () => {
     expect(workspaceNavigation(true, false).map((group) => group.id)).toEqual(["workflow", "applications", "review", "settings", "help"]);
     expect(workspaceNavigation(true, false).find((group) => group.id === "review")?.items.map((item) => item.label)).toEqual(["申請審核"]);
-    expect(workspaceNavigation(false, false).find((group) => group.id === "applications")?.items.map((item) => item.href)).toEqual(["/dns", "/requests/new", "/requests/claim", "/requests"]);
+    expect(workspaceNavigation(false, false).find((group) => group.id === "applications")?.items.map((item) => item.href)).toEqual(["/dns", "/requests/new", "/requests"]);
   });
   it("keeps group IDs and routes unique", () => {
     const groups = workspaceNavigation(true, true);
@@ -59,12 +59,18 @@ it("links the usage guide last for every role", () => {
 
 it("exposes user DNS workflows to system administrators", () => {
   const routes = workspaceNavigation(true, true, true).flatMap((group) => group.items).map((item) => item.href);
-  expect(routes).toContain("/dns"); expect(routes).toContain("/requests/new"); expect(routes).toContain("/requests/claim");
+  expect(routes).toContain("/dns"); expect(routes).toContain("/requests/new"); expect(routes).not.toContain("/requests/claim");
   expect(routes).toContain("/units"); expect(routes).toContain("/requests");
 });
 
 it("places DNS and personal history under applications for administrators", () => {
   const groups = workspaceNavigation(true, true);
-  expect(groups.find(group => group.id === "applications")?.items.map(item => item.href)).toEqual(["/dns", "/requests/new", "/requests/claim", "/requests/history"]);
+  expect(groups.find(group => group.id === "applications")?.items.map(item => item.href)).toEqual(["/dns", "/requests/new", "/requests/history"]);
   expect(groups.find(group => group.id === "workflow")?.items.some(item => item.href === "/dns")).toBe(false);
+});
+
+it("hides ownership claim applications for every role while paused", () => {
+  for (const [admin, systemAdmin, unitAdmin] of [[false, false, false], [false, false, true], [true, false, false], [true, true, true]]) {
+    expect(workspaceNavigation(admin, systemAdmin, unitAdmin).flatMap(group => group.items).map(item => item.href)).not.toContain("/requests/claim");
+  }
 });

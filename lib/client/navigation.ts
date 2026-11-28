@@ -13,7 +13,6 @@ export function workspaceNavigation(admin: boolean, systemAdmin: boolean, unitAd
   const applications: NavItem[] = [
     { href: "/dns", label: "單位 DNS", icon: "dns" },
     { href: "/requests/new", label: "申請 DNS", icon: "apply" },
-    { href: "/requests/claim", label: "DNS 歸屬申請", icon: "claim" },
   ];
   // Keep personal history separate from the administrator review queue.
   const review: NavItem[] = admin ? [{ href: "/requests", label: "申請審核", icon: "review" }] : [];
