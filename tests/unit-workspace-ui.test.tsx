@@ -67,7 +67,7 @@ it("lets system administrators switch actual memberships and exposes their appli
   const html = shell([unit, { ...unit, id: "two", name: "第二單位" }], true);
   expect(html).toContain("切換工作區");
   expect(html).toContain('href="/requests/new"');
-  expect(html).toContain('href="/requests/claim"');
+  expect(html).not.toContain('href="/requests/claim"');
 });
 it("explains ownership-only approval and hides TTL editing on claim forms", () => {
   vi.mocked(useResource).mockImplementation((url) => ({ data: url === "/api/units" ? { units: [{ ...unit, canApply: true }] } : url === "/api/application-policy" ? { policy: { adminOnlyTypes: [], ownership: "UNIT_ONLY" }, admin: false } : { zones: [{ name: "example.com." }] }, loading: false, error: "", reload: vi.fn() }) as never);
