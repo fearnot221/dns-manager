@@ -678,7 +678,7 @@
       "post": {
         "operationId": "post_api_dns_requests",
         "summary": "提交批次 DNS 或歸屬申請",
-        "description": "提交批次 DNS 或歸屬申請",
+        "description": "DNS 歸屬申請暫時關閉，operation 為 CLAIM 時回傳 403；新增 DNS 申請照常受理。",
         "tags": [
           "dns-requests"
         ],

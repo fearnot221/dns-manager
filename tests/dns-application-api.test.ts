@@ -95,10 +95,13 @@ it("passes optional notes independently from purpose", async () => {
   expect(vi.mocked(saveApplication).mock.calls[0][1].records[0]).toMatchObject({ purpose: "實驗室網站", notes: "補充說明" });
 });
 
-it("passes validated ownership claims through the authenticated application API", async () => {
+it.each(["USER", "SUPER_ADMIN"] as const)("rejects ownership claims while paused for %s", async (globalRole) => {
+  vi.mocked(requireActor).mockResolvedValue({ id: "user", email: "user@example.com", globalRole, zoneRoles: {} });
   const response = await POST(request({ ...body, operation: "CLAIM" }));
-  expect(response.status).toBe(201);
-  expect(saveApplication).toHaveBeenCalledWith(expect.objectContaining({ id: "user" }), expect.objectContaining({ operation: "CLAIM", unitId: "unit-1", records: [expect.objectContaining({ recordName: "test.example.com." })] }), expect.any(Request));
+  expect(response.status).toBe(403);
+  expect(await response.text()).toContain("DNS 歸屬申請功能暫時關閉");
+  expect(powerdns.listZones).not.toHaveBeenCalled();
+  expect(saveApplication).not.toHaveBeenCalled();
 });
 it("rejects forged operations at the application boundary", async () => {
   expect((await POST(request({ ...body, operation: "UPDATE" }))).status).toBe(400);

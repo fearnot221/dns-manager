@@ -47,6 +47,7 @@ async function POSTHandler(request: Request) {
     const parsed=dnsApplicationSchema.safeParse(body);
     if(!parsed.success) prepareApplication(body,[]); // preserve field-specific error messages
     const preview=prepareApplication(body,parsed.data!.records.map(r=>r.zoneName));
+    if (preview.operation === "CLAIM") throw new ApiError("DNS 歸屬申請功能暫時關閉。", 403);
     await assertApplicationPolicy(actor,preview.records.map(r=>r.recordType),preview.unitId);
     const zones = await powerdns.listZones();
     const input = prepareApplication(body, zones.map((zone) => zone.name));
